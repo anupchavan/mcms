@@ -226,6 +226,9 @@ export default function MeetingCreation({
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [location, setLocation] = useState("");
+  const [locationType, setLocationType] = useState<"Inside" | "Outside">("Inside");
+  const [roomNo, setRoomNo] = useState("");
+  const [building, setBuilding] = useState("");
   const [duration, setDuration] = useState<number>(30);
   const [modality, setModality] = useState<"Online" | "Offline" | "Hybrid">(
     "Online",
@@ -508,10 +511,22 @@ export default function MeetingCreation({
       inputRef.current?.focus();
       return;
     }
+
+    let finalLocation = location;
+    if (modality === "Offline" || modality === "Hybrid") {
+      if (locationType === "Inside") {
+        const parts = [];
+        if (roomNo.trim()) parts.push(`Room ${roomNo.trim()}`);
+        if (building.trim()) parts.push(building.trim());
+        if (parts.length > 0) parts.push("IITH");
+        finalLocation = parts.join(", ");
+      }
+    }
+
     onSubmit({
       title,
       description,
-      location,
+      location: finalLocation,
       duration,
       modality,
       agenda: agenda.filter((a) => a.title.trim() !== ""),
@@ -787,30 +802,102 @@ export default function MeetingCreation({
 
           {(modality === "Offline" || modality === "Hybrid") && (
             <div className="form-group">
-              <div
-                style={{
-                  display: "flex",
-                  justifyContent: "space-between",
-                  alignItems: "center",
-                }}
-              >
-                <label className="form-label">Physical Location</label>
-                <span
-                  style={{ fontSize: "11px", color: "var(--text-tertiary)" }}
-                >
-                  {location.length}/200
-                </span>
+              <label className="form-label">Physical Location</label>
+              <div style={{ display: "flex", gap: "1rem", marginBottom: "0.75rem" }}>
+                <label style={{ display: "flex", alignItems: "center", gap: "0.25rem", fontSize: "0.8125rem", color: "var(--text-secondary)", cursor: "pointer" }}>
+                  <input
+                    type="radio"
+                    name="locationType"
+                    value="Inside"
+                    checked={locationType === "Inside"}
+                    onChange={(e) => setLocationType(e.target.value as "Inside" | "Outside")}
+                  />
+                  Inside IITH Campus
+                </label>
+                <label style={{ display: "flex", alignItems: "center", gap: "0.25rem", fontSize: "0.8125rem", color: "var(--text-secondary)", cursor: "pointer" }}>
+                  <input
+                    type="radio"
+                    name="locationType"
+                    value="Outside"
+                    checked={locationType === "Outside"}
+                    onChange={(e) => setLocationType(e.target.value as "Inside" | "Outside")}
+                  />
+                  Outside Campus
+                </label>
               </div>
-              <input
-                type="text"
-                className="input"
-                placeholder="e.g., Room 301, Academic Block A"
-                id="input-location"
-                maxLength={200}
-                value={location}
-                onChange={(e) => setLocation(e.target.value)}
-                required={modality == "Offline" || modality == "Hybrid"}
-              />
+
+              {locationType === "Inside" ? (
+                <div style={{ display: "flex", gap: "1rem" }}>
+                  <div style={{ flex: 1 }}>
+                    <div style={{ display: "flex", justifyContent: "space-between" }}>
+                      <label className="form-label" style={{ fontSize: "0.75rem", marginBottom: "4px" }}>Room No.</label>
+                      <span style={{ fontSize: "11px", color: "var(--text-tertiary)" }}>{roomNo.length}/50</span>
+                    </div>
+                    <input
+                      type="text"
+                      className="input"
+                      placeholder="e.g., 301"
+                      maxLength={50}
+                      value={roomNo}
+                      onChange={(e) => setRoomNo(e.target.value)}
+                      required={modality === "Offline" || modality === "Hybrid"}
+                    />
+                  </div>
+                  <div style={{ flex: 1 }}>
+                    <div style={{ display: "flex", justifyContent: "space-between" }}>
+                      <label className="form-label" style={{ fontSize: "0.75rem", marginBottom: "4px" }}>Building</label>
+                      <span style={{ fontSize: "11px", color: "var(--text-tertiary)" }}>{building.length}/100</span>
+                    </div>
+                    <input
+                      type="text"
+                      className="input"
+                      placeholder="e.g., Academic Block A"
+                      maxLength={100}
+                      value={building}
+                      onChange={(e) => setBuilding(e.target.value)}
+                      required={modality === "Offline" || modality === "Hybrid"}
+                    />
+                  </div>
+                </div>
+              ) : (
+                <>
+                  <div
+                    style={{
+                      display: "flex",
+                      justifyContent: "space-between",
+                      alignItems: "center",
+                      marginBottom: "4px"
+                    }}
+                  >
+                    <label className="form-label" style={{ fontSize: "0.75rem", marginBottom: 0 }}>Location Address</label>
+                    <span style={{ fontSize: "11px", color: "var(--text-tertiary)" }}>
+                      {location.length}/200
+                    </span>
+                  </div>
+                  <div style={{ display: "flex", gap: "0.5rem" }}>
+                    <input
+                      type="text"
+                      className="input"
+                      placeholder="e.g., 123 Main St, Hyderabad"
+                      id="input-location"
+                      maxLength={200}
+                      value={location}
+                      onChange={(e) => setLocation(e.target.value)}
+                      required={modality === "Offline" || modality === "Hybrid"}
+                    />
+                    <a
+                      href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(location || "Hyderabad")}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="btn btn-secondary"
+                      style={{ flexShrink: 0, display: "flex", alignItems: "center", gap: "0.375rem", padding: "0 0.75rem", textDecoration: "none" }}
+                      title="Search on Google Maps"
+                    >
+                      <Icon icon={Location01Icon} size={14} /> Map
+                    </a>
+                  </div>
+                </>
+              )}
             </div>
           )}
 

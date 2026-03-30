@@ -282,7 +282,18 @@ function DashboardApp() {
                 Select a meeting below to join the call and see agenda, minutes, and action items.
               </p>
               <div className="meeting-list">
-                {meetings.filter(m => m.status !== 'completed').map(meeting => (
+                {meetings
+                  .filter(m => m.status !== 'completed')
+                  .sort((a, b) => {
+                    const aDateStr = a.confirmedDate || a.date;
+                    const aTimeStr = a.confirmedTime || a.time || "00:00";
+                    const bDateStr = b.confirmedDate || b.date;
+                    const bTimeStr = b.confirmedTime || b.time || "00:00";
+                    const aTime = aDateStr ? new Date(`${aDateStr}T${aTimeStr}`).getTime() : Number.MAX_SAFE_INTEGER;
+                    const bTime = bDateStr ? new Date(`${bDateStr}T${bTimeStr}`).getTime() : Number.MAX_SAFE_INTEGER;
+                    return aTime - bTime;
+                  })
+                  .map(meeting => (
                   <div key={meeting.id} className="meeting-card glass-card" onClick={() => setSelectedMeeting(meeting)}>
                     {meeting.status === "pending_poll" && meeting.pollId && (
                       <button className="btn btn-sm btn-primary" style={{ position: 'absolute', top: 'var(--lk-size-md)', right: 'var(--lk-size-md)' }} onClick={(e) => { e.stopPropagation(); setPollMeetingId(meeting.id); }}>Vote</button>
@@ -373,7 +384,18 @@ function DashboardApp() {
               <h2 style={{ fontSize: 'var(--font-size-title3)', fontWeight: 600, marginBottom: 'var(--lk-size-2xs)', letterSpacing: '-0.022em' }}>Scheduled Meetings</h2>
             </div>
             <div className="meeting-list">
-              {meetings.filter(m => m.status !== 'completed').map(meeting => (
+              {meetings
+                .filter(m => m.status !== 'completed')
+                .sort((a, b) => {
+                  const aDateStr = a.confirmedDate || a.date;
+                  const aTimeStr = a.confirmedTime || a.time || "00:00";
+                  const bDateStr = b.confirmedDate || b.date;
+                  const bTimeStr = b.confirmedTime || b.time || "00:00";
+                  const aTime = aDateStr ? new Date(`${aDateStr}T${aTimeStr}`).getTime() : Number.MAX_SAFE_INTEGER;
+                  const bTime = bDateStr ? new Date(`${bDateStr}T${bTimeStr}`).getTime() : Number.MAX_SAFE_INTEGER;
+                  return aTime - bTime;
+                })
+                .map(meeting => (
                 <div
                   key={meeting.id}
                   className={`meeting-card glass-card ${selectedMeeting?.id === meeting.id ? "selected" : ""}`}
