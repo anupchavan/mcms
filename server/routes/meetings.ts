@@ -1,6 +1,45 @@
 import express from 'express';
 const router = express.Router();
 
+const MEETING_COMPLETION_BUFFER_MINUTES = 10;
+const DEFAULT_MEETING_DURATION_MINUTES = 30;
+
+function parseMeetingStart(meeting: any) {
+    const dateStr = meeting.confirmedDate || meeting.date;
+    const timeStr = meeting.confirmedTime || meeting.time || '00:00';
+    if (!dateStr) return null;
+
+    const [year, month, day] = String(dateStr).split('-').map(Number);
+    const [hours, minutes] = String(timeStr).split(':').map(Number);
+    if (![year, month, day].every(Number.isFinite)) return null;
+
+    return new Date(
+        year,
+        (month || 1) - 1,
+        day || 1,
+        Number.isFinite(hours) ? hours : 0,
+        Number.isFinite(minutes) ? minutes : 0,
+        0,
+        0,
+    );
+}
+
+function shouldAutoCompleteMeeting(meeting: any, now = new Date()) {
+    if (!['scheduled', 'in-progress'].includes(meeting.status)) return false;
+    const start = parseMeetingStart(meeting);
+    if (!start) return false;
+
+    const durationMinutes = Number(meeting.durationMinutes);
+    const effectiveDurationMinutes = Number.isFinite(durationMinutes) && durationMinutes > 0
+        ? durationMinutes
+        : DEFAULT_MEETING_DURATION_MINUTES;
+    const meetingEndWithBuffer = start.getTime()
+        + effectiveDurationMinutes * 60 * 1000
+        + MEETING_COMPLETION_BUFFER_MINUTES * 60 * 1000;
+
+    return now.getTime() >= meetingEndWithBuffer;
+}
+
 export = function ({ User, Meeting, Poll, Notification, Agenda, protect, usingMongo, emitToUser, sendRsvpEmail, generateICS, CLIENT_URL, inMemoryMeetings, inMemoryAgendas }: any) {
 
     router.get('/', protect, async (req: any, res: any) => {
@@ -8,12 +47,20 @@ export = function ({ User, Meeting, Poll, Notification, Agenda, protect, usingMo
             if (usingMongo() && Meeting) {
                 const base = (CLIENT_URL || 'http://localhost:5173').replace(/\/$/, '');
                 const dbMeetings = await Meeting.find({}).sort({ createdAt: -1 }).populate('participants', 'name email');
+                const expiredMeetings = dbMeetings.filter((meeting: any) => shouldAutoCompleteMeeting(meeting));
+                if (expiredMeetings.length > 0) {
+                    await Promise.all(expiredMeetings.map(async (meeting: any) => {
+                        meeting.status = 'completed';
+                        await meeting.save();
+                    }));
+                }
                 const formatted = dbMeetings.map((m: any) => ({
                     id: m._id,
                     title: m.title,
                     modality: m.modality,
                     date: m.confirmedDate || m.date,
                     time: m.confirmedTime || m.time,
+                    durationMinutes: m.durationMinutes,
                     location: m.location,
                     host: m.host || 'Unknown',
                     hostId: m.hostId,
@@ -24,6 +71,9 @@ export = function ({ User, Meeting, Poll, Notification, Agenda, protect, usingMo
                 }));
                 return res.json(formatted);
             }
+            inMemoryMeetings.forEach((meeting: any) => {
+                if (shouldAutoCompleteMeeting(meeting)) meeting.status = 'completed';
+            });
             res.json(inMemoryMeetings);
         } catch (error: any) {
             res.status(500).json({ message: 'Server error', error: error.message });
@@ -130,6 +180,7 @@ export = function ({ User, Meeting, Poll, Notification, Agenda, protect, usingMo
                     id: populated._id, title: populated.title, modality: populated.modality,
                     date: populated.confirmedDate || populated.date,
                     time: populated.confirmedTime || populated.time,
+                    durationMinutes: populated.durationMinutes,
                     location: populated.location, host: populated.host, hostId: populated.hostId,
                     participants: populated.participants, status: populated.status,
                     meetingUrl,

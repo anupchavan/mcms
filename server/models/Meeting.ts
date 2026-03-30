@@ -8,6 +8,7 @@ interface IMeeting extends Document {
 	time?: string;
 	confirmedDate?: string;
 	confirmedTime?: string;
+	durationMinutes?: number;
 	location?: string;
 	host?: string;
 	hostId?: mongoose.Types.ObjectId;
@@ -27,6 +28,7 @@ const meetingSchema = new mongoose.Schema({
 	time: { type: String },
 	confirmedDate: { type: String },
 	confirmedTime: { type: String },
+	durationMinutes: { type: Number, default: 30 },
 	location: { type: String, maxlength: 200 },
 	host: { type: String },
 	hostId: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },

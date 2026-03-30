@@ -14,7 +14,7 @@ import ArchiveView from "./components/ArchiveView";
 import RubricSidebar from "./components/RubricSidebar";
 import useKeyboardShortcuts from "./hooks/useKeyboardShortcuts";
 import Icon from "./components/Icon";
-import { Calendar02Icon, Clock01Icon, UserIcon } from "@hugeicons/core-free-icons";
+import { Calendar02Icon, Clock01Icon, Location01Icon, UserIcon } from "@hugeicons/core-free-icons";
 
 import Login from "./pages/Login";
 import Signup from "./pages/Signup";
@@ -31,6 +31,57 @@ function formatDate(dateStr: string): string {
   return `${d.getDate()} ${d.toLocaleString("en-US", { month: "short" })} ${d.getFullYear()}`;
 }
 
+const MEETING_COMPLETION_BUFFER_MINUTES = 10;
+const DEFAULT_MEETING_DURATION_MINUTES = 30;
+
+function parseMeetingStart(meeting: any): Date | null {
+  const dateStr = meeting.confirmedDate || meeting.date;
+  const timeStr = meeting.confirmedTime || meeting.time || "00:00";
+  if (!dateStr) return null;
+
+  const [year, month, day] = String(dateStr).split("-").map(Number);
+  const [hours, minutes] = String(timeStr).split(":").map(Number);
+  if (![year, month, day].every(Number.isFinite)) return null;
+
+  return new Date(
+    year,
+    (month || 1) - 1,
+    day || 1,
+    Number.isFinite(hours) ? hours : 0,
+    Number.isFinite(minutes) ? minutes : 0,
+    0,
+    0,
+  );
+}
+
+function getMeetingDurationMinutes(meeting: any): number {
+  const duration = Number(meeting.durationMinutes);
+  return Number.isFinite(duration) && duration > 0 ? duration : DEFAULT_MEETING_DURATION_MINUTES;
+}
+
+function isMeetingCompletedByTime(meeting: any, nowTs: number): boolean {
+  if (meeting.status === "completed" || meeting.status === "cancelled" || meeting.status === "pending_poll") return meeting.status === "completed";
+
+  const start = parseMeetingStart(meeting);
+  if (!start) return false;
+
+  const endTimeWithBuffer = start.getTime()
+    + getMeetingDurationMinutes(meeting) * 60 * 1000
+    + MEETING_COMPLETION_BUFFER_MINUTES * 60 * 1000;
+
+  return nowTs >= endTimeWithBuffer;
+}
+
+function sortMeetingsBySchedule(a: any, b: any): number {
+  const aStart = parseMeetingStart(a)?.getTime() ?? Number.MAX_SAFE_INTEGER;
+  const bStart = parseMeetingStart(b)?.getTime() ?? Number.MAX_SAFE_INTEGER;
+  return aStart - bStart;
+}
+
+function shouldShowMeetingLocation(meeting: any): boolean {
+  return (meeting.modality === "Offline" || meeting.modality === "Hybrid") && Boolean(String(meeting.location || "").trim());
+}
+
 function DashboardApp() {
   const { user, logout } = useAuth();
   const { socket } = useSocket();
@@ -44,6 +95,7 @@ function DashboardApp() {
     if (typeof window === "undefined") return "dark";
     return window.localStorage.getItem("theme") === "light" ? "light" : "dark";
   });
+  const [nowTs, setNowTs] = useState(() => Date.now());
 
   const [meetings, setMeetings] = useState<any[]>([]);
   const [agendaItems, setAgendaItems] = useState<any[]>([]);
@@ -113,6 +165,16 @@ function DashboardApp() {
     if (typeof document !== "undefined") document.documentElement.setAttribute("data-theme", theme);
     if (typeof window !== "undefined") window.localStorage.setItem("theme", theme);
   }, [theme]);
+
+  useEffect(() => {
+    const intervalId = window.setInterval(() => setNowTs(Date.now()), 60 * 1000);
+    return () => window.clearInterval(intervalId);
+  }, []);
+
+  const upcomingMeetings = useMemo(
+    () => meetings.filter((meeting) => !isMeetingCompletedByTime(meeting, nowTs)).sort(sortMeetingsBySchedule),
+    [meetings, nowTs],
+  );
 
   useEffect(() => {
     const labels: Record<string, string> = {
@@ -282,18 +344,7 @@ function DashboardApp() {
                 Select a meeting below to join the call and see agenda, minutes, and action items.
               </p>
               <div className="meeting-list">
-                {meetings
-                  .filter(m => m.status !== 'completed')
-                  .sort((a, b) => {
-                    const aDateStr = a.confirmedDate || a.date;
-                    const aTimeStr = a.confirmedTime || a.time || "00:00";
-                    const bDateStr = b.confirmedDate || b.date;
-                    const bTimeStr = b.confirmedTime || b.time || "00:00";
-                    const aTime = aDateStr ? new Date(`${aDateStr}T${aTimeStr}`).getTime() : Number.MAX_SAFE_INTEGER;
-                    const bTime = bDateStr ? new Date(`${bDateStr}T${bTimeStr}`).getTime() : Number.MAX_SAFE_INTEGER;
-                    return aTime - bTime;
-                  })
-                  .map(meeting => (
+                {upcomingMeetings.map(meeting => (
                   <div key={meeting.id} className="meeting-card glass-card" onClick={() => setSelectedMeeting(meeting)}>
                     {meeting.status === "pending_poll" && meeting.pollId && (
                       <button className="btn btn-sm btn-primary" style={{ position: 'absolute', top: 'var(--lk-size-md)', right: 'var(--lk-size-md)' }} onClick={(e) => { e.stopPropagation(); setPollMeetingId(meeting.id); }}>Vote</button>
@@ -306,6 +357,7 @@ function DashboardApp() {
                       </span>
                       {(meeting.confirmedDate || meeting.date) && <span><Icon icon={Calendar02Icon} size={14} /> {formatDate(meeting.confirmedDate || meeting.date)}</span>}
                       {(meeting.confirmedTime || meeting.time) && <span><Icon icon={Clock01Icon} size={14} /> {meeting.confirmedTime || meeting.time}</span>}
+                      {shouldShowMeetingLocation(meeting) && <span><Icon icon={Location01Icon} size={14} /> {meeting.location}</span>}
                       <span><Icon icon={UserIcon} size={14} /> {meeting.host}</span>
                     </div>
                   </div>
@@ -384,18 +436,7 @@ function DashboardApp() {
               <h2 style={{ fontSize: 'var(--font-size-title3)', fontWeight: 600, marginBottom: 'var(--lk-size-2xs)', letterSpacing: '-0.022em' }}>Scheduled Meetings</h2>
             </div>
             <div className="meeting-list">
-              {meetings
-                .filter(m => m.status !== 'completed')
-                .sort((a, b) => {
-                  const aDateStr = a.confirmedDate || a.date;
-                  const aTimeStr = a.confirmedTime || a.time || "00:00";
-                  const bDateStr = b.confirmedDate || b.date;
-                  const bTimeStr = b.confirmedTime || b.time || "00:00";
-                  const aTime = aDateStr ? new Date(`${aDateStr}T${aTimeStr}`).getTime() : Number.MAX_SAFE_INTEGER;
-                  const bTime = bDateStr ? new Date(`${bDateStr}T${bTimeStr}`).getTime() : Number.MAX_SAFE_INTEGER;
-                  return aTime - bTime;
-                })
-                .map(meeting => (
+              {upcomingMeetings.map(meeting => (
                 <div
                   key={meeting.id}
                   className={`meeting-card glass-card ${selectedMeeting?.id === meeting.id ? "selected" : ""}`}
@@ -413,6 +454,7 @@ function DashboardApp() {
                     </span>
                     {(meeting.confirmedDate || meeting.date) && <span><Icon icon={Calendar02Icon} size={14} /> {formatDate(meeting.confirmedDate || meeting.date)}</span>}
                     {(meeting.confirmedTime || meeting.time) && <span><Icon icon={Clock01Icon} size={14} /> {meeting.confirmedTime || meeting.time}</span>}
+                    {shouldShowMeetingLocation(meeting) && <span><Icon icon={Location01Icon} size={14} /> {meeting.location}</span>}
                     <span><Icon icon={UserIcon} size={14} /> {meeting.host}</span>
                   </div>
                 </div>
