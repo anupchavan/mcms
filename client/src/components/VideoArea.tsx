@@ -24,6 +24,7 @@ import {
 import ShortcutTooltip from "./ShortcutTooltip";
 import Kbd from "./Kbd";
 import useWebRTC from "../hooks/useWebRTC";
+import useTranscriptionCapture from "../hooks/useTranscriptionCapture";
 import { useSocket } from "../context/SocketContext";
 
 const SERVER_BASE = (import.meta.env.VITE_API_URL || "http://localhost:5001").replace(/\/api$/, "");
@@ -45,7 +46,6 @@ interface VideoAreaProps {
   participants?: Array<{ _id?: string; id?: string; name?: string; profileImage?: string | null }>;
   modality?: string;
   currentUser?: { _id?: string; id?: string; name?: string; profileImage?: string | null } | null;
-  hostId?: string | null;
   fullscreenRef?: React.RefObject<HTMLDivElement | null>;
   agendaPanelOpen: boolean;
   rightPanelOpen: boolean;
@@ -143,7 +143,6 @@ export default function VideoArea({
   meetingTitle,
   participants,
   modality,
-  hostId,
   currentUser,
   fullscreenRef,
   agendaPanelOpen,
@@ -262,6 +261,8 @@ export default function VideoArea({
     toggleVideo,
     toggleScreenShare,
   } = useWebRTC(socket, meetingId, currentUser);
+
+  useTranscriptionCapture(socket, meetingId || null, localStream);
 
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [hasJoined, setHasJoined] = useState(false);
@@ -580,7 +581,6 @@ export default function VideoArea({
         onToggleScreenShare={toggleScreenShare}
         onLeave={handleLeave}
         hasJoined={hasJoined}
-        isHost={currentUser ? (currentUser._id === hostId || currentUser.id === hostId) : false}
         onMeetingEnded={onMeetingEnded}
       />
 

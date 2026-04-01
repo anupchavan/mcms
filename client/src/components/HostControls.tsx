@@ -1,4 +1,4 @@
-import { useState, useCallback, forwardRef, useImperativeHandle } from 'react';
+import { useState, useEffect, useCallback, forwardRef, useImperativeHandle } from 'react';
 import Icon from './Icon';
 import {
     Mic01Icon, MicOff01Icon, Video01Icon, VideoOffIcon,
@@ -21,7 +21,6 @@ export interface HostControlsProps {
     onToggleScreenShare: () => void;
     onLeave: () => void;
     hasJoined: boolean;
-    isHost?: boolean;
     onMeetingEnded?: () => void;
 }
 
@@ -35,31 +34,57 @@ const HostControls = forwardRef<HostControlsRef, HostControlsProps>(function Hos
     meetingId, meetingTitle, modality,
     audioEnabled, videoEnabled, screenSharing,
     onToggleAudio, onToggleVideo, onToggleScreenShare,
-    onLeave, hasJoined, isHost, onMeetingEnded,
+    onLeave, hasJoined, onMeetingEnded,
 }, ref) {
     const { socket } = useSocket();
+    const [recording, setRecording] = useState(false);
     const [showQR, setShowQR] = useState(false);
     const [copied, setCopied] = useState(false);
 
     const isOffline = modality === 'Offline';
 
     useImperativeHandle(ref, () => ({
-        toggleRecording: () => { },
+        toggleRecording: () => {
+            if (!socket || !meetingId) return;
+            if (recording) socket.emit('stop_transcription', { meetingId });
+            else socket.emit('start_transcription', { meetingId });
+        },
         showAttendance: () => setShowQR(true),
         endMeeting: () => {
-            if (socket && meetingId) {
-                socket.emit('end_meeting', { meetingId });
-            }
+            if (!socket || !meetingId) return;
+            if (recording) socket.emit('stop_transcription', { meetingId });
+            socket.emit('end_meeting', { meetingId });
             onMeetingEnded?.();
         },
-    }), [socket, meetingId, onMeetingEnded]);
+    }), [socket, meetingId, recording, onMeetingEnded]);
+
+    useEffect(() => {
+        if (!socket) return;
+        const onStarted = ({ meetingId: mid }: { meetingId?: string }) => { if (mid === meetingId) setRecording(true); };
+        const onStopped = ({ meetingId: mid }: { meetingId?: string }) => { if (mid === meetingId) setRecording(false); };
+        socket.on('transcription_started', onStarted);
+        socket.on('transcription_stopped', onStopped);
+        return () => {
+            socket.off('transcription_started', onStarted);
+            socket.off('transcription_stopped', onStopped);
+        };
+    }, [socket, meetingId]);
+
+    const toggleRecording = useCallback(() => {
+        if (!socket || !meetingId) return;
+        if (recording) {
+            socket.emit('stop_transcription', { meetingId });
+        } else {
+            socket.emit('start_transcription', { meetingId });
+        }
+    }, [socket, meetingId, recording]);
 
     const handleEndMeeting = useCallback(() => {
-        if (socket && meetingId) {
-            socket.emit('end_meeting', { meetingId });
-        }
+        if (!socket || !meetingId) return;
+        if (recording) socket.emit('stop_transcription', { meetingId });
+        socket.emit('end_meeting', { meetingId });
         onMeetingEnded?.();
-    }, [socket, meetingId, onMeetingEnded]);
+    }, [socket, meetingId, recording, onMeetingEnded]);
 
     const handleCopyLink = useCallback(() => {
         if (!meetingId) return;
@@ -108,10 +133,15 @@ const HostControls = forwardRef<HostControlsRef, HostControlsProps>(function Hos
 
                             <div className="controls-divider"></div>
 
-                            <ShortcutTooltip label="Live transcription is not available yet" position="top">
-                                <button type="button" className="control-btn" disabled style={{ opacity: 0.55, cursor: 'not-allowed' }}>
+                            <ShortcutTooltip label={recording ? 'Stop recording' : 'Record'} keys={['R']} position="top">
+                                <button
+                                    className={`control-btn ${recording ? 'recording' : ''}`}
+                                    onClick={toggleRecording}
+                                    disabled={!hasJoined}
+                                >
                                     <Icon icon={RecordIcon} size={16} />
-                                    <span>Transcript</span>
+                                    <span>{recording ? 'Recording' : 'Record'}</span>
+                                    {recording && <div className="rec-dot"></div>}
                                 </button>
                             </ShortcutTooltip>
                         </>
@@ -140,18 +170,16 @@ const HostControls = forwardRef<HostControlsRef, HostControlsProps>(function Hos
                 <div style={{ display: 'flex', gap: '6px' }}>
                     {(hasJoined || isOffline) && (
                         <>
-                            {isHost && (
-                                <ShortcutTooltip label="End meeting" keys={['mod', 'Shift', 'E']} position="top">
-                                    <button
-                                        className="btn btn-danger"
-                                        onClick={handleEndMeeting}
-                                        style={{ fontSize: '12px', padding: '8px 16px' }}
-                                    >
-                                        <Icon icon={StopIcon} size={14} />
-                                        <span style={{ marginLeft: '4px' }}>End</span>
-                                    </button>
-                                </ShortcutTooltip>
-                            )}
+                            <ShortcutTooltip label="End meeting" keys={['mod', 'Shift', 'E']} position="top">
+                                <button
+                                    className="btn btn-danger"
+                                    onClick={handleEndMeeting}
+                                    style={{ fontSize: '12px', padding: '8px 16px' }}
+                                >
+                                    <Icon icon={StopIcon} size={14} />
+                                    <span style={{ marginLeft: '4px' }}>End</span>
+                                </button>
+                            </ShortcutTooltip>
                             <ShortcutTooltip label="Leave" keys={['mod', 'Shift', 'L']} position="top">
                                 <button
                                     className="btn btn-secondary"

@@ -915,6 +915,31 @@ input[type="date"].input-field {
   background: var(--bg-card);
 }
 
+/* Transcript on top: must not use .panel height:100% or it steals the whole sidebar */
+.right-panel-transcript {
+  flex: 0 1 auto;
+  min-height: 0;
+  max-height: min(42vh, 22rem);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  border-bottom: 0.0625rem solid var(--border);
+}
+
+.right-panel-transcript .transcript-panel.panel {
+  height: auto;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.right-panel-bottom {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
 .right-panel-half {
   flex: 1;
   min-height: 0;

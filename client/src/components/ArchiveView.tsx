@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import Icon from './Icon';
 import {
     Search01Icon, Calendar02Icon, UserIcon,
@@ -71,13 +71,24 @@ interface ArchiveMeeting {
     date?: string;
     time?: string;
     host: string;
-    matchedTranscripts?: Array<{ speaker: string; text: string }>;
+    matchedTranscripts?: Array<{ speaker: string; text: string; timestamp?: string }>;
+}
+
+interface TranscriptSegment {
+    id: string;
+    speaker: string;
+    timestamp: string;
+    text: string;
+    agendaItemId?: string | null;
+    agendaKey?: string;
+    createdAt?: string;
 }
 
 interface ArchiveDetail {
     meeting: { title: string; date?: string; time?: string; host: string };
     agendaItems: Array<{ id: string; title: string; duration: number }>;
     transcriptsByAgenda: Record<string, Array<{ id: string; speaker: string; timestamp: string; text: string }>>;
+    transcriptFlat?: TranscriptSegment[];
     actionItems: Array<{ id: string; title: string; status: string; assignee?: string; source?: string }>;
     pins: Array<{ id: string; type: string; url?: string; label?: string; transcriptTimestamp?: string }>;
 }
@@ -94,6 +105,199 @@ interface AgendaSectionProps {
 }
 
 const SEARCH_DEBOUNCE_MS = 300;
+const TRANSCRIPT_DEBOUNCE_MS = 350;
+
+function flattenTranscripts(detail: ArchiveDetail): TranscriptSegment[] {
+    if (detail.transcriptFlat?.length) return detail.transcriptFlat;
+    const by = detail.transcriptsByAgenda || {};
+    return Object.entries(by).flatMap(([key, segs]) =>
+        (segs || []).map((s) => ({ ...s, agendaKey: key })),
+    );
+}
+
+function ArchiveTranscriptExplorer({
+    meetingId,
+    detail,
+    fetchWithAuth,
+}: {
+    meetingId: string;
+    detail: ArchiveDetail;
+    fetchWithAuth?: (url: string, options?: RequestInit) => Promise<Response>;
+}) {
+    const flat = useMemo(() => flattenTranscripts(detail), [detail]);
+
+    const [contentQ, setContentQ] = useState('');
+    const [speakerQ, setSpeakerQ] = useState('');
+    const [debounced, setDebounced] = useState({ c: '', s: '' });
+    const [serverSegments, setServerSegments] = useState<TranscriptSegment[]>([]);
+    const [serverTotal, setServerTotal] = useState(0);
+    const [serverSkip, setServerSkip] = useState(0);
+    const [loading, setLoading] = useState(false);
+    const [useServer, setUseServer] = useState(false);
+
+    useEffect(() => {
+        const t = setTimeout(
+            () => setDebounced({ c: contentQ.trim(), s: speakerQ.trim() }),
+            TRANSCRIPT_DEBOUNCE_MS,
+        );
+        return () => clearTimeout(t);
+    }, [contentQ, speakerQ]);
+
+    const needIndexedSearch = debounced.c.length >= 2 || debounced.s.length >= 1;
+    const preferServer = flat.length > 200 || useServer;
+
+    useEffect(() => {
+        if (!needIndexedSearch || !preferServer) {
+            setServerSegments([]);
+            setServerTotal(0);
+            setServerSkip(0);
+            return;
+        }
+        let cancelled = false;
+        setLoading(true);
+        setServerSegments([]);
+        setServerTotal(0);
+        setServerSkip(0);
+        const params = new URLSearchParams();
+        if (debounced.c) params.set('q', debounced.c);
+        if (debounced.s) params.set('speaker', debounced.s);
+        params.set('limit', '100');
+        params.set('skip', '0');
+        (fetchWithAuth || fetch)(`${API_BASE}/archive/${meetingId}/transcript-query?${params}`)
+            .then((r) => (r.ok ? r.json() : null))
+            .then((data) => {
+                if (cancelled || !data) return;
+                setServerSegments(data.segments || []);
+                setServerTotal(typeof data.total === 'number' ? data.total : 0);
+                setServerSkip((data.segments || []).length);
+            })
+            .finally(() => {
+                if (!cancelled) setLoading(false);
+            });
+        return () => { cancelled = true; };
+    }, [debounced.c, debounced.s, meetingId, fetchWithAuth, needIndexedSearch, preferServer]);
+
+    const loadMoreServer = useCallback(async () => {
+        if (!needIndexedSearch || !preferServer || loading || serverSegments.length >= serverTotal) return;
+        setLoading(true);
+        try {
+            const params = new URLSearchParams();
+            if (debounced.c) params.set('q', debounced.c);
+            if (debounced.s) params.set('speaker', debounced.s);
+            params.set('limit', '100');
+            params.set('skip', String(serverSkip));
+            const res = await (fetchWithAuth || fetch)(`${API_BASE}/archive/${meetingId}/transcript-query?${params}`);
+            if (!res.ok) return;
+            const data = await res.json();
+            const next = data.segments || [];
+            setServerSegments((prev) => [...prev, ...next]);
+            setServerSkip((prev) => prev + next.length);
+        } finally {
+            setLoading(false);
+        }
+    }, [needIndexedSearch, preferServer, loading, serverSegments.length, serverTotal, serverSkip, debounced, meetingId, fetchWithAuth]);
+
+    const displayed = useMemo(() => {
+        if (needIndexedSearch && preferServer) return serverSegments;
+        const c = debounced.c.toLowerCase();
+        const sp = debounced.s.toLowerCase();
+        return flat.filter((seg) => {
+            const okC =
+                !c ||
+                seg.text.toLowerCase().includes(c) ||
+                String(seg.timestamp || '').toLowerCase().includes(c);
+            const okS = !sp || String(seg.speaker || '').toLowerCase().includes(sp);
+            return okC && okS;
+        });
+    }, [flat, debounced.c, debounced.s, needIndexedSearch, preferServer, serverSegments]);
+
+    if (flat.length === 0) return null;
+
+    const showLoadMore =
+        needIndexedSearch &&
+        preferServer &&
+        serverSegments.length > 0 &&
+        serverSegments.length < serverTotal;
+
+    return (
+        <div style={{ marginBottom: '1.5rem' }}>
+            <h3 style={{ fontSize: '0.875rem', fontWeight: 600, marginBottom: '0.5rem' }}>
+                <Icon icon={Search01Icon} size={14} /> Transcript search
+            </h3>
+            <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginBottom: '0.75rem' }}>
+                Filter by text, meeting time (e.g. 5:30 = 5 min 30 sec from start of recording), or speaker. Large meetings use indexed search automatically; you can force it below.
+            </p>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem', marginBottom: '0.75rem' }}>
+                <input
+                    className="input-field"
+                    style={{ flex: '1 1 12rem', minWidth: '10rem' }}
+                    placeholder="Search content or time…"
+                    value={contentQ}
+                    onChange={(e) => setContentQ(e.target.value)}
+                    aria-label="Search transcript content"
+                />
+                <input
+                    className="input-field"
+                    style={{ flex: '1 1 10rem', minWidth: '8rem' }}
+                    placeholder="Speaker name…"
+                    value={speakerQ}
+                    onChange={(e) => setSpeakerQ(e.target.value)}
+                    aria-label="Filter by speaker"
+                />
+            </div>
+            {flat.length > 200 && (
+                <label style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', fontSize: '0.75rem', marginBottom: '0.5rem', cursor: 'pointer' }}>
+                    <input
+                        type="checkbox"
+                        checked={useServer}
+                        onChange={(e) => setUseServer(e.target.checked)}
+                    />
+                    Always use indexed (MongoDB) search for this meeting
+                </label>
+            )}
+            <div style={{ fontSize: '0.6875rem', color: 'var(--text-muted)', marginBottom: '0.5rem' }}>
+                {loading && 'Searching… '}
+                Showing {displayed.length}
+                {needIndexedSearch && preferServer && serverTotal > 0 ? ` of ${serverTotal} matches` : ` segment${displayed.length !== 1 ? 's' : ''}`}
+            </div>
+            <div
+                className="glass-card"
+                style={{
+                    maxHeight: '22rem',
+                    overflowY: 'auto',
+                    padding: '0.5rem 0.75rem',
+                }}
+            >
+                {displayed.map((seg) => (
+                    <div
+                        key={String(seg.id)}
+                        style={{
+                            padding: '0.5rem 0',
+                            borderBottom: '1px solid var(--border)',
+                            fontSize: '0.8125rem',
+                            lineHeight: 1.45,
+                            color: 'var(--text-secondary)',
+                        }}
+                    >
+                        <span style={{ color: 'var(--text-muted)', fontVariantNumeric: 'tabular-nums' }}>{seg.timestamp || '—'}</span>
+                        <span style={{ color: 'var(--text-muted)' }}> · </span>
+                        <span style={{ fontWeight: 600, color: 'var(--text-primary)' }}>{seg.speaker || 'Unknown'}</span>
+                        <span style={{ color: 'var(--text-muted)' }}> · </span>
+                        <span>{seg.text}</span>
+                        {seg.agendaKey && seg.agendaKey !== '_unlinked' && (
+                            <span className="chip" style={{ fontSize: '0.5rem', padding: '1px 6px', marginLeft: '6px' }}>agenda</span>
+                        )}
+                    </div>
+                ))}
+            </div>
+            {showLoadMore && (
+                <button type="button" className="btn btn-secondary btn-sm" style={{ marginTop: '0.5rem' }} onClick={loadMoreServer}>
+                    Load more results
+                </button>
+            )}
+        </div>
+    );
+}
 
 export default function ArchiveView({ fetchWithAuth }: ArchiveViewProps) {
     const [query, setQuery] = useState('');
@@ -182,6 +386,8 @@ export default function ArchiveView({ fetchWithAuth }: ArchiveViewProps) {
                         {loadingSummary ? 'Generating...' : 'Generate Key Point Summaries'}
                     </button>
                 )}
+
+                <ArchiveTranscriptExplorer meetingId={selectedMeeting} detail={detail} fetchWithAuth={fetchWithAuth} />
 
                 {detail.agendaItems.length > 0 && (
                     <div style={{ marginBottom: '1.5rem' }}>
@@ -297,7 +503,7 @@ export default function ArchiveView({ fetchWithAuth }: ArchiveViewProps) {
                                 <div style={{ marginTop: '6px' }}>
                                     {meeting.matchedTranscripts.map((t, i) => (
                                         <p key={i} style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', margin: '2px 0', lineHeight: 1.4 }}>
-                                            <strong>{t.speaker}:</strong> {t.text.length > 120 ? t.text.slice(0, 120) + '...' : t.text}
+                                            {t.timestamp ? `${t.timestamp} · ` : ''}{t.speaker} · {t.text.length > 120 ? t.text.slice(0, 120) + '...' : t.text}
                                         </p>
                                     ))}
                                 </div>
@@ -337,11 +543,13 @@ function AgendaSection({ item, index, segments, summary }: AgendaSectionProps) {
             {expanded && segments.length > 0 && (
                 <div style={{ marginTop: '8px', paddingLeft: '12px', borderLeft: '2px solid var(--border)' }}>
                     {segments.map(seg => (
-                        <div key={seg.id} style={{ marginBottom: '6px' }}>
-                            <span style={{ fontWeight: 600, fontSize: '0.75rem' }}>{seg.speaker}</span>
-                            <span style={{ fontSize: '0.625rem', color: 'var(--text-muted)', marginLeft: '6px' }}>{seg.timestamp}</span>
-                            <p style={{ fontSize: '0.75rem', margin: '2px 0 0', lineHeight: 1.4 }}>{seg.text}</p>
-                        </div>
+                        <p key={seg.id} style={{ fontSize: '0.75rem', margin: '0 0 6px', lineHeight: 1.45, color: 'var(--text-secondary)' }}>
+                            <span style={{ color: 'var(--text-muted)', fontVariantNumeric: 'tabular-nums' }}>{seg.timestamp || '—'}</span>
+                            <span style={{ color: 'var(--text-muted)' }}> · </span>
+                            <span style={{ fontWeight: 600, color: 'var(--text-primary)' }}>{seg.speaker}</span>
+                            <span style={{ color: 'var(--text-muted)' }}> · </span>
+                            {seg.text}
+                        </p>
                     ))}
                 </div>
             )}

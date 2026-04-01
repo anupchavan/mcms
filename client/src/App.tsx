@@ -4,6 +4,7 @@ import TopBar from "./components/TopBar";
 import Sidebar from "./components/Sidebar";
 import AgendaPanel from "./components/AgendaPanel";
 import VideoArea from "./components/VideoArea";
+import TranscriptFeed from "./components/TranscriptFeed";
 import MinutesPanel from "./components/MinutesPanel";
 import ActionItems from "./components/ActionItems";
 import MeetingCreation from "./components/MeetingCreation";
@@ -100,6 +101,7 @@ function DashboardApp() {
   const [meetings, setMeetings] = useState<any[]>([]);
   const [agendaItems, setAgendaItems] = useState<any[]>([]);
   const [minutesItems, setMinutesItems] = useState<any[]>([]);
+  const [transcripts, setTranscripts] = useState<any[]>([]);
   const [actionItems, setActionItems] = useState<any[]>([]);
   const [dashboardStats, setDashboardStats] = useState<any>(null);
   const [selectedMeeting, setSelectedMeeting] = useState<any>(null);
@@ -194,6 +196,7 @@ function DashboardApp() {
     if (selectedMeeting) {
       fetchAgenda(selectedMeeting.id);
       fetchMinutes(selectedMeeting.id);
+      fetchTranscript(selectedMeeting.id);
       fetchActionItems(selectedMeeting.id);
     }
   }, [selectedMeeting]);
@@ -205,6 +208,18 @@ function DashboardApp() {
 
     socket.emit('join_meeting', { meetingId });
 
+    const handleTranscriptUpdate = (segment: any) => {
+      if (segment.meetingId !== meetingId) return;
+      setTranscripts((prev) => {
+        const i = prev.findIndex((t: any) => t.id === segment.id);
+        if (i >= 0) {
+          const next = [...prev];
+          next[i] = { ...next[i], ...segment };
+          return next;
+        }
+        return [...prev, segment];
+      });
+    };
     const handleAgendaSync = ({ meetingId: mid, items }: { meetingId: string; items: any[] }) => {
       if (mid?.toString() === meetingId) setAgendaItems(items);
     };
@@ -228,6 +243,7 @@ function DashboardApp() {
       }
     };
 
+    socket.on('transcript_update', handleTranscriptUpdate);
     socket.on('agenda_sync', handleAgendaSync);
     socket.on('action_items_sync', handleActionItemsSync);
     socket.on('minutes_sync', handleMinutesSync);
@@ -235,6 +251,7 @@ function DashboardApp() {
 
     return () => {
       socket.emit('leave_meeting', { meetingId });
+      socket.off('transcript_update', handleTranscriptUpdate);
       socket.off('agenda_sync', handleAgendaSync);
       socket.off('action_items_sync', handleActionItemsSync);
       socket.off('minutes_sync', handleMinutesSync);
@@ -258,6 +275,13 @@ function DashboardApp() {
       const res = await fetchWithAuth(`${API_BASE}/agenda/${meetingId}`);
       if (res.ok) setAgendaItems(await res.json());
     } catch (err) { console.error("Failed to fetch agenda:", err); }
+  };
+
+  const fetchTranscript = async (meetingId: string) => {
+    try {
+      const res = await fetchWithAuth(`${API_BASE}/transcript/${meetingId}`);
+      if (res.ok) setTranscripts(await res.json());
+    } catch (err) { console.error("Failed to fetch transcript:", err); }
   };
 
   const fetchMinutes = async (meetingId: string) => {
@@ -387,7 +411,6 @@ function DashboardApp() {
               meetingTitle={selectedMeeting?.title || "Select a Meeting"}
               participants={selectedMeeting?.participants || []}
               modality={selectedMeeting?.modality}
-              hostId={selectedMeeting?.hostId || null}
               currentUser={user}
               fullscreenRef={meetingLayoutRef}
               agendaPanelOpen={agendaPanelOpen}
@@ -407,21 +430,29 @@ function DashboardApp() {
             {rightPanelOpen && (
               <div className="meeting-side-panel meeting-side-panel-right open">
                 <div className="right-panel-content">
-                  <div className="right-panel-half right-panel-half-minutes">
-                    <MinutesPanel
-                      minutesItems={minutesItems}
-                      onItemChange={handleMinutesChange}
+                  <div className="right-panel-transcript">
+                    <TranscriptFeed
+                      transcripts={transcripts}
+                      onClosePanel={toggleRightPanel}
                     />
                   </div>
-                  <div className="right-panel-half right-panel-half-actions">
-                    <ActionItems
-                      items={actionItems}
-                      meetingId={selectedMeeting.id}
-                      fetchWithAuth={fetchWithAuth}
-                      onRefresh={() => fetchActionItems(selectedMeeting.id)}
-                      addActionItemTrigger={addActionItemTrigger}
-                      onAddTriggered={() => setAddActionItemTrigger(0)}
-                    />
+                  <div className="right-panel-bottom">
+                    <div className="right-panel-half right-panel-half-minutes">
+                      <MinutesPanel
+                        minutesItems={minutesItems}
+                        onItemChange={handleMinutesChange}
+                      />
+                    </div>
+                    <div className="right-panel-half right-panel-half-actions">
+                      <ActionItems
+                        items={actionItems}
+                        meetingId={selectedMeeting.id}
+                        fetchWithAuth={fetchWithAuth}
+                        onRefresh={() => fetchActionItems(selectedMeeting.id)}
+                        addActionItemTrigger={addActionItemTrigger}
+                        onAddTriggered={() => setAddActionItemTrigger(0)}
+                      />
+                    </div>
                   </div>
                 </div>
               </div>
