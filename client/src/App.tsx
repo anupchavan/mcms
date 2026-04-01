@@ -15,7 +15,8 @@ import ArchiveView from "./components/ArchiveView";
 import RubricSidebar from "./components/RubricSidebar";
 import useKeyboardShortcuts from "./hooks/useKeyboardShortcuts";
 import Icon from "./components/Icon";
-import { Calendar02Icon, Clock01Icon, Location01Icon, UserIcon } from "@hugeicons/core-free-icons";
+import { Search01Icon, Calendar02Icon, Clock01Icon, Location01Icon, UserIcon } from "@hugeicons/core-free-icons";
+import * as chrono from 'chrono-node';
 
 import Login from "./pages/Login";
 import Signup from "./pages/Signup";
@@ -83,6 +84,56 @@ function shouldShowMeetingLocation(meeting: any): boolean {
   return (meeting.modality === "Offline" || meeting.modality === "Hybrid") && Boolean(String(meeting.location || "").trim());
 }
 
+/** Parse natural language date range from search input. Returns { textQuery, dateFrom, dateTo }. */
+function parseSearchInput(input: string) {
+  const trimmed = input.trim();
+  const now = new Date();
+  if (!trimmed) return { textQuery: '', dateFrom: null, dateTo: null };
+
+  const parsed = chrono.parse(trimmed, now);
+  let textQuery = trimmed;
+  let dateFrom: Date | null = null;
+  let dateTo: Date | null = null;
+
+  for (const p of parsed) {
+    textQuery = textQuery.replace(p.text, ' ');
+  }
+  textQuery = textQuery.replace(/\b(from|since|till|to|until)\b\s*/gi, '').replace(/\s+/g, ' ').trim();
+
+  const lower = trimmed.toLowerCase();
+  const hasFrom = /\b(from|since)\b/.test(lower);
+  const hasTo = /\b(till|to|until)\b/.test(lower);
+
+  if (parsed.length >= 2) {
+    dateFrom = parsed[0].start.date();
+    dateTo = parsed[1].start.date();
+    if (dateFrom > dateTo) [dateFrom, dateTo] = [dateTo, dateFrom];
+  } else if (parsed.length === 1) {
+    const p = parsed[0];
+    const d = p.start.date();
+    const startOfDay = (dt: Date) => new Date(dt.getFullYear(), dt.getMonth(), dt.getDate(), 0, 0, 0);
+    const endOfDay = (dt: Date) => new Date(dt.getFullYear(), dt.getMonth(), dt.getDate(), 23, 59, 59);
+
+    if (p.end) {
+      dateFrom = startOfDay(p.start.date());
+      dateTo = endOfDay(p.end.date());
+    } else if (hasFrom && !hasTo) {
+      dateFrom = startOfDay(d);
+    } else if (hasTo && !hasFrom) {
+      dateTo = endOfDay(d);
+    } else {
+      dateFrom = startOfDay(d);
+      dateTo = endOfDay(d);
+    }
+  }
+
+  return {
+    textQuery,
+    dateFrom: dateFrom ? dateFrom.toISOString().slice(0, 10) : null,
+    dateTo: dateTo ? dateTo.toISOString().slice(0, 10) : null,
+  };
+}
+
 function DashboardApp() {
   const { user, logout } = useAuth();
   const { socket } = useSocket();
@@ -97,6 +148,7 @@ function DashboardApp() {
     return window.localStorage.getItem("theme") === "light" ? "light" : "dark";
   });
   const [nowTs, setNowTs] = useState(() => Date.now());
+  const [scheduleSearchQuery, setScheduleSearchQuery] = useState("");
 
   const [meetings, setMeetings] = useState<any[]>([]);
   const [agendaItems, setAgendaItems] = useState<any[]>([]);
@@ -177,6 +229,29 @@ function DashboardApp() {
     () => meetings.filter((meeting) => !isMeetingCompletedByTime(meeting, nowTs)).sort(sortMeetingsBySchedule),
     [meetings, nowTs],
   );
+
+  const filteredUpcomingMeetings = useMemo(() => {
+    if (!scheduleSearchQuery.trim()) return upcomingMeetings;
+    
+    const { textQuery, dateFrom, dateTo } = parseSearchInput(scheduleSearchQuery);
+    const textLower = textQuery.toLowerCase();
+    
+    return upcomingMeetings.filter(m => {
+      let matchesText = true;
+      if (textLower) {
+        matchesText = (m.title?.toLowerCase().includes(textLower)) || (m.host?.toLowerCase().includes(textLower));
+      }
+      
+      let matchesDate = true;
+      const mDateStr = m.confirmedDate || m.date; // YYYY-MM-DD
+      if (mDateStr) {
+        if (dateFrom && mDateStr < dateFrom) matchesDate = false;
+        if (dateTo && mDateStr > dateTo) matchesDate = false;
+      }
+      
+      return matchesText && matchesDate;
+    });
+  }, [upcomingMeetings, scheduleSearchQuery]);
 
   useEffect(() => {
     const labels: Record<string, string> = {
@@ -466,8 +541,19 @@ function DashboardApp() {
             <div className="page-header">
               <h2 style={{ fontSize: 'var(--font-size-title3)', fontWeight: 600, marginBottom: 'var(--lk-size-2xs)', letterSpacing: '-0.022em' }}>Scheduled Meetings</h2>
             </div>
+            <div className="archive-search-bar" style={{ marginBottom: '1.5rem', marginLeft: 'var(--lk-size-md)', marginRight: 'var(--lk-size-md)' }}>
+                <div className="archive-search-input-wrap">
+                    <Icon icon={Search01Icon} size={14} className="archive-search-icon" />
+                    <input
+                        className="input-field"
+                        placeholder="Search titles, hosts... or filter by date: next week, tomorrow..."
+                        value={scheduleSearchQuery}
+                        onChange={(e) => setScheduleSearchQuery(e.target.value)}
+                    />
+                </div>
+            </div>
             <div className="meeting-list">
-              {upcomingMeetings.map(meeting => (
+              {filteredUpcomingMeetings.map(meeting => (
                 <div
                   key={meeting.id}
                   className={`meeting-card glass-card ${selectedMeeting?.id === meeting.id ? "selected" : ""}`}
@@ -490,6 +576,11 @@ function DashboardApp() {
                   </div>
                 </div>
               ))}
+              {filteredUpcomingMeetings.length === 0 && (
+                <p style={{ color: 'var(--text-muted)', fontSize: '0.875rem', padding: '0 var(--lk-size-md)' }}>
+                  {scheduleSearchQuery.trim() ? "No meetings match your search." : "No scheduled meetings."}
+                </p>
+              )}
             </div>
           </div>
         );
