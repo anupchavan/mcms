@@ -42,4 +42,7 @@ const agendaSchema = new mongoose.Schema({
 	timestamps: true,
 });
 
+/** Full-text on embedded item titles for search / archive filters. (meetingId already indexed via unique.) */
+agendaSchema.index({ 'items.title': 'text' });
+
 export = mongoose.model('Agenda', agendaSchema);

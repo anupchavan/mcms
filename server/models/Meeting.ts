@@ -41,4 +41,9 @@ const meetingSchema = new mongoose.Schema({
 	timestamps: true
 });
 
+/** Completed-meeting lists sorted by recency (archives). */
+meetingSchema.index({ status: 1, createdAt: -1 });
+/** Full-text on titles for archive / global search (uses text index). */
+meetingSchema.index({ title: 'text' });
+
 export = mongoose.model('Meeting', meetingSchema);
