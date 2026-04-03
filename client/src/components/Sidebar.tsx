@@ -3,6 +3,7 @@ import ShortcutTooltip from './ShortcutTooltip';
 import { useAuth } from '../context/AuthContext';
 import {
   DashboardSquare01Icon,
+  Task01Icon,
   Video01Icon,
   Calendar02Icon,
   Archive03Icon,
@@ -22,10 +23,11 @@ interface SidebarProps {
 
 const mainNavItems = [
     { id: 'dashboard', label: 'Dashboard', icon: DashboardSquare01Icon, shortcutNum: '1' },
-    { id: 'meeting', label: 'Live Meeting', icon: Video01Icon, shortcutNum: '2' },
-    { id: 'schedule', label: 'Schedule', icon: Calendar02Icon, shortcutNum: '3' },
-    { id: 'archive', label: 'Archives', icon: Archive03Icon, shortcutNum: '4' },
-    { id: 'analytics', label: 'Analytics', icon: BarChartIcon, shortcutNum: '5' },
+    { id: 'tasks', label: 'Tasks', icon: Task01Icon, shortcutNum: '2' },
+    { id: 'meeting', label: 'Live Meeting', icon: Video01Icon, shortcutNum: '3' },
+    { id: 'schedule', label: 'Schedule', icon: Calendar02Icon, shortcutNum: '4' },
+    { id: 'archive', label: 'Archives', icon: Archive03Icon, shortcutNum: '5' },
+    { id: 'analytics', label: 'Analytics', icon: BarChartIcon, shortcutNum: '6' },
 ];
 
 export default function Sidebar({ currentView, onViewChange, collapsed }: SidebarProps) {

@@ -26,7 +26,7 @@ import { useSocket } from "./context/SocketContext";
 const VITE_API_URL = import.meta.env.VITE_API_URL;
 const API_BASE = VITE_API_URL || "http://localhost:5001/api";
 
-const VIEW_KEYS = ['dashboard', 'meeting', 'schedule', 'archive', 'analytics', 'settings', 'profile'];
+const VIEW_KEYS = ['dashboard', 'tasks', 'meeting', 'schedule', 'archive', 'analytics', 'settings', 'profile'];
 
 function formatDate(dateStr: string): string {
   const d = new Date(dateStr + "T00:00:00");
@@ -161,6 +161,8 @@ function DashboardApp() {
   const [rightPanelOpen, setRightPanelOpen] = useState(true);
   const [addActionItemTrigger, setAddActionItemTrigger] = useState(0);
   const [addAgendaItemTrigger, setAddAgendaItemTrigger] = useState(0);
+  const [myActionItems, setMyActionItems] = useState<any[]>([]);
+  const [liveParticipants, setLiveParticipants] = useState<any[]>([]);
   const meetingLayoutRef = useRef<HTMLDivElement | null>(null);
 
   const triggerAddActionItem = useCallback(() => {
@@ -201,7 +203,7 @@ function DashboardApp() {
     return fetch(url, { ...options, headers });
   };
 
-  useEffect(() => { fetchMeetings(); fetchDashboardStats(); }, []);
+  useEffect(() => { fetchMeetings(); fetchDashboardStats(); fetchMyActionItems(); }, []);
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -262,6 +264,7 @@ function DashboardApp() {
       analytics: "Analytics",
       settings: "Settings",
       profile: "Profile",
+      tasks: "My Tasks",
     };
     const label = labels[currentView] ?? currentView;
     document.title = `${label} — Concord`;
@@ -317,12 +320,18 @@ function DashboardApp() {
         fetchMeetings();
       }
     };
+    const handleNotification = (notif: any) => {
+      if (notif.type === 'action_item_assigned') {
+        fetchMyActionItems();
+      }
+    };
 
     socket.on('transcript_update', handleTranscriptUpdate);
     socket.on('agenda_sync', handleAgendaSync);
     socket.on('action_items_sync', handleActionItemsSync);
     socket.on('minutes_sync', handleMinutesSync);
     socket.on('meeting_ended', handleMeetingEndedSync);
+    socket.on('notification', handleNotification);
 
     return () => {
       socket.emit('leave_meeting', { meetingId });
@@ -331,6 +340,7 @@ function DashboardApp() {
       socket.off('action_items_sync', handleActionItemsSync);
       socket.off('minutes_sync', handleMinutesSync);
       socket.off('meeting_ended', handleMeetingEndedSync);
+      socket.off('notification', handleNotification);
     };
   }, [socket, selectedMeeting]);
 
@@ -374,6 +384,13 @@ function DashboardApp() {
       const res = await fetchWithAuth(`${API_BASE}/action-items/${meetingId}`);
       if (res.ok) setActionItems(await res.json());
     } catch (err) { console.error("Failed to fetch action items:", err); }
+  };
+
+  const fetchMyActionItems = async () => {
+    try {
+      const res = await fetchWithAuth(`${API_BASE}/action-items/mine`);
+      if (res.ok) setMyActionItems(await res.json());
+    } catch (err) { console.error("Failed to fetch my action items:", err); }
   };
 
   const fetchDashboardStats = async () => {
@@ -434,6 +451,20 @@ function DashboardApp() {
           </div>
         );
 
+      case "tasks":
+        return (
+          <div style={{ flex: 1, overflow: "auto", padding: '1rem' }}>
+            <div className="page-header">
+              <h2 style={{ fontSize: 'var(--font-size-title2)', fontWeight: 700, marginBottom: '1.5rem' }}>My Tasks</h2>
+            </div>
+            <ActionItems
+              items={myActionItems}
+              fetchWithAuth={fetchWithAuth}
+              onRefresh={fetchMyActionItems}
+            />
+          </div>
+        );
+
       case "meeting":
         if (!selectedMeeting) {
           return (
@@ -476,7 +507,7 @@ function DashboardApp() {
                 />
                 <RubricSidebar
                   meetingId={selectedMeeting.id}
-                  participants={selectedMeeting.participants || []}
+                  participants={liveParticipants.length > 0 ? liveParticipants : (selectedMeeting.participants || [])}
                   fetchWithAuth={fetchWithAuth}
                 />
               </div>
@@ -501,6 +532,7 @@ function DashboardApp() {
               onAgendaChange={handleAgendaChange}
               onMinutesChange={handleMinutesChange}
               onRefreshActionItems={() => fetchActionItems(selectedMeeting.id)}
+              onParticipantsUpdate={setLiveParticipants}
             />
             {rightPanelOpen && (
               <div className="meeting-side-panel meeting-side-panel-right open">
@@ -526,6 +558,7 @@ function DashboardApp() {
                         onRefresh={() => fetchActionItems(selectedMeeting.id)}
                         addActionItemTrigger={addActionItemTrigger}
                         onAddTriggered={() => setAddActionItemTrigger(0)}
+                        participants={liveParticipants.length > 0 ? liveParticipants : (selectedMeeting.participants || [])}
                       />
                     </div>
                   </div>

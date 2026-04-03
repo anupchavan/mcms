@@ -60,6 +60,7 @@ interface VideoAreaProps {
   onAgendaChange?: (items: any[]) => void;
   onMinutesChange?: (items: any[]) => void;
   onRefreshActionItems?: () => void;
+  onParticipantsUpdate?: (participants: any[]) => void;
 }
 
 function VideoTile({ stream, name, profileImage, muted, isSelf, isScreenShare, speaking }: VideoTileProps) {
@@ -158,12 +159,14 @@ export default function VideoArea({
   onAgendaChange,
   onMinutesChange,
   onRefreshActionItems,
+  onParticipantsUpdate,
 }: VideoAreaProps) {
   const { socket, connected } = useSocket();
   const [elapsedTime, setElapsedTime] = useState(0);
   const [activeNote, setActiveNote] = useState("");
   const [parkingLotItems, setParkingLotItems] = useState<string[]>([]);
   const [showToast, setShowToast] = useState<string | null>(null);
+
 
   useEffect(() => {
     const timer = setInterval(() => {
@@ -264,6 +267,19 @@ export default function VideoArea({
 
   useTranscriptionCapture(socket, meetingId || null, localStream);
 
+  useEffect(() => {
+    const list = [];
+    if (currentUser) {
+      list.push({ _id: (currentUser as any).id || (currentUser as any)._id, name: currentUser.name || "You" });
+    }
+    peers.forEach(p => {
+      if (p.userId !== (currentUser as any)?.id && p.userId !== (currentUser as any)?._id) {
+        list.push({ _id: p.userId, name: p.name });
+      }
+    });
+    onParticipantsUpdate?.(list);
+  }, [currentUser, peers, onParticipantsUpdate]);
+
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [hasJoined, setHasJoined] = useState(false);
   const hostControlsRef = useRef<HostControlsRef | null>(null);
@@ -322,6 +338,20 @@ export default function VideoArea({
       target.requestFullscreen().catch(() => { });
     }
   }, [fullscreenRef]);
+
+  const liveParticipants = useMemo(() => {
+    const list = [];
+    if (currentUser) {
+      list.push({ _id: (currentUser as any).id || (currentUser as any)._id, name: currentUser.name || "You" });
+    }
+    peers.forEach(p => {
+      // Avoid duplicates if currentUser is also in peers for some reason
+      if (p.userId !== (currentUser as any)?.id && p.userId !== (currentUser as any)?._id) {
+        list.push({ _id: p.userId, name: p.name });
+      }
+    });
+    return list;
+  }, [currentUser, peers]);
 
   const totalParticipants = 1 + peers.length;
 

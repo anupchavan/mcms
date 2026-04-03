@@ -13,7 +13,7 @@ const actionItemSchema = new mongoose.Schema({
     },
     status: {
         type: String,
-        enum: ['draft', 'pending', 'in-progress', 'completed'],
+        enum: ['draft', 'pending', 'in-progress', 'completed', 'missing'],
         default: 'pending',
     },
     deadline: { type: String, default: null },

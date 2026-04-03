@@ -5,6 +5,7 @@ import {
     CheckmarkCircle01Icon, Clock01Icon, AlertCircleIcon,
     ArrowRight01Icon,
     FlashIcon, Add01Icon, Delete02Icon, SparklesIcon,
+    Video01Icon,
 } from '@hugeicons/core-free-icons';
 
 const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:5001/api';
@@ -21,10 +22,11 @@ const statusConfig = {
     'in-progress': { icon: Clock01Icon, color: 'var(--accent-amber)', label: 'In Progress' },
     'pending': { icon: AlertCircleIcon, color: 'var(--text-muted)', label: 'Pending' },
     'draft': { icon: AlertCircleIcon, color: 'var(--text-tertiary)', label: 'Draft' },
+    'missing': { icon: AlertCircleIcon, color: 'var(--accent-red)', label: 'Missing' },
 };
 
 const CATEGORIES = ['Technical', 'Administrative', 'Decision', 'Follow-up'];
-const STATUSES = ['draft', 'pending', 'in-progress', 'completed'];
+const STATUSES = ['draft', 'pending', 'in-progress', 'completed', 'missing'];
 
 function deadlineToApi(dateStr: string, timeStr: string, includeTime: boolean): string | null {
     const d = dateStr?.trim();
@@ -52,6 +54,7 @@ interface ActionItem {
     assignee?: string;
     deadline?: string;
     source?: string;
+    meetingTitle?: string;
 }
 
 interface ActionItemsProps {
@@ -61,16 +64,29 @@ interface ActionItemsProps {
     onRefresh?: () => void;
     addActionItemTrigger?: number;
     onAddTriggered?: () => void;
+    participants?: any[];
 }
 
-export default function ActionItems({ items, meetingId, fetchWithAuth, onRefresh, addActionItemTrigger, onAddTriggered }: ActionItemsProps) {
+export default function ActionItems({ items, meetingId, fetchWithAuth, onRefresh, addActionItemTrigger, onAddTriggered, participants }: ActionItemsProps) {
     const [adding, setAdding] = useState(false);
     const [newTitle, setNewTitle] = useState('');
     const [newCategory, setNewCategory] = useState('Technical');
     const [newDeadlineDate, setNewDeadlineDate] = useState('');
     const [newDeadlineTime, setNewDeadlineTime] = useState('');
     const [newDeadlineIncludeTime, setNewDeadlineIncludeTime] = useState(false);
+    const [newAssignee, setNewAssignee] = useState<{ id: string; name: string } | null>(null);
     const [editingId, setEditingId] = useState<string | null>(null);
+
+    useEffect(() => {
+        if (participants && participants.length > 0) {
+            // Only auto-select if no selection exists, or if current selection is no longer in the list
+            if (!newAssignee || !participants.find(p => (p._id || p.id) === newAssignee.id)) {
+                setNewAssignee({ id: participants[0]._id || participants[0].id, name: participants[0].name });
+            }
+        } else {
+            setNewAssignee(null);
+        }
+    }, [participants]);
 
     useEffect(() => {
         if (addActionItemTrigger && addActionItemTrigger > 0) {
@@ -79,24 +95,39 @@ export default function ActionItems({ items, meetingId, fetchWithAuth, onRefresh
         }
     }, [addActionItemTrigger, onAddTriggered]);
 
-    const resetDeadlineFields = () => {
+    const resetFields = () => {
+        setNewTitle('');
         setNewDeadlineDate('');
         setNewDeadlineTime('');
         setNewDeadlineIncludeTime(false);
+        if (participants && participants.length > 0) {
+            // Re-select first participant if possible
+            setNewAssignee({ id: participants[0]._id || participants[0].id, name: participants[0].name });
+        } else {
+            setNewAssignee(null);
+        }
     };
 
     const handleCreate = async () => {
-        if (!newTitle.trim() || !meetingId) return;
         const deadline = deadlineToApi(newDeadlineDate, newDeadlineTime, newDeadlineIncludeTime);
         try {
+            const body: any = { 
+                title: newTitle.trim(), 
+                category: newCategory, 
+                deadline: deadline || null 
+            };
+            if (newAssignee) {
+                body.assignee = newAssignee.id;
+                body.assigneeName = newAssignee.name;
+            }
+
             const res = await (fetchWithAuth || fetch)(`${API_BASE}/action-items/${meetingId}`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ title: newTitle.trim(), category: newCategory, deadline: deadline || null }),
+                body: JSON.stringify(body),
             });
             if (res.ok) {
-                setNewTitle('');
-                resetDeadlineFields();
+                resetFields();
                 setAdding(false);
                 onRefresh?.();
             }
@@ -193,10 +224,16 @@ export default function ActionItems({ items, meetingId, fetchWithAuth, onRefresh
                                     <span className={`chip ${categoryChips[item.category] || 'chip-blue'}`}>
                                         {item.category}
                                     </span>
-                                    <span className="ai-card-assignee">
+                                    <span className="ai-card-assignee" title={item.assignee}>
                                         <Icon icon={ArrowRight01Icon} size={10} />
-                                        {item.assignee || 'Unassigned'}
+                                        {item.assignee}
                                     </span>
+                                    {item.meetingTitle && (
+                                        <span className="ai-card-meta-item" style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '100px' }} title={item.meetingTitle}>
+                                            <Icon icon={Video01Icon} size={10} />
+                                            {item.meetingTitle}
+                                        </span>
+                                    )}
                                     {item.deadline && (
                                         <span className="ai-card-deadline">
                                             <Icon icon={Clock01Icon} size={10} />
@@ -209,7 +246,7 @@ export default function ActionItems({ items, meetingId, fetchWithAuth, onRefresh
                     })}
 
                     {adding ? (
-                        <div className="glass-card inline-form-card" onKeyDown={(e: React.KeyboardEvent) => { if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); setAdding(false); resetDeadlineFields(); } }}>
+                        <div className="glass-card inline-form-card" onKeyDown={(e: React.KeyboardEvent) => { if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); setAdding(false); resetFields(); } }}>
                             <input
                                 className="input-field"
                                 placeholder="Action item title..."
@@ -217,7 +254,7 @@ export default function ActionItems({ items, meetingId, fetchWithAuth, onRefresh
                                 onChange={(e: React.ChangeEvent<HTMLInputElement>) => setNewTitle(e.target.value)}
                                 onKeyDown={(e: React.KeyboardEvent) => {
                                     if (e.key === 'Enter') handleCreate();
-                                    if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); setAdding(false); resetDeadlineFields(); }
+                                    if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); setAdding(false); resetFields(); }
                                 }}
                                 autoFocus
                                 style={{ marginBottom: '0.25rem' }}
@@ -227,9 +264,25 @@ export default function ActionItems({ items, meetingId, fetchWithAuth, onRefresh
                                     className="input-field"
                                     value={newCategory}
                                     onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setNewCategory(e.target.value)}
+                                    style={{ flex: 1 }}
                                 >
                                     {CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
                                 </select>
+                                {participants && participants.length > 0 && (
+                                    <select
+                                        className="input-field"
+                                        value={newAssignee?.id || ''}
+                                        onChange={(e: React.ChangeEvent<HTMLSelectElement>) => {
+                                            const p = participants.find(part => (part._id || part.id) === e.target.value);
+                                            if (p) setNewAssignee({ id: p._id || p.id, name: p.name });
+                                        }}
+                                        style={{ flex: 1 }}
+                                    >
+                                        {participants.map(p => (
+                                            <option key={p._id || p.id} value={p._id || p.id}>{p.name}</option>
+                                        ) ) }
+                                    </select>
+                                )}
                             </div>
                             <div className="action-item-deadline-block">
                                 <span className="action-item-deadline-label">Deadline</span>
@@ -261,8 +314,8 @@ export default function ActionItems({ items, meetingId, fetchWithAuth, onRefresh
                                 </div>
                             </div>
                             <div className="inline-form-row" style={{ marginTop: '0.35rem' }}>
-                                <button className="btn btn-sm btn-primary" onClick={handleCreate}>Add</button>
-                                <button className="btn btn-sm btn-secondary" onClick={() => { setAdding(false); resetDeadlineFields(); }}>Cancel</button>
+                                <button className="btn btn-sm btn-primary" onClick={handleCreate} disabled={!newTitle.trim() || !newAssignee}>Add</button>
+                                <button className="btn btn-sm btn-secondary" onClick={() => { setAdding(false); resetFields(); }}>Cancel</button>
                             </div>
                         </div>
                     ) : (

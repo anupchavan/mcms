@@ -3,42 +3,68 @@ const router = express.Router();
 import ActionItem = require('../models/ActionItem');
 
 export = function ({ protect, usingMongo, Notification, emitToUser, inMemoryActionItems, io, ActionItem: DbActionItem }: any) {
+    const processItem = (i: any) => {
+        const item = i.toObject ? i.toObject() : i;
+        let status = item.status;
+        if (status !== 'completed' && item.deadline) {
+            const now = new Date();
+            const deadline = new Date(item.deadline);
+            if (deadline < now) {
+                status = 'missing';
+            }
+        }
+        return {
+            id: (item._id || item.id).toString(),
+            title: item.title,
+            assignee: item.assigneeName || item.assignee?.name || 'Unassigned',
+            assigneeId: (item.assignee?._id || item.assignee)?.toString(),
+            category: item.category,
+            status: status,
+            deadline: item.deadline,
+            agendaItemId: item.agendaItemId,
+            source: item.source,
+            aiConfidence: item.aiConfidence,
+            meetingId: (item.meetingId?._id || item.meetingId)?.toString(),
+            meetingTitle: item.meetingId?.title || null,
+        };
+    };
+
     const broadcastSync = async (meetingId: string) => {
         if (!io) return;
         const mId = meetingId.toString();
         let items = [];
         if (usingMongo() && ActionItem) {
             const dbItems = await ActionItem.find({ meetingId: mId }).populate('assignee', 'name email').sort({ createdAt: 1 });
-            items = dbItems.map((i: any) => ({
-                id: i._id.toString(), title: i.title,
-                assignee: i.assigneeName || i.assignee?.name || 'Unassigned',
-                assigneeId: (i.assignee?._id || i.assignee)?.toString(),
-                category: i.category, status: i.status,
-                deadline: i.deadline, agendaItemId: i.agendaItemId,
-                source: i.source, aiConfidence: i.aiConfidence,
-            }));
+            items = dbItems.map(processItem);
         } else {
             items = inMemoryActionItems[meetingId] || [];
         }
         io.to(`meeting:${mId}`).emit('action_items_sync', { meetingId: mId, items });
     };
 
+    router.get('/mine', protect, async (req: any, res: any) => {
+        try {
+            if (usingMongo() && ActionItem) {
+                const items = await ActionItem.find({ assignee: req.user._id })
+                    .populate('meetingId', 'title')
+                    .populate('assignee', 'name email')
+                    .sort({ deadline: 1 });
+                return res.json(items.map(processItem));
+            }
+            res.json([]);
+        } catch (error: any) {
+            res.status(500).json({ message: 'Server error', error: error.message });
+        }
+    });
+
     router.get('/:meetingId', protect, async (req: any, res: any) => {
         try {
             if (usingMongo() && ActionItem) {
                 const items = await ActionItem.find({ meetingId: req.params.meetingId })
+                    .populate('meetingId', 'title')
                     .populate('assignee', 'name email')
                     .sort({ createdAt: 1 });
-                if (items.length) {
-                    return res.json(items.map((i: any) => ({
-                        id: i._id.toString(), title: i.title,
-                        assignee: i.assigneeName || i.assignee?.name || 'Unassigned',
-                        assigneeId: (i.assignee?._id || i.assignee)?.toString(),
-                        category: i.category, status: i.status,
-                        deadline: i.deadline, agendaItemId: i.agendaItemId,
-                        source: i.source, aiConfidence: i.aiConfidence,
-                    })));
-                }
+                return res.json(items.map(processItem));
             }
             res.json(inMemoryActionItems[req.params.meetingId] || []);
         } catch (error: any) {
@@ -89,14 +115,8 @@ export = function ({ protect, usingMongo, Notification, emitToUser, inMemoryActi
                 } catch (e) { /* non-critical */ }
             }
 
-            res.status(201).json({
-                id: item._id, title: item.title,
-                assignee: item.assigneeName || 'Unassigned',
-                assigneeId: item.assignee,
-                category: item.category, status: item.status,
-                deadline: item.deadline, agendaItemId: item.agendaItemId,
-                source: item.source, aiConfidence: item.aiConfidence,
-            });
+            const populated = await ActionItem.findById(item._id).populate('meetingId', 'title').populate('assignee', 'name email');
+            res.status(201).json(processItem(populated));
             broadcastSync(req.params.meetingId);
         } catch (error: any) {
             res.status(500).json({ message: 'Server error', error: error.message });
@@ -114,18 +134,12 @@ export = function ({ protect, usingMongo, Notification, emitToUser, inMemoryActi
             }
 
             const item = await ActionItem.findByIdAndUpdate(req.params.id, updates, { new: true })
+                .populate('meetingId', 'title')
                 .populate('assignee', 'name email');
             if (!item) return res.status(404).json({ message: 'Action item not found' });
 
-            res.json({
-                id: item._id.toString(), title: item.title,
-                assignee: (item as any).assigneeName || (item as any).assignee?.name || 'Unassigned',
-                assigneeId: ((item as any).assignee?._id || item.assignee)?.toString(),
-                category: item.category, status: item.status,
-                deadline: (item as any).deadline, agendaItemId: (item as any).agendaItemId,
-                source: (item as any).source, aiConfidence: (item as any).aiConfidence,
-            });
-            broadcastSync((item as any).meetingId.toString());
+            res.json(processItem(item));
+            broadcastSync((item as any).meetingId._id.toString());
         } catch (error: any) {
             res.status(500).json({ message: 'Server error', error: error.message });
         }
