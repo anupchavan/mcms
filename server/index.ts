@@ -29,7 +29,7 @@ dotenv.config();
 // optional MongoDB connection
 let usingMongoFlag = false;
 let User: any = null, Meeting: any = null, Poll: any = null, Notification: any = null, RSVP: any = null;
-let Transcript: any = null, Agenda: any = null, Minutes: any = null, ActionItem: any = null, Attendance: any = null;
+let Transcript: any = null, Agenda: any = null, Minutes: any = null, ActionItem: any = null, Attendance: any = null, MeetingSummary: any = null;
 
 try {
 	const mongoose = require('mongoose');
@@ -54,6 +54,7 @@ try {
 	Minutes = require('./models/Minutes');
 	ActionItem = require('./models/ActionItem');
 	Attendance = require('./models/Attendance');
+	MeetingSummary = require('./models/MeetingSummary');
 } catch (e) {
 	console.log('Mongoose not found — using in-memory store');
 }
@@ -152,7 +153,7 @@ function generateRsvpToken(meetingId: any, userId: any) {
 }
 
 const { generateICS } = require('./services/icsGenerator');
-const { callAISummarize, callAIExtractActions } = require('./services/aiService');
+const { callAISummarize, callAIExtractActions, callAIMeetingSummary } = require('./services/aiService');
 
 async function sendRsvpEmail(meeting: any, user: any, slot: any, icsBuffer: Buffer | null) {
 	try {
@@ -222,14 +223,16 @@ const inMemoryAgendas: Record<string, any[]> = {};
 const inMemoryMinutes: Record<string, any[]> = {};
 const inMemoryTranscripts: Record<string, any[]> = {};
 const inMemoryActionItems: Record<string, any[]> = {};
+const inMemoryMeetingSummaries: Record<string, any> = {};
 
 // ── Shared deps object for routes ────────────────────────────
 const deps = {
 	User, Meeting, Poll, Notification, RSVP, Agenda, Minutes, protect, usingMongo,
 	generateToken, emitToUser, sendRsvpEmail, generateICS,
 	inMemoryUsers, JWT_SECRET, PORT, CLIENT_URL,
-	inMemoryMeetings, inMemoryAgendas, inMemoryMinutes, inMemoryTranscripts, inMemoryActionItems,
-	callAISummarize, io,
+	inMemoryMeetings, inMemoryAgendas, inMemoryMinutes, inMemoryTranscripts, inMemoryActionItems, inMemoryMeetingSummaries,
+	MeetingSummary,
+	callAISummarize, callAIMeetingSummary, io,
 };
 
 // ── Mount Routes ─────────────────────────────────────────────
@@ -297,6 +300,101 @@ function broadcastInterimTranscript(meetingId: string, session: any) {
 	});
 }
 
+async function processRealtimeActions(meetingId: string, agg: TranscriptAgg) {
+	try {
+		let currentMinutes: any[] = [];
+		if (usingMongoFlag && Minutes) {
+			const minutesDoc = await Minutes.findOne({ meetingId });
+			if (minutesDoc && minutesDoc.items) currentMinutes = minutesDoc.items;
+		} else {
+			currentMinutes = inMemoryMinutes[meetingId] || [];
+		}
+		const actions = await callAIExtractActions(`${agg.speaker}: ${agg.text}`, currentMinutes);
+		if (actions && actions.length > 0) {
+			let added = false;
+			let meetingUsers: any[] = [];
+			if (usingMongoFlag && Meeting) {
+				const meeting = await Meeting.findById(meetingId).populate('participants');
+				if (meeting && meeting.participants) meetingUsers = meeting.participants;
+			}
+			for (const a of actions) {
+				if (usingMongoFlag && ActionItem) {
+					const safeTitle = a.title.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+					const exists = await ActionItem.findOne({
+						meetingId,
+						title: { $regex: new RegExp(`^${safeTitle}$`, 'i') }
+					});
+					if (exists) continue;
+
+					let assigneeId = null;
+					if (a.assignee) {
+						const safeAssignee = a.assignee.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+						const matchedParticipant = meetingUsers.find((u: any) => 
+							u.name?.toLowerCase() === a.assignee.toLowerCase() || 
+							u.email?.toLowerCase() === a.assignee.toLowerCase()
+						);
+						if (matchedParticipant) {
+							assigneeId = matchedParticipant._id;
+						} else if (User) {
+							const globalUser = await User.findOne({ name: { $regex: new RegExp(`^${safeAssignee}$`, 'i') } });
+							if (globalUser) assigneeId = globalUser._id;
+						}
+					}
+
+					await ActionItem.create({
+						meetingId,
+						title: a.title,
+						assigneeName: a.assignee || null,
+						assignee: assigneeId,
+						category: a.category || 'Technical',
+						status: 'pending',
+						deadline: a.deadline || null,
+						source: 'ai-extracted',
+						aiConfidence: a.confidence || null,
+					});
+					added = true;
+				} else {
+					const exists = inMemoryActionItems[meetingId]?.find((item: any) => item.title.toLowerCase() === a.title.toLowerCase());
+					if (exists) continue;
+					const item = {
+						id: `ai-live-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+						title: a.title,
+						assignee: a.assignee || 'Unassigned',
+						category: a.category || 'Technical',
+						status: 'pending',
+						deadline: a.deadline || null,
+						source: 'ai-extracted',
+					};
+					if (!inMemoryActionItems[meetingId]) inMemoryActionItems[meetingId] = [];
+					inMemoryActionItems[meetingId].push(item);
+					added = true;
+				}
+			}
+			if (added && io) {
+				let items = [];
+				if (usingMongoFlag && ActionItem) {
+					const dbItems = await ActionItem.find({ meetingId }).populate('assignee', 'name email').sort({ createdAt: 1 });
+					items = dbItems.map((i: any) => ({
+						id: i._id.toString(), title: i.title,
+						assignee: i.assigneeName || i.assignee?.name || 'Unassigned',
+						assigneeId: (i.assignee?._id || i.assignee)?.toString(),
+						category: i.category, status: i.status,
+						deadline: i.deadline, agendaItemId: i.agendaItemId,
+						source: i.source, aiConfidence: i.aiConfidence,
+					}));
+				} else {
+					items = inMemoryActionItems[meetingId] || [];
+				}
+				io.to(`meeting:${meetingId}`).emit('action_items_sync', { meetingId, items });
+			}
+		}
+	} catch (e: any) {
+		if (process.env.NODE_ENV !== 'production') {
+			console.error('Real-time AI action extraction failed:', e.message);
+		}
+	}
+}
+
 // push finalized transcript segments to all clients in a meeting and save them to the database if MongoDB is enabled.
 // called when a paragraph, speaker turn, or sentence boundary is reached during live transcription.
 function flushAggToClients(meetingId: string, agg: TranscriptAgg, session: any) {
@@ -331,7 +429,24 @@ function flushAggToClients(meetingId: string, agg: TranscriptAgg, session: any) 
 			languageCode: agg.languageCode,
 			agendaItemId: agg.agendaItemId,
 		}).catch(() => { });
+	} else {
+		if (!inMemoryTranscripts[meetingId]) inMemoryTranscripts[meetingId] = [];
+		inMemoryTranscripts[meetingId].push({
+			id,
+			meetingId,
+			speaker: agg.speaker,
+			speakerImage: agg.speakerImage,
+			text,
+			timestamp: segment.timestamp,
+			startTime: agg.segmentStartElapsedMs,
+			languageCode: agg.languageCode,
+			agendaItemId: agg.agendaItemId,
+			createdAt: new Date().toISOString(),
+		});
 	}
+
+	// Trigger real-time action extraction is commented out to defer to post-meeting extraction
+	// processRealtimeActions(meetingId, agg);
 }
 
 // split transcript into paragraphs
@@ -675,9 +790,10 @@ io.on('connection', (socket: any) => {
 							const fullText = transcripts.map((t: any) => `${t.speaker}: ${t.text}`).join('\n');
 							const agenda = await Agenda.findOne({ meetingId });
 							const agendaItems = agenda ? agenda.items : [];
+							const minutesDoc = await Minutes.findOne({ meetingId });
 
 							try {
-								const actions = await callAIExtractActions(fullText);
+								const actions = await callAIExtractActions(fullText, minutesDoc ? minutesDoc.items : []);
 								for (const a of actions) {
 									await ActionItem.create({
 										meetingId, title: a.title,
@@ -693,12 +809,57 @@ io.on('connection', (socket: any) => {
 							}
 
 							try {
-								const summaries = await callAISummarize(
+								await callAISummarize(
 									transcripts.map((t: any) => ({ text: t.text, speaker: t.speaker, agendaItemId: t.agendaItemId })),
 									agendaItems.map((i: any) => ({ id: i.id, title: i.title }))
 								);
 							} catch (e: any) {
 								console.error('AI summarization failed:', e.message);
+							}
+
+							try {
+								const latestActionItems = await ActionItem.find({ meetingId }).populate('assignee', 'name email').sort({ createdAt: 1 });
+								const storedSummary = await callAIMeetingSummary({
+									meeting_title: meeting.title,
+									segments: transcripts.map((t: any) => ({
+										text: t.text,
+										speaker: t.speaker,
+										agendaItemId: t.agendaItemId,
+									})),
+									agenda_items: agendaItems.map((i: any) => ({ id: i.id, title: i.title })),
+									minutes_items: ((minutesDoc as any)?.items || []).map((item: any) => ({
+										id: item.id,
+										title: item.title,
+										status: item.status,
+										notes: item.notes || '',
+										duration: item.duration,
+									})),
+									action_items: latestActionItems.map((item: any) => ({
+										title: item.title,
+										status: item.status,
+										assignee: item.assigneeName || item.assignee?.name || null,
+										deadline: item.deadline || null,
+										category: item.category || null,
+									})),
+								});
+
+								await MeetingSummary.findOneAndUpdate(
+									{ meetingId },
+									{
+										meetingId,
+										overview: storedSummary.overview || '',
+										discussionPoints: storedSummary.discussion_points || [],
+										completedItems: storedSummary.completed_items || [],
+										pendingItems: storedSummary.pending_items || [],
+										decisions: storedSummary.decisions || [],
+										nextSteps: storedSummary.next_steps || [],
+										model: storedSummary.model || 'unknown',
+										generatedAt: new Date(),
+									},
+									{ upsert: true, new: true }
+								);
+							} catch (e: any) {
+								console.error('AI meeting summary persistence failed:', e.message);
 							}
 						}
 					} catch (e: any) {
@@ -719,6 +880,83 @@ io.on('connection', (socket: any) => {
 								read: false, createdAt: notif.createdAt,
 							});
 						} catch (e) { /* non-critical */ }
+					}
+				}
+			} else {
+				// In-memory fallback
+				const memMeeting = inMemoryMeetings.find((m: any) => String(m.id || m._id) === String(meetingId));
+				if (memMeeting && memMeeting.status !== 'completed') {
+					memMeeting.status = 'completed';
+					console.log(`[Socket] Meeting ${meetingId} manually ended (In-Memory).`);
+
+					try {
+						const transcripts = inMemoryTranscripts[meetingId] || [];
+						if (transcripts.length > 0) {
+							const fullText = transcripts.map((t: any) => `${t.speaker}: ${t.text}`).join('\n');
+							const agendaItems = inMemoryAgendas[meetingId] || [];
+							const minutesItems = inMemoryMinutes[meetingId] || [];
+
+							try {
+								const actions = await callAIExtractActions(fullText, minutesItems);
+								if (!inMemoryActionItems[meetingId]) inMemoryActionItems[meetingId] = [];
+								for (const a of actions) {
+									inMemoryActionItems[meetingId].push({
+										id: `ai-post-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+										title: a.title,
+										assignee: a.assignee || 'Unassigned',
+										category: a.category || 'Technical',
+										status: 'pending',
+										deadline: a.deadline || null,
+										source: 'ai-extracted',
+										aiConfidence: a.confidence || null,
+									});
+								}
+							} catch (e: any) {
+								console.error('In-memory AI action extraction failed:', e.message);
+							}
+
+							try {
+								await callAISummarize(
+									transcripts.map((t: any) => ({ text: t.text, speaker: t.speaker, agendaItemId: t.agendaItemId })),
+									agendaItems.map((i: any) => ({ id: i.id, title: i.title }))
+								);
+							} catch (e: any) {
+								console.error('In-memory AI summarization failed:', e.message);
+							}
+
+							try {
+								const storedSummary = await callAIMeetingSummary({
+									meeting_title: memMeeting.title,
+									segments: transcripts.map((t: any) => ({
+										text: t.text, speaker: t.speaker, agendaItemId: t.agendaItemId,
+									})),
+									agenda_items: agendaItems.map((i: any) => ({ id: i.id, title: i.title })),
+									minutes_items: minutesItems.map((item: any) => ({
+										id: item.id, title: item.title, status: item.status,
+										notes: item.notes || '', duration: item.duration,
+									})),
+									action_items: (inMemoryActionItems[meetingId] || []).map((item: any) => ({
+										title: item.title, status: item.status, assignee: item.assignee, category: item.category,
+									})),
+								});
+
+								inMemoryMeetingSummaries[meetingId] = {
+									meetingId,
+									overview: storedSummary.overview || '',
+									discussionPoints: storedSummary.discussion_points || [],
+									completedItems: storedSummary.completed_items || [],
+									pendingItems: storedSummary.pending_items || [],
+									decisions: storedSummary.decisions || [],
+									nextSteps: storedSummary.next_steps || [],
+									model: storedSummary.model || 'unknown',
+									generatedAt: new Date(),
+								};
+							} catch (e: any) {
+								console.error('In-memory AI meeting summary persistence failed:', e.message);
+							}
+						}
+					} catch (e: any) {
+						console.error('In-memory post-meeting AI processing error:', e.message);
 					}
 				}
 			}
@@ -865,6 +1103,7 @@ app.get('/mcms/*path', (req: any, res: any) => {
 
 // start server
 server.listen(PORT, () => {
-	console.log(`MCMS Backend running at http://localhost:${PORT}`);
-	console.log(`MongoDB: ${usingMongoFlag ? 'Connected' : 'Not running — users stored in-memory'}`);
+	console.log(`\n🚀 MCMS Backend running at http://localhost:${PORT}`);
+	console.log(`🤖 AI Service URL: ${process.env.AI_SERVICE_URL || 'http://localhost:8000'}`);
+	console.log(`📦 Storage: ${usingMongoFlag ? 'MongoDB (Persistent)' : 'In-Memory (Volatile)'}\n`);
 });

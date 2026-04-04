@@ -91,6 +91,16 @@ interface ArchiveDetail {
     transcriptFlat?: TranscriptSegment[];
     actionItems: Array<{ id: string; title: string; status: string; assignee?: string; source?: string }>;
     pins: Array<{ id: string; type: string; url?: string; label?: string; transcriptTimestamp?: string }>;
+    meetingSummary?: {
+        overview: string;
+        discussionPoints: string[];
+        completedItems: string[];
+        pendingItems: string[];
+        decisions: string[];
+        nextSteps: string[];
+        model?: string;
+        generatedAt?: string;
+    } | null;
 }
 
 interface ArchiveViewProps {
@@ -307,6 +317,8 @@ export default function ArchiveView({ fetchWithAuth }: ArchiveViewProps) {
     const [detail, setDetail] = useState<ArchiveDetail | null>(null);
     const [summaries, setSummaries] = useState<Record<string, string>>({});
     const [loadingSummary, setLoadingSummary] = useState(false);
+    const [finalSummary, setFinalSummary] = useState<ArchiveDetail['meetingSummary']>(null);
+    const [loadingFinalSummary, setLoadingFinalSummary] = useState(false);
     const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
     const search = useCallback(async (searchInput: string) => {
@@ -336,10 +348,39 @@ export default function ArchiveView({ fetchWithAuth }: ArchiveViewProps) {
         setSelectedMeeting(meetingId);
         try {
             const res = await (fetchWithAuth || fetch)(`${API_BASE}/archive/${meetingId}`);
-            if (res.ok) setDetail(await res.json());
+            if (res.ok) {
+                const data = await res.json();
+                setDetail(data);
+                setFinalSummary(data.meetingSummary || null);
+            }
         } catch (err) {
             console.error('Failed to load archive detail:', err);
         }
+    };
+
+    const loadFinalSummary = async (meetingId: string) => {
+        setLoadingFinalSummary(true);
+        try {
+            const res = await (fetchWithAuth || fetch)(`${API_BASE}/archive/${meetingId}/final-summary`);
+            if (res.ok) {
+                const data = await res.json();
+                const normalized = data.summary ? {
+                    overview: data.summary.overview || '',
+                    discussionPoints: data.summary.discussion_points || [],
+                    completedItems: data.summary.completed_items || [],
+                    pendingItems: data.summary.pending_items || [],
+                    decisions: data.summary.decisions || [],
+                    nextSteps: data.summary.next_steps || [],
+                    model: data.summary.model,
+                    generatedAt: data.summary.generated_at,
+                } : null;
+                setFinalSummary(normalized);
+                setDetail((prev) => prev ? ({ ...prev, meetingSummary: normalized }) : prev);
+            }
+        } catch (err) {
+            console.error('Failed to load final summary:', err);
+        }
+        setLoadingFinalSummary(false);
     };
 
     const loadSummary = async (meetingId: string) => {
@@ -361,7 +402,7 @@ export default function ArchiveView({ fetchWithAuth }: ArchiveViewProps) {
             <div style={{ flex: 1, overflow: 'auto', padding: '1.5rem' }}>
                 <button
                     className="btn btn-secondary btn-sm"
-                    onClick={() => { setSelectedMeeting(null); setDetail(null); setSummaries({}); }}
+                    onClick={() => { setSelectedMeeting(null); setDetail(null); setSummaries({}); setFinalSummary(null); }}
                     style={{ marginBottom: '1rem' }}
                 >
                     Back to Archives
@@ -375,6 +416,36 @@ export default function ArchiveView({ fetchWithAuth }: ArchiveViewProps) {
                     {detail.meeting.time && <> &middot; <Icon icon={Clock01Icon} size={12} /> {detail.meeting.time}</>}
                     &middot; <Icon icon={UserIcon} size={12} /> {detail.meeting.host}
                 </p>
+
+                <div style={{ marginBottom: '1.5rem' }}>
+                    <h3 style={{ fontSize: '0.875rem', fontWeight: 600, marginBottom: '0.5rem' }}>
+                        <Icon icon={Notebook01Icon} size={14} /> Meeting Summary
+                    </h3>
+                    {finalSummary ? (
+                        <div className="glass-card" style={{ padding: '14px 16px' }}>
+                            <p style={{ fontSize: '0.875rem', lineHeight: 1.55, color: 'var(--text-primary)', marginBottom: '0.75rem' }}>
+                                {finalSummary.overview || 'No overview available.'}
+                            </p>
+                            <SummaryList title="Discussion Points" items={finalSummary.discussionPoints} />
+                            <SummaryList title="Completed" items={finalSummary.completedItems} />
+                            <SummaryList title="Pending" items={finalSummary.pendingItems} />
+                            <SummaryList title="Decisions" items={finalSummary.decisions} />
+                            <SummaryList title="Next Steps" items={finalSummary.nextSteps} />
+                            <p style={{ fontSize: '0.6875rem', color: 'var(--text-muted)', marginTop: '0.75rem', marginBottom: 0 }}>
+                                Model: {finalSummary.model || 'unknown'}
+                                {finalSummary.generatedAt ? ` · Generated ${new Date(finalSummary.generatedAt).toLocaleString()}` : ''}
+                            </p>
+                        </div>
+                    ) : (
+                        <button
+                            className="btn btn-sm btn-primary"
+                            onClick={() => loadFinalSummary(selectedMeeting)}
+                            disabled={loadingFinalSummary}
+                        >
+                            {loadingFinalSummary ? 'Generating...' : 'Generate Meeting Summary'}
+                        </button>
+                    )}
+                </div>
 
                 {!Object.keys(summaries).length && (
                     <button
@@ -515,6 +586,22 @@ export default function ArchiveView({ fetchWithAuth }: ArchiveViewProps) {
                     )}
                 </div>
             )}
+        </div>
+    );
+}
+
+function SummaryList({ title, items }: { title: string; items?: string[] }) {
+    if (!items || items.length === 0) return null;
+    return (
+        <div style={{ marginTop: '0.75rem' }}>
+            <h4 style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-muted)', marginBottom: '0.35rem', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                {title}
+            </h4>
+            <ul style={{ margin: 0, paddingLeft: '1rem', color: 'var(--text-secondary)', fontSize: '0.8125rem', lineHeight: 1.5 }}>
+                {items.map((item, idx) => (
+                    <li key={`${title}-${idx}`}>{item}</li>
+                ))}
+            </ul>
         </div>
     );
 }

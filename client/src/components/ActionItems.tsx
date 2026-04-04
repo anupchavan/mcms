@@ -4,7 +4,7 @@ import ShortcutTooltip from './ShortcutTooltip';
 import {
     CheckmarkCircle01Icon, Clock01Icon, AlertCircleIcon,
     ArrowRight01Icon,
-    FlashIcon, Add01Icon, Delete02Icon, SparklesIcon,
+    FlashIcon, Add01Icon, Delete02Icon, SparklesIcon, PencilEdit02Icon,
     Video01Icon,
 } from '@hugeicons/core-free-icons';
 
@@ -51,7 +51,9 @@ interface ActionItem {
     title: string;
     category: string;
     status: string;
-    assignee?: string;
+    assignee?: string;      // The display name
+    assigneeId?: string;    // The actual User ID (ObjectId)
+    assigneeName?: string;  // Explicit display name field
     deadline?: string;
     source?: string;
     meetingTitle?: string;
@@ -87,7 +89,22 @@ export default function ActionItems({ items, meetingId, fetchWithAuth, onRefresh
             setNewAssignee(null);
         }
     }, [participants]);
+    const [editData, setEditData] = useState<Partial<ActionItem> | null>(null);
 
+    const startEditing = (item: ActionItem) => {
+        setEditingId(item.id || item._id || null);
+        // Ensure assignee is correctly setup for the update request
+        setEditData({ ...item });
+    };
+
+    const cancelEditing = () => {
+        setEditingId(null);
+        setEditData(null);
+    };
+
+    const handleUpdateField = (field: keyof ActionItem, value: any) => {
+        setEditData(prev => prev ? { ...prev, [field]: value } : null);
+    };
     useEffect(() => {
         if (addActionItemTrigger && addActionItemTrigger > 0) {
             setAdding(true);
@@ -149,6 +166,22 @@ export default function ActionItems({ items, meetingId, fetchWithAuth, onRefresh
         }
     };
 
+    const handleUpdate = async (itemId: string) => {
+        if (!editData || !editData.title?.trim()) return;
+        try {
+            await (fetchWithAuth || fetch)(`${API_BASE}/action-items/${itemId}`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(editData),
+            });
+            setEditingId(null);
+            setEditData(null);
+            onRefresh?.();
+        } catch (err) {
+            console.error('Failed to update action item:', err);
+        }
+    };
+
     const handleDelete = async (itemId: string) => {
         try {
             await (fetchWithAuth || fetch)(`${API_BASE}/action-items/${itemId}`, { method: 'DELETE' });
@@ -174,6 +207,49 @@ export default function ActionItems({ items, meetingId, fetchWithAuth, onRefresh
                         const status = statusConfig[item.status] || statusConfig.pending;
                         const isEditing = editingId === (item.id || item._id);
 
+                        if (isEditing && editData) {
+                            return (
+                                <div key={item.id || item._id || index} className="action-item-card glass-card animate-in" style={{ animationDelay: `${index * 0.06}s` }}>
+                                    <input className="input-field" value={editData.title || ''} onChange={e => handleUpdateField('title', e.target.value)} style={{ marginBottom: '4px' }} placeholder="Title" />
+                                    <div className="inline-form-row">
+                                        <select className="input-field" value={editData.category || 'Technical'} onChange={e => handleUpdateField('category', e.target.value)}>
+                                            {CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
+                                        </select>
+                                        <select className="input-field" value={editData.status || 'pending'} onChange={e => handleUpdateField('status', e.target.value)}>
+                                            {STATUSES.map(s => <option key={s} value={s}>{s}</option>)}
+                                        </select>
+                                    </div>
+                                    <div className="inline-form-row" style={{ marginTop: '4px', marginBottom: '4px' }}>
+                                        {participants && participants.length > 0 ? (
+                                            <select
+                                                className="input-field"
+                                                value={editData.assigneeId || ''}
+                                                onChange={e => {
+                                                    const p = participants.find(part => (part._id || part.id) === e.target.value);
+                                                    if (p) {
+                                                        setEditData(prev => prev ? { ...prev, assigneeId: p._id || p.id, assignee: p.name } : null);
+                                                    }
+                                                }}
+                                                style={{ flex: 1 }}
+                                            >
+                                                <option value="">Unassigned</option>
+                                                {participants.map(p => (
+                                                    <option key={p._id || p.id} value={p._id || p.id}>{p.name}</option>
+                                                ))}
+                                            </select>
+                                        ) : (
+                                            <input className="input-field" placeholder="Assignee" value={editData.assignee || ''} onChange={e => handleUpdateField('assignee', e.target.value)} style={{ flex: 1 }} />
+                                        )}
+                                    </div>
+                                    <input className="input-field" placeholder="Deadline (YYYY-MM-DD)" value={editData.deadline || ''} onChange={e => handleUpdateField('deadline', e.target.value)} style={{ marginBottom: '4px' }} />
+                                    <div className="inline-form-row">
+                                        <button className="btn btn-sm btn-primary" onClick={() => handleUpdate(item.id || item._id!)}>Save</button>
+                                        <button className="btn btn-sm btn-secondary" onClick={cancelEditing}>Cancel</button>
+                                    </div>
+                                </div>
+                            );
+                        }
+
                         return (
                             <div
                                 key={item.id || item._id || index}
@@ -189,25 +265,26 @@ export default function ActionItems({ items, meetingId, fetchWithAuth, onRefresh
                                         </span>
                                     )}
                                     <div style={{ marginLeft: 'auto', display: 'flex', gap: '2px' }}>
-                                        {isEditing ? (
-                                            <select
-                                                className="input-field"
-                                                style={{ fontSize: '0.625rem', padding: '2px 4px', width: 'auto' }}
-                                                value={item.status}
-                                                onChange={(e: React.ChangeEvent<HTMLSelectElement>) => { handleStatusChange(item.id || item._id!, e.target.value); setEditingId(null); }}
-                                            >
-                                                {STATUSES.map(s => <option key={s} value={s}>{s}</option>)}
-                                            </select>
-                                        ) : (
-                                            <button
-                                                className="btn-icon btn-icon-sm"
-                                                style={{ fontSize: '0.5rem' }}
-                                                onClick={() => setEditingId(item.id || item._id || null)}
-                                                title="Change status"
-                                            >
-                                                <Icon icon={Clock01Icon} size={10} />
-                                            </button>
-                                        )}
+                                        <button
+                                            className="btn-icon btn-icon-sm"
+                                            style={{ fontSize: '0.5rem' }}
+                                            onClick={() => {
+                                                const statuses = STATUSES;
+                                                const currentIndex = statuses.indexOf(item.status);
+                                                const nextStatus = statuses[(currentIndex + 1) % statuses.length];
+                                                handleStatusChange(item.id || item._id!, nextStatus);
+                                            }}
+                                            title="Cycle status"
+                                        >
+                                            <Icon icon={Clock01Icon} size={10} />
+                                        </button>
+                                        <button
+                                            className="btn-icon btn-icon-sm"
+                                            onClick={() => startEditing(item)}
+                                            title="Edit item"
+                                        >
+                                            <Icon icon={PencilEdit02Icon} size={10} />
+                                        </button>
                                         {meetingId && (
                                             <button
                                                 className="btn-icon btn-icon-sm"
@@ -280,7 +357,7 @@ export default function ActionItems({ items, meetingId, fetchWithAuth, onRefresh
                                     >
                                         {participants.map(p => (
                                             <option key={p._id || p.id} value={p._id || p.id}>{p.name}</option>
-                                        ) ) }
+                                        ))}
                                     </select>
                                 )}
                             </div>

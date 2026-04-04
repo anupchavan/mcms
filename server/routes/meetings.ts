@@ -74,6 +74,7 @@ export = function ({ User, Meeting, Poll, Notification, Agenda, protect, usingMo
             inMemoryMeetings.forEach((meeting: any) => {
                 if (shouldAutoCompleteMeeting(meeting)) meeting.status = 'completed';
             });
+            console.log(`[API] Returning ${inMemoryMeetings.length} in-memory meetings.`);
             res.json(inMemoryMeetings);
         } catch (error: any) {
             res.status(500).json({ message: 'Server error', error: error.message });

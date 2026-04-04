@@ -3,11 +3,13 @@ import mongoose from 'mongoose';
 const router = express.Router();
 import Agenda = require('../models/Agenda');
 import ActionItem = require('../models/ActionItem');
+import MeetingSummary = require('../models/MeetingSummary');
+import Minutes = require('../models/Minutes');
 import ResourcePin = require('../models/ResourcePin');
 import Transcript = require('../models/Transcript');
 import { sanitizeTextSearch, escapeRegex } from '../utils/searchHelpers';
 
-export = function ({ Meeting, protect, usingMongo, callAISummarize }: any) {
+export = function ({ Meeting, protect, usingMongo, callAISummarize, callAIMeetingSummary, inMemoryMeetingSummaries, inMemoryMeetings, inMemoryAgendas, inMemoryTranscripts, inMemoryActionItems }: any) {
 
 	async function meetingIdsMatchingTextSearch(qRaw: string): Promise<mongoose.Types.ObjectId[]> {
 		const q = (qRaw || '').trim();
@@ -102,7 +104,39 @@ export = function ({ Meeting, protect, usingMongo, callAISummarize }: any) {
 
 	router.get('/', protect, async (req: any, res: any) => {
 		try {
-			if (!usingMongo() || !Meeting) return res.json([]);
+			if (!usingMongo() || !Meeting) {
+				// In-memory fallback
+				const { q, dateFrom, dateTo } = req.query;
+				let results = inMemoryMeetings.filter((m: any) => m.status === 'completed');
+				
+				if (dateFrom || dateTo) {
+					results = results.filter((m: any) => {
+						const mDate = m.confirmedDate || m.date;
+						if (!mDate) return false;
+						if (dateFrom && mDate < dateFrom) return false;
+						if (dateTo && mDate > dateTo) return false;
+						return true;
+					});
+				}
+
+				if (q && String(q).trim().length >= 2) {
+					const qt = String(q).toLowerCase();
+					results = results.filter((m: any) => 
+						m.title?.toLowerCase().includes(qt) || 
+						m.host?.toLowerCase().includes(qt)
+					);
+				}
+
+				return res.json(results.map((m: any) => ({
+					id: m.id || m._id, title: m.title, modality: m.modality,
+					date: m.confirmedDate || m.date,
+					time: m.confirmedTime || m.time,
+					host: m.host, hostId: m.hostId,
+					participants: m.participants || [],
+					matchedTranscripts: [],
+					matchedAgendaItems: [],
+				})));
+			}
 
 			const { q, agendaTitle, dateFrom, dateTo } = req.query;
 			const meetingFilter: any = { status: 'completed' };
@@ -297,9 +331,202 @@ export = function ({ Meeting, protect, usingMongo, callAISummarize }: any) {
 		}
 	});
 
+	router.get('/:meetingId/final-summary', protect, async (req: any, res: any) => {
+		try {
+			if (!usingMongo()) return res.json({ summary: inMemoryMeetingSummaries[req.params.meetingId] || null });
+
+			const existing = await MeetingSummary.findOne({ meetingId: req.params.meetingId }).lean();
+			if (existing) {
+				return res.json({
+					summary: {
+						overview: (existing as any).overview || '',
+						discussion_points: (existing as any).discussionPoints || [],
+						completed_items: (existing as any).completedItems || [],
+						pending_items: (existing as any).pendingItems || [],
+						decisions: (existing as any).decisions || [],
+						next_steps: (existing as any).nextSteps || [],
+						model: (existing as any).model || 'unknown',
+						generated_at: (existing as any).generatedAt || null,
+					},
+				});
+			}
+
+			const [meeting, agenda, minutesDoc, transcripts, actionItems] = await Promise.all([
+				Meeting.findById(req.params.meetingId).lean(),
+				Agenda.findOne({ meetingId: req.params.meetingId }).lean(),
+				Minutes.findOne({ meetingId: req.params.meetingId }).lean(),
+				Transcript.find({ meetingId: req.params.meetingId }).sort({ startTime: 1, createdAt: 1 }).lean(),
+				ActionItem.find({ meetingId: req.params.meetingId }).populate('assignee', 'name email').sort({ createdAt: 1 }).lean(),
+			]);
+
+			if (!meeting) return res.status(404).json({ message: 'Meeting not found' });
+			if (!transcripts.length) {
+				return res.json({
+					summary: {
+						overview: 'No transcript was recorded for this meeting.',
+						discussion_points: [],
+						completed_items: [],
+						pending_items: [],
+						decisions: [],
+						next_steps: [],
+						model: 'empty-transcript',
+					},
+				});
+			}
+
+			if (callAIMeetingSummary) {
+				try {
+					const summary = await callAIMeetingSummary({
+						meeting_title: meeting.title,
+						segments: transcripts.map((t: any) => ({
+							text: t.text,
+							speaker: t.speaker,
+							agendaItemId: t.agendaItemId,
+						})),
+						agenda_items: ((agenda as any)?.items || []).map((item: any) => ({
+							id: item.id,
+							title: item.title,
+						})),
+						minutes_items: ((minutesDoc as any)?.items || []).map((item: any) => ({
+							id: item.id,
+							title: item.title,
+							status: item.status,
+							notes: item.notes || '',
+							duration: item.duration,
+						})),
+						action_items: (actionItems || []).map((item: any) => ({
+							title: item.title,
+							status: item.status,
+							assignee: item.assigneeName || item.assignee?.name || null,
+							deadline: item.deadline || null,
+							category: item.category || null,
+						})),
+					});
+					await MeetingSummary.findOneAndUpdate(
+						{ meetingId: req.params.meetingId },
+						{
+							meetingId: req.params.meetingId,
+							overview: summary.overview || '',
+							discussionPoints: summary.discussion_points || [],
+							completedItems: summary.completed_items || [],
+							pendingItems: summary.pending_items || [],
+							decisions: summary.decisions || [],
+							nextSteps: summary.next_steps || [],
+							model: summary.model || 'unknown',
+							generatedAt: new Date(),
+						},
+						{ upsert: true, new: true }
+					);
+					return res.json({ summary });
+				} catch (e: any) {
+					console.error('AI final summary failed, using fallback:', e.message);
+				}
+			}
+
+			const completedItems = [
+				...(((minutesDoc as any)?.items || [])
+					.filter((item: any) => ['completed', 'done'].includes(String(item.status).toLowerCase()))
+					.map((item: any) => item.title)),
+				...((actionItems || [])
+					.filter((item: any) => String(item.status).toLowerCase() === 'completed')
+					.map((item: any) => item.title)),
+			];
+			const pendingItems = [
+				...(((minutesDoc as any)?.items || [])
+					.filter((item: any) => !['completed', 'done'].includes(String(item.status).toLowerCase()))
+					.map((item: any) => item.title)),
+				...((actionItems || [])
+					.filter((item: any) => String(item.status).toLowerCase() !== 'completed')
+					.map((item: any) => item.title)),
+			];
+
+			const fallbackSummary = {
+				overview: `This meeting produced ${transcripts.length} transcript segment(s) and ${actionItems.length} action item(s).`,
+				discussion_points: transcripts.slice(0, 5).map((t: any) => `${t.speaker}: ${t.text}`),
+				completed_items: completedItems,
+				pending_items: pendingItems,
+				decisions: [],
+				next_steps: pendingItems.slice(0, 5),
+				model: 'server-fallback',
+			};
+			await MeetingSummary.findOneAndUpdate(
+				{ meetingId: req.params.meetingId },
+				{
+					meetingId: req.params.meetingId,
+					overview: fallbackSummary.overview,
+					discussionPoints: fallbackSummary.discussion_points,
+					completedItems: fallbackSummary.completed_items,
+					pendingItems: fallbackSummary.pending_items,
+					decisions: fallbackSummary.decisions,
+					nextSteps: fallbackSummary.next_steps,
+					model: fallbackSummary.model,
+					generatedAt: new Date(),
+				},
+				{ upsert: true, new: true }
+			);
+
+			return res.json({ summary: fallbackSummary });
+		} catch (error: any) {
+			res.status(500).json({ message: 'Server error', error: error.message });
+		}
+	});
+
 	router.get('/:meetingId', protect, async (req: any, res: any) => {
 		try {
-			if (!usingMongo()) return res.json(null);
+			if (!usingMongo()) {
+				const meeting = inMemoryMeetings.find((m: any) => (m.id || m._id) === req.params.meetingId);
+				if (!meeting) return res.status(404).json({ message: 'Meeting not found' });
+
+				const agendaItems = inMemoryAgendas[req.params.meetingId] || [];
+				const transcripts = inMemoryTranscripts[req.params.meetingId] || [];
+				const actionItems = (inMemoryActionItems[req.params.meetingId] || []).map((i: any) => ({
+					id: i.id || i._id, title: i.title,
+					assignee: i.assignee || 'Unassigned',
+					category: i.category, status: i.status, deadline: i.deadline,
+					source: i.source,
+				}));
+				const summary = inMemoryMeetingSummaries[req.params.meetingId] || null;
+
+				const transcriptsByAgenda: any = {};
+				const transcriptFlat: any[] = [];
+				for (const t of transcripts) {
+					const key = t.agendaItemId || '_unlinked';
+					if (!transcriptsByAgenda[key]) transcriptsByAgenda[key] = [];
+					const seg = {
+						id: t.id || t._id, speaker: t.speaker, speakerImage: t.speakerImage,
+						text: t.text, timestamp: t.timestamp, startTime: t.startTime,
+						sentiment: t.sentiment,
+						agendaItemId: t.agendaItemId,
+						createdAt: t.createdAt,
+					};
+					transcriptsByAgenda[key].push(seg);
+					transcriptFlat.push({ ...seg, agendaKey: key });
+				}
+
+				return res.json({
+					meeting: {
+						id: meeting.id || meeting._id, title: meeting.title, modality: meeting.modality,
+						date: meeting.confirmedDate || meeting.date,
+						time: meeting.confirmedTime || meeting.time,
+						host: meeting.host, participants: meeting.participants || [],
+					},
+					agendaItems,
+					transcriptsByAgenda,
+					transcriptFlat,
+					actionItems,
+					pins: [], // pin in-memory not implemented yet
+					meetingSummary: summary ? {
+						overview: summary.overview || '',
+						discussionPoints: summary.discussionPoints || [],
+						completedItems: summary.completedItems || [],
+						pendingItems: summary.pendingItems || [],
+						decisions: summary.decisions || [],
+						nextSteps: summary.nextSteps || [],
+						model: summary.model || 'unknown',
+						generatedAt: summary.generatedAt || null,
+					} : null,
+				});
+			}
 
 			const meeting = await Meeting.findById(req.params.meetingId).populate('participants', 'name email');
 			if (!meeting) return res.status(404).json({ message: 'Meeting not found' });
@@ -308,6 +535,7 @@ export = function ({ Meeting, protect, usingMongo, callAISummarize }: any) {
 			const transcripts = await Transcript.find({ meetingId: req.params.meetingId }).sort({ startTime: 1, createdAt: 1 });
 			const actionItems = await ActionItem.find({ meetingId: req.params.meetingId }).populate('assignee', 'name email');
 			const pins = await ResourcePin.find({ meetingId: req.params.meetingId }).populate('userId', 'name');
+			const meetingSummary = await MeetingSummary.findOne({ meetingId: req.params.meetingId });
 
 			const transcriptsByAgenda: any = {};
 			const transcriptFlat: any[] = [];
@@ -347,6 +575,16 @@ export = function ({ Meeting, protect, usingMongo, callAISummarize }: any) {
 					transcriptTimestamp: p.transcriptTimestamp,
 					user: p.userId?.name,
 				})),
+				meetingSummary: meetingSummary ? {
+					overview: (meetingSummary as any).overview || '',
+					discussionPoints: (meetingSummary as any).discussionPoints || [],
+					completedItems: (meetingSummary as any).completedItems || [],
+					pendingItems: (meetingSummary as any).pendingItems || [],
+					decisions: (meetingSummary as any).decisions || [],
+					nextSteps: (meetingSummary as any).nextSteps || [],
+					model: (meetingSummary as any).model || 'unknown',
+					generatedAt: (meetingSummary as any).generatedAt || null,
+				} : null,
 			});
 		} catch (error: any) {
 			res.status(500).json({ message: 'Server error', error: error.message });
