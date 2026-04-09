@@ -778,7 +778,7 @@ io.on('connection', (socket: any) => {
 		if (!meetingId) return;
 		try {
 			if (usingMongoFlag && Meeting) {
-				const meeting = await Meeting.findById(meetingId);
+				const meeting = await Meeting.findById(meetingId).populate('participants');
 				if (meeting && meeting.status !== 'completed') {
 					meeting.status = 'completed';
 					await meeting.save();
@@ -794,12 +794,32 @@ io.on('connection', (socket: any) => {
 
 							try {
 								const actions = await callAIExtractActions(fullText, minutesDoc ? minutesDoc.items : []);
+								const meetingUsers = meeting.participants || [];
+
 								for (const a of actions) {
+									let assigneeId = null;
+									if (a.assignee) {
+										const safeAssignee = a.assignee.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+										const matchedParticipant = meetingUsers.find((u: any) =>
+											u.name?.toLowerCase() === a.assignee.toLowerCase() ||
+											u.email?.toLowerCase() === a.assignee.toLowerCase()
+										);
+										if (matchedParticipant) {
+											assigneeId = matchedParticipant._id;
+										} else if (User) {
+											const globalUser = await User.findOne({ name: { $regex: new RegExp(`^${safeAssignee}$`, 'i') } });
+											if (globalUser) assigneeId = globalUser._id;
+										}
+									}
+
 									await ActionItem.create({
-										meetingId, title: a.title,
+										meetingId,
+										title: a.title,
 										assigneeName: a.assignee || null,
+										assignee: assigneeId,
 										category: a.category || 'Technical',
-										status: 'pending', deadline: a.deadline || null,
+										status: 'pending',
+										deadline: a.deadline || null,
 										source: 'ai-extracted',
 										aiConfidence: a.confidence || null,
 									});
