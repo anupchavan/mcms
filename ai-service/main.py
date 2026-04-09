@@ -27,29 +27,42 @@ LOCAL_SUMMARY_MODEL=os.getenv(
     "LOCAL_SUMMARY_MODEL", "knkarthick/meeting-summary-samsum"
 )
 
-GROQ_API_KEY=os.getenv("GROQ_API_KEY")
+GROQ_API_KEY = os.getenv("GROQ_API_KEY")
+GROQ_MODEL = os.getenv("GROQ_MODEL", "llama-3.1-8b-instant")
+groq_client = None
 try:
-    from groq import Groq  # type: ignore
-    groq_client=Groq(api_key=GROQ_API_KEY) if GROQ_API_KEY else None
-    if groq_client:
+    if GROQ_API_KEY:
+        from groq import Groq # type: ignore
+        groq_client = Groq(api_key=GROQ_API_KEY)
         print("Groq client successfully initialized.")
     else:
-        print("Groq client initialization failed: GROQ_API_KEY not found.")
+        print("Groq client not configured (GROQ_API_KEY missing).")
 except ImportError:
-    groq_client=None
-    print("Groq client initialization failed: 'groq' module not found.")
-GROQ_MODEL="llama-3.1-8b-instant"
+    print("Groq module not found.")
 
-openai_client=None
-if GROK_API_KEY:
-    try:
-        from openai import OpenAI  # type: ignore
-        openai_client=OpenAI(api_key=GROK_API_KEY, base_url=GROK_BASE_URL)
-        AI_MODEL="grok-2-latest"
-    except ImportError:
-        pass
-else:
-    AI_MODEL="gpt-4o-mini"
+GROK_API_KEY = os.getenv("GROK_API_KEY")
+GROK_BASE_URL = os.getenv("GROK_BASE_URL", "https://api.x.ai/v1")
+AI_MODEL = os.getenv("AI_MODEL", "grok-2-latest")
+openai_client = None # Historically named openai_client but used for Grok (x.ai)
+try:
+    if GROK_API_KEY:
+        from openai import OpenAI # type: ignore
+        openai_client = OpenAI(api_key=GROK_API_KEY, base_url=GROK_BASE_URL)
+        print("Grok (OpenAI-compatible) client successfully initialized.")
+    else:
+        print("Grok client not configured (GROK_API_KEY missing).")
+except ImportError:
+    print("OpenAI module not found.")
+
+def get_preferred_client(task="general"):
+    """Returns (client, model) based on availability and task type."""
+    if task in ["extraction", "summary"]:
+        if groq_client: return groq_client, GROQ_MODEL
+        if openai_client: return openai_client, AI_MODEL
+    else:
+        if openai_client: return openai_client, AI_MODEL
+        if groq_client: return groq_client, GROQ_MODEL
+    return None, None
 
 
 class TranscriptSegment(BaseModel):
@@ -336,7 +349,8 @@ async def summarize(req: SummarizeRequest):
         key=seg.agendaItemId or "_unlinked"
         segments_by_agenda.setdefault(key, []).append(f"{seg.speaker}: {seg.text}")
 
-    if openai_client and req.agenda_items:
+    client, model = get_preferred_client("summary")
+    if client and req.agenda_items:
         try:
             agenda_info="\n".join(
                 f"- {item.id}: {item.title}" for item in req.agenda_items
@@ -344,8 +358,8 @@ async def summarize(req: SummarizeRequest):
             transcript_text="\n".join(
                 f"{seg.speaker}: {seg.text}" for seg in req.segments
             )
-            response=openai_client.chat.completions.create(
-                model=AI_MODEL,
+            response=client.chat.completions.create(
+                model=model,
                 messages=[
                     {
                         "role": "system",
@@ -365,9 +379,9 @@ async def summarize(req: SummarizeRequest):
             )
             import json
             summaries=json.loads(response.choices[0].message.content)
-            return {"summaries": summaries}
+            return {"summaries": summaries, "model": model}
         except Exception as e:
-            print(f"OpenAI summarize error: {e}")
+            print(f"AI summarize error: {e}")
 
     summaries={}
     for item in req.agenda_items:
@@ -395,11 +409,12 @@ async def summarize(req: SummarizeRequest):
 @app.post("/meeting-summary")
 async def meeting_summary(req: MeetingSummaryRequest):
     context_text=build_meeting_context(req)
+    client, model = get_preferred_client("summary")
 
-    if groq_client:
+    if client:
         try:
-            response=groq_client.chat.completions.create(
-                model=GROQ_MODEL,
+            response=client.chat.completions.create(
+                model=model,
                 messages=[
                     {
                         "role": "system",
@@ -420,10 +435,10 @@ async def meeting_summary(req: MeetingSummaryRequest):
             import json
 
             summary=json.loads(response.choices[0].message.content)
-            summary["model"]=GROQ_MODEL
+            summary["model"]=model
             return {"summary": summary}
         except Exception as exc:
-            print(f"Groq meeting-summary error: {exc}")
+            print(f"AI meeting-summary error: {exc}")
 
     local_summary=summarize_with_local_model(context_text)
     if local_summary:
@@ -444,15 +459,16 @@ async def extract_actions(req: ExtractActionsRequest):
         )
 
     actions: List[Dict[str, Any]]=[]
+    client, model = get_preferred_client("extraction")
 
-    if groq_client:
+    if client:
         try:
             content=str(req.text)
             if context_minutes:
                 content=f"{context_minutes}\n\nFull Meeting Transcript:\n{content}"
             
-            response=groq_client.chat.completions.create(
-                model=GROQ_MODEL,
+            response=client.chat.completions.create(
+                model=model,
                 messages=[
                     {
                         "role": "system",
@@ -481,7 +497,7 @@ async def extract_actions(req: ExtractActionsRequest):
             except json.JSONDecodeError:
                 pass
         except Exception as e:
-            print(f"Groq extract-actions error: {e}")
+            print(f"AI extract-actions error: {e}")
 
     # Deduplicate Groq
     if actions:
@@ -569,10 +585,11 @@ async def extract_actions(req: ExtractActionsRequest):
 
 @app.post("/sentiment")
 async def sentiment(req: SentimentRequest):
-    if openai_client:
+    client, model = get_preferred_client("sentiment")
+    if client:
         try:
-            response=openai_client.chat.completions.create(
-                model=AI_MODEL,
+            response=client.chat.completions.create(
+                model=model,
                 messages=[
                     {
                         "role": "system",
@@ -590,7 +607,7 @@ async def sentiment(req: SentimentRequest):
             data=json.loads(response.choices[0].message.content)
             return {"score": data.get("score", "neutral")}
         except Exception as e:
-            print(f"OpenAI sentiment error: {e}")
+            print(f"AI sentiment error: {e}")
 
     text_lower=req.text.lower()
     positive_words={"great", "good", "excellent", "happy", "thanks", "agree", "perfect", "wonderful", "love"}
