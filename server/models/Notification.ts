@@ -14,4 +14,9 @@ const notificationSchema = new mongoose.Schema({
     timestamps: true
 });
 
+/** Notification center loads one user's newest notifications first. */
+notificationSchema.index({ userId: 1, createdAt: -1 });
+/** Bulk mark-as-read updates filter by user and unread state. */
+notificationSchema.index({ userId: 1, read: 1 });
+
 export = mongoose.model('Notification', notificationSchema);

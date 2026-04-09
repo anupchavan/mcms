@@ -45,5 +45,9 @@ const meetingSchema = new mongoose.Schema({
 meetingSchema.index({ status: 1, createdAt: -1 });
 /** Full-text on titles for archive / global search (uses text index). */
 meetingSchema.index({ title: 'text' });
+/** Dashboard counts meetings owned by a user. */
+meetingSchema.index({ hostId: 1 });
+/** Dashboard counts meetings a user participates in. */
+meetingSchema.index({ participants: 1 });
 
 export = mongoose.model('Meeting', meetingSchema);

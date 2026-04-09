@@ -13,5 +13,7 @@ const attendanceSchema = new mongoose.Schema({
 });
 
 attendanceSchema.index({ meetingId: 1, userId: 1 }, { unique: true });
+/** Dashboard history scans attendance by user in chronological order. */
+attendanceSchema.index({ userId: 1, joinTimestamp: 1 });
 
 export = mongoose.model('Attendance', attendanceSchema);

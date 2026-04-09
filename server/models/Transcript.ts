@@ -15,8 +15,8 @@ const transcriptSchema = new mongoose.Schema({
 	timestamps: true,
 });
 
-/** Sort / scan by meeting + time (createdAt is always set). */
-transcriptSchema.index({ meetingId: 1, createdAt: 1 });
+/** Ordered transcript reads within a meeting sort by startTime, then createdAt as a tiebreaker. */
+transcriptSchema.index({ meetingId: 1, startTime: 1, createdAt: 1 });
 /** Filter archive transcript search by speaker within a meeting. */
 transcriptSchema.index({ meetingId: 1, speaker: 1 });
 /**

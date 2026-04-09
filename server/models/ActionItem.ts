@@ -23,7 +23,11 @@ const actionItemSchema = new mongoose.Schema({
     timestamps: true,
 });
 
-actionItemSchema.index({ meetingId: 1 });
-actionItemSchema.index({ assignee: 1, status: 1 });
+/** Meeting action item views read one meeting's items in creation order. */
+actionItemSchema.index({ meetingId: 1, createdAt: 1 });
+/** "My tasks" filters by assignee and sorts by deadline. */
+actionItemSchema.index({ assignee: 1, deadline: 1 });
+/** Brief generation pulls recent pending / in-progress items globally. */
+actionItemSchema.index({ status: 1, createdAt: -1 });
 
 export = mongoose.model('ActionItem', actionItemSchema);

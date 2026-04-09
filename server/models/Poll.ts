@@ -13,4 +13,7 @@ const pollSchema = new mongoose.Schema({
     timestamps: true
 });
 
+/** Routes treat poll as one-to-one with meeting. */
+pollSchema.index({ meetingId: 1 }, { unique: true });
+
 export = mongoose.model('Poll', pollSchema);

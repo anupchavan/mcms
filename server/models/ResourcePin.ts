@@ -18,6 +18,7 @@ const resourcePinSchema = new mongoose.Schema({
     timestamps: true,
 });
 
-resourcePinSchema.index({ meetingId: 1 });
+/** Meeting resource views read pins in creation order. */
+resourcePinSchema.index({ meetingId: 1, createdAt: 1 });
 
 export = mongoose.model('ResourcePin', resourcePinSchema);
