@@ -64,6 +64,18 @@ def get_preferred_client(task="general"):
         if groq_client: return groq_client, GROQ_MODEL
     return None, None
 
+last_ai_error = None
+
+@app.get("/")
+async def root():
+    return {
+        "status": "online",
+        "groq_initialized": groq_client is not None,
+        "grok_initialized": openai_client is not None,
+        "primary_model": get_preferred_client()[1],
+        "last_error": last_ai_error
+    }
+
 
 class TranscriptSegment(BaseModel):
     text: str
@@ -381,9 +393,13 @@ async def summarize(req: SummarizeRequest):
             summaries=json.loads(response.choices[0].message.content)
             return {"summaries": summaries, "model": model}
         except Exception as e:
+            global last_ai_error
+            last_ai_error = str(e)
             print(f"AI summarize error: {e}")
+            return {"summaries": {}, "error": str(e), "model": model}
 
     summaries={}
+    # ... (rest of function)
     for item in req.agenda_items:
         texts=segments_by_agenda.get(item.id, [])
         if texts:
@@ -438,14 +454,14 @@ async def meeting_summary(req: MeetingSummaryRequest):
             summary["model"]=model
             return {"summary": summary}
         except Exception as exc:
+            global last_ai_error
+            last_ai_error = str(exc)
             print(f"AI meeting-summary error: {exc}")
-
-    local_summary=summarize_with_local_model(context_text)
-    if local_summary:
-        fallback=heuristic_meeting_summary(req)
-        fallback["overview"]=local_summary
-        fallback["model"]=LOCAL_SUMMARY_MODEL
-        return {"summary": fallback}
+            # Use heuristic summary as a lightweight non-LLM fallback
+            fallback=heuristic_meeting_summary(req)
+            fallback["overview"]=f"AI Error: {exc}. {fallback['overview']}"
+            fallback["model"]="error-fallback"
+            return {"summary": fallback}
 
     return {"summary": heuristic_meeting_summary(req)}
 

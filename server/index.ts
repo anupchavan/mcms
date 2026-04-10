@@ -329,8 +329,8 @@ async function processRealtimeActions(meetingId: string, agg: TranscriptAgg) {
 					let assigneeId = null;
 					if (a.assignee) {
 						const safeAssignee = a.assignee.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-						const matchedParticipant = meetingUsers.find((u: any) => 
-							u.name?.toLowerCase() === a.assignee.toLowerCase() || 
+						const matchedParticipant = meetingUsers.find((u: any) =>
+							u.name?.toLowerCase() === a.assignee.toLowerCase() ||
 							u.email?.toLowerCase() === a.assignee.toLowerCase()
 						);
 						if (matchedParticipant) {
