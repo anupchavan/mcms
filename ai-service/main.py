@@ -21,6 +21,14 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+async def add_process_time_header(request, call_next):
+    print(f"DEBUG: Incoming {request.method} request to {request.url.path}")
+    response = await call_next(request)
+    print(f"DEBUG: Completed {request.method} {request.url.path} with status {response.status_code}")
+    return response
+
+app.middleware("http")(add_process_time_header)
+
 GROK_API_KEY=os.getenv("GROK_API_KEY")
 GROK_BASE_URL=os.getenv("GROK_BASE_URL", "https://api.x.ai/v1")
 LOCAL_SUMMARY_MODEL=os.getenv(
@@ -513,6 +521,8 @@ async def extract_actions(req: ExtractActionsRequest):
             except json.JSONDecodeError:
                 pass
         except Exception as e:
+            global last_ai_error
+            last_ai_error = str(e)
             print(f"AI extract-actions error: {e}")
 
     # Deduplicate Groq
@@ -623,6 +633,8 @@ async def sentiment(req: SentimentRequest):
             data=json.loads(response.choices[0].message.content)
             return {"score": data.get("score", "neutral")}
         except Exception as e:
+            global last_ai_error
+            last_ai_error = str(e)
             print(f"AI sentiment error: {e}")
 
     text_lower=req.text.lower()
