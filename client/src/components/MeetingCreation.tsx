@@ -16,6 +16,20 @@ import {
 } from "@hugeicons/core-free-icons";
 import * as chrono from "chrono-node";
 import { useAuth } from "../context/AuthContext";
+import "leaflet/dist/leaflet.css";
+import { MapContainer, TileLayer, Marker, useMapEvents } from "react-leaflet";
+import L from "leaflet";
+
+// Fix Leaflet's default icon paths in bundlers
+import markerIcon2x from "leaflet/dist/images/marker-icon-2x.png";
+import markerIcon from "leaflet/dist/images/marker-icon.png";
+import markerShadow from "leaflet/dist/images/marker-shadow.png";
+delete (L.Icon.Default.prototype as any)._getIconUrl;
+L.Icon.Default.mergeOptions({
+  iconRetinaUrl: markerIcon2x,
+  iconUrl: markerIcon,
+  shadowUrl: markerShadow,
+});
 
 interface Suggestion {
   label: string;
@@ -218,6 +232,35 @@ function buildSuggestions(query: string): Suggestion[] {
   return results.slice(0, 6);
 }
 
+function LocationMapPicker({ 
+  markerPos, 
+  onLocationSelect 
+}: { 
+  markerPos: L.LatLng | null; 
+  onLocationSelect: (pos: L.LatLng, address: string) => void;
+}) {
+  useMapEvents({
+    click(e) {
+      const { lat, lng } = e.latlng;
+      // Use Nominatim for free reverse geocoding
+      fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}`)
+        .then(res => res.json())
+        .then(data => {
+          if (data && data.display_name) {
+            onLocationSelect(e.latlng, data.display_name);
+          } else {
+            onLocationSelect(e.latlng, `${lat.toFixed(4)}, ${lng.toFixed(4)}`);
+          }
+        })
+        .catch(err => {
+          console.error("Reverse geocoding failed", err);
+          onLocationSelect(e.latlng, `${lat.toFixed(4)}, ${lng.toFixed(4)}`);
+        });
+    },
+  });
+  return markerPos ? <Marker position={markerPos} /> : null;
+}
+
 export default function MeetingCreation({
   onClose,
   onSubmit,
@@ -227,6 +270,8 @@ export default function MeetingCreation({
   const [description, setDescription] = useState("");
   const [location, setLocation] = useState("");
   const [locationType, setLocationType] = useState<"Inside" | "Outside">("Inside");
+  const [mapPos, setMapPos] = useState<L.LatLng | null>(null);
+  const [showMap, setShowMap] = useState(false);
   const [roomNo, setRoomNo] = useState("");
   const [building, setBuilding] = useState("");
   const [duration, setDuration] = useState<number>(30);
@@ -885,17 +930,39 @@ export default function MeetingCreation({
                       onChange={(e) => setLocation(e.target.value)}
                       required={modality === "Offline" || modality === "Hybrid"}
                     />
-                    <a
-                      href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(location || "Hyderabad")}`}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="btn btn-secondary"
-                      style={{ flexShrink: 0, display: "flex", alignItems: "center", gap: "0.375rem", padding: "0 0.75rem", textDecoration: "none" }}
-                      title="Search on Google Maps"
+                    <button
+                      type="button"
+                      className={`btn btn-secondary ${showMap ? 'active' : ''}`}
+                      onClick={() => setShowMap(!showMap)}
+                      style={{ flexShrink: 0, padding: "0 0.75rem", background: showMap ? "var(--bg-hover)" : undefined }}
+                      title="Select on Map"
                     >
                       <Icon icon={Location01Icon} size={14} /> Map
-                    </a>
+                    </button>
                   </div>
+                  {showMap && (
+                    <div style={{ marginTop: "0.5rem", height: "200px", borderRadius: "var(--radius-sm)", overflow: "hidden", border: "1px solid var(--border)" }}>
+                      <MapContainer center={mapPos || [17.5947, 78.1230]} zoom={13} style={{ height: "100%", width: "100%" }}>
+                        <TileLayer
+                          attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OSM</a>'
+                          url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+                        />
+                        <LocationMapPicker 
+                          markerPos={mapPos} 
+                          onLocationSelect={(pos, address) => {
+                            setMapPos(pos);
+                            setLocation(address);
+                            // Keep map open so they can see the marker
+                          }} 
+                        />
+                      </MapContainer>
+                    </div>
+                  )}
+                  {showMap && (
+                      <div style={{ fontSize: "0.7rem", color: "var(--text-muted)", marginTop: "4px" }}>
+                        Click anywhere on the map to set the location.
+                      </div>
+                  )}
                 </>
               )}
             </div>

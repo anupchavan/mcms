@@ -4,7 +4,7 @@ import ActionItems from './ActionItems';
 import {
     Search01Icon, Calendar02Icon, UserIcon,
     ArrowDown01Icon, ArrowUp01Icon, Clock01Icon,
-    FlashIcon, PinIcon, Notebook01Icon, PencilEdit02Icon,
+    FlashIcon, PinIcon, Notebook01Icon, PencilEdit02Icon, Location01Icon
 } from '@hugeicons/core-free-icons';
 import * as chrono from 'chrono-node';
 
@@ -72,6 +72,8 @@ interface ArchiveMeeting {
     date?: string;
     time?: string;
     host: string;
+    location?: string;
+    modality?: string;
     matchedTranscripts?: Array<{ speaker: string; text: string; timestamp?: string }>;
 }
 
@@ -86,7 +88,7 @@ interface TranscriptSegment {
 }
 
 interface ArchiveDetail {
-    meeting: { title: string; date?: string; time?: string; host: string };
+    meeting: { title: string; date?: string; time?: string; host: string; location?: string; modality?: string };
     agendaItems: Array<{ id: string; title: string; duration: number }>;
     transcriptsByAgenda: Record<string, Array<{ id: string; speaker: string; timestamp: string; text: string }>>;
     transcriptFlat?: TranscriptSegment[];
@@ -419,6 +421,19 @@ export default function ArchiveView({ fetchWithAuth }: ArchiveViewProps) {
                     <Icon icon={Calendar02Icon} size={12} /> {formatDate(detail.meeting.date)}
                     {detail.meeting.time && <> &middot; <Icon icon={Clock01Icon} size={12} /> {detail.meeting.time}</>}
                     &middot; <Icon icon={UserIcon} size={12} /> {detail.meeting.host}
+                    {detail.meeting.location && (
+                        <>
+                        &middot; 
+                        <a 
+                            href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(detail.meeting.location)}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            style={{ color: 'inherit', textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: '3px' }}
+                        >
+                            <Icon icon={Location01Icon} size={12} /> {detail.meeting.location}
+                        </a>
+                        </>
+                    )}
                 </p>
 
                 <div style={{ marginBottom: '1.5rem' }}>
@@ -562,6 +577,17 @@ export default function ArchiveView({ fetchWithAuth }: ArchiveViewProps) {
                             <div className="meeting-card-meta">
                                 {meeting.date && <span><Icon icon={Calendar02Icon} size={14} /> {formatDate(meeting.date)}</span>}
                                 <span><Icon icon={UserIcon} size={14} /> {meeting.host}</span>
+                                {meeting.location && (
+                                    <a 
+                                        href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(meeting.location)}`}
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        style={{ color: 'inherit', textDecoration: 'none', display: 'flex', alignItems: 'center', gap: '4px' }}
+                                        onClick={(e) => e.stopPropagation()}
+                                    >
+                                        <Icon icon={Location01Icon} size={14} /> {meeting.location}
+                                    </a>
+                                )}
                                 <span className="chip chip-emerald">Completed</span>
                             </div>
                             {meeting.matchedTranscripts?.length > 0 && (

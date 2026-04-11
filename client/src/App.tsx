@@ -493,7 +493,17 @@ function DashboardApp() {
                       </span>
                       {(meeting.confirmedDate || meeting.date) && <span><Icon icon={Calendar02Icon} size={14} /> {formatDate(meeting.confirmedDate || meeting.date)}</span>}
                       {(meeting.confirmedTime || meeting.time) && <span><Icon icon={Clock01Icon} size={14} /> {meeting.confirmedTime || meeting.time}</span>}
-                      {shouldShowMeetingLocation(meeting) && <span><Icon icon={Location01Icon} size={14} /> {meeting.location}</span>}
+                      {shouldShowMeetingLocation(meeting) && (
+                        <a 
+                          href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(meeting.location)}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          style={{ color: 'inherit', textDecoration: 'none', display: 'flex', alignItems: 'center', gap: '4px' }}
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          <Icon icon={Location01Icon} size={14} /> {meeting.location}
+                        </a>
+                      )}
                       <span><Icon icon={UserIcon} size={14} /> {meeting.host}</span>
                     </div>
                   </div>
@@ -610,7 +620,17 @@ function DashboardApp() {
                     </span>
                     {(meeting.confirmedDate || meeting.date) && <span><Icon icon={Calendar02Icon} size={14} /> {formatDate(meeting.confirmedDate || meeting.date)}</span>}
                     {(meeting.confirmedTime || meeting.time) && <span><Icon icon={Clock01Icon} size={14} /> {meeting.confirmedTime || meeting.time}</span>}
-                    {shouldShowMeetingLocation(meeting) && <span><Icon icon={Location01Icon} size={14} /> {meeting.location}</span>}
+                    {shouldShowMeetingLocation(meeting) && (
+                      <a 
+                        href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(meeting.location)}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        style={{ color: 'inherit', textDecoration: 'none', display: 'flex', alignItems: 'center', gap: '4px' }}
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        <Icon icon={Location01Icon} size={14} /> {meeting.location}
+                      </a>
+                    )}
                     <span><Icon icon={UserIcon} size={14} /> {meeting.host}</span>
                   </div>
                 </div>
