@@ -1,6 +1,6 @@
 import { useState } from 'react';
-import { useAuth } from '../context/AuthContext';
-import Icon from '../components/Icon';
+import { useAuth } from '../stores/AuthContext';
+import Icon from '../shared/components/Icon';
 import { Mail01Icon, Key01Icon, Alert01Icon, ArrowRight01Icon } from '@hugeicons/core-free-icons';
 
 interface LoginProps {
