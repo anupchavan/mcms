@@ -87,6 +87,9 @@ export = function ({ User, Meeting, Poll, Notification, Agenda, protect, usingMo
 
             let hostName = 'You';
             if (usingMongo() && User) {
+                if (!/^[0-9a-fA-F]{24}$/.test(req.user.id)) {
+                    return res.status(401).json({ message: 'Session expired (switched to MongoDB). Please log in again.' });
+                }
                 const userDoc = await User.findById(req.user.id);
                 if (userDoc) hostName = userDoc.name;
             }

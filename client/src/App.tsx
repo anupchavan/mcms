@@ -200,7 +200,12 @@ function DashboardApp() {
   const fetchWithAuth = async (url: string, options: RequestInit = {}): Promise<Response> => {
     const headers: Record<string, string> = { "Content-Type": "application/json", ...(options.headers as Record<string, string>) };
     if (user?.token) headers.Authorization = `Bearer ${user.token}`;
-    return fetch(url, { ...options, headers });
+    const res = await fetch(url, { ...options, headers });
+    if (res.status === 401) {
+        logout();
+        window.location.href = '/';
+    }
+    return res;
   };
 
   useEffect(() => { fetchMeetings(); fetchDashboardStats(); fetchMyActionItems(); }, []);
@@ -318,6 +323,7 @@ function DashboardApp() {
           setCurrentView('dashboard');
         }
         fetchMeetings();
+        fetchMyActionItems();
       }
     };
     const handleNotification = (notif: any) => {

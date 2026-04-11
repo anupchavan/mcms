@@ -1,9 +1,10 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import Icon from './Icon';
+import ActionItems from './ActionItems';
 import {
     Search01Icon, Calendar02Icon, UserIcon,
     ArrowDown01Icon, ArrowUp01Icon, Clock01Icon,
-    FlashIcon, PinIcon, Notebook01Icon,
+    FlashIcon, PinIcon, Notebook01Icon, PencilEdit02Icon,
 } from '@hugeicons/core-free-icons';
 import * as chrono from 'chrono-node';
 
@@ -112,6 +113,9 @@ interface AgendaSectionProps {
     index: number;
     segments: Array<{ id: string; speaker: string; timestamp: string; text: string }>;
     summary?: string;
+    meetingId: string;
+    fetchWithAuth?: (url: string, options?: RequestInit) => Promise<Response>;
+    onRefresh: () => void;
 }
 
 const SEARCH_DEBOUNCE_MS = 300;
@@ -469,7 +473,7 @@ export default function ArchiveView({ fetchWithAuth }: ArchiveViewProps) {
                             const segments = detail.transcriptsByAgenda[item.id] || [];
                             const summary = summaries[item.id];
                             return (
-                                <AgendaSection key={item.id} item={item} index={idx} segments={segments} summary={summary} />
+                                <AgendaSection key={item.id} item={item} index={idx} segments={segments} summary={summary} meetingId={selectedMeeting} fetchWithAuth={fetchWithAuth} onRefresh={() => loadDetail(selectedMeeting)} />
                             );
                         })}
 
@@ -478,32 +482,22 @@ export default function ArchiveView({ fetchWithAuth }: ArchiveViewProps) {
                                 item={{ id: '_unlinked', title: 'Unlinked Segments', duration: 0 }}
                                 index={-1}
                                 segments={detail.transcriptsByAgenda._unlinked}
+                                meetingId={selectedMeeting}
+                                fetchWithAuth={fetchWithAuth}
+                                onRefresh={() => loadDetail(selectedMeeting)}
                             />
                         )}
                     </div>
                 )}
 
                 {detail.actionItems.length > 0 && (
-                    <div style={{ marginBottom: '1.5rem' }}>
-                        <h3 style={{ fontSize: '0.875rem', fontWeight: 600, marginBottom: '0.5rem' }}>
-                            <Icon icon={FlashIcon} size={14} /> Action Items
-                        </h3>
-                        {detail.actionItems.map(item => (
-                            <div key={item.id} className="glass-card" style={{ padding: '8px 12px', marginBottom: '6px' }}>
-                                <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.8125rem' }}>
-                                    <span className={`chip ${item.status === 'completed' ? 'chip-emerald' : 'chip-amber'}`} style={{ fontSize: '0.5625rem' }}>
-                                        {item.status}
-                                    </span>
-                                    <span style={{ fontWeight: 500 }}>{item.title}</span>
-                                    <span style={{ color: 'var(--text-muted)', marginLeft: 'auto', fontSize: '0.75rem' }}>
-                                        {item.assignee}
-                                    </span>
-                                    {item.source === 'ai-extracted' && (
-                                        <span className="chip chip-purple" style={{ fontSize: '0.5rem' }}>AI</span>
-                                    )}
-                                </div>
-                            </div>
-                        ))}
+                    <div style={{ marginBottom: '1.5rem', marginTop: '-0.5rem' }}>
+                        <ActionItems 
+                            items={detail.actionItems as any}
+                            meetingId={selectedMeeting}
+                            fetchWithAuth={fetchWithAuth}
+                            onRefresh={() => loadDetail(selectedMeeting)}
+                        />
                     </div>
                 )}
 
@@ -606,19 +600,76 @@ function SummaryList({ title, items }: { title: string; items?: string[] }) {
     );
 }
 
-function AgendaSection({ item, index, segments, summary }: AgendaSectionProps) {
+function AgendaSection({ item, index, segments, summary, meetingId, fetchWithAuth, onRefresh }: AgendaSectionProps) {
     const [expanded, setExpanded] = useState(false);
+    const [isEditing, setIsEditing] = useState(false);
+    const [editData, setEditData] = useState({ title: item.title, duration: item.duration });
+
+    const handleSave = async (e: React.MouseEvent) => {
+        e.stopPropagation();
+        if (!meetingId || item.id === '_unlinked') {
+            setIsEditing(false);
+            return;
+        }
+        try {
+            const res = await (fetchWithAuth || fetch)(`${API_BASE}/agenda/${meetingId}/items/${item.id}`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(editData),
+            });
+            if (res.ok) {
+                setIsEditing(false);
+                onRefresh();
+            }
+        } catch (err) {
+            console.error('Failed to update agenda item:', err);
+        }
+    };
+
     return (
         <div className="glass-card" style={{ padding: '10px 14px', marginBottom: '8px' }}>
             <div
                 style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }}
-                onClick={() => setExpanded(e => !e)}
+                onClick={() => { if (!isEditing) setExpanded(e => !e); }}
             >
                 {index >= 0 && <span style={{ fontWeight: 600, fontSize: '0.75rem', color: 'var(--text-muted)' }}>{index + 1}.</span>}
-                <span style={{ fontWeight: 500, fontSize: '0.8125rem', flex: 1 }}>{item.title}</span>
-                {item.duration > 0 && <span style={{ fontSize: '0.6875rem', color: 'var(--text-muted)' }}>{item.duration}m</span>}
-                <span style={{ fontSize: '0.625rem', color: 'var(--text-muted)' }}>{segments.length} segment{segments.length !== 1 ? 's' : ''}</span>
-                <Icon icon={expanded ? ArrowUp01Icon : ArrowDown01Icon} size={12} />
+                
+                {isEditing ? (
+                    <div style={{ display: 'flex', gap: '8px', flex: 1, alignItems: 'center' }} onClick={e => e.stopPropagation()}>
+                        <input
+                            className="input-field"
+                            style={{ flex: 1, padding: '4px 8px', fontSize: '0.8125rem' }}
+                            value={editData.title}
+                            onChange={e => setEditData(prev => ({ ...prev, title: e.target.value }))}
+                        />
+                        <input
+                            type="number"
+                            className="input-field"
+                            style={{ width: '60px', padding: '4px 8px', fontSize: '0.8125rem' }}
+                            value={editData.duration}
+                            onChange={e => setEditData(prev => ({ ...prev, duration: Number(e.target.value) }))}
+                        />
+                        <button className="btn btn-sm btn-primary" onClick={handleSave}>Save</button>
+                        <button className="btn btn-sm btn-secondary" onClick={() => setIsEditing(false)}>Cancel</button>
+                    </div>
+                ) : (
+                    <>
+                        <span style={{ fontWeight: 500, fontSize: '0.8125rem', flex: 1 }}>{item.title}</span>
+                        {item.duration > 0 && <span style={{ fontSize: '0.6875rem', color: 'var(--text-muted)' }}>{item.duration}m</span>}
+                        <span style={{ fontSize: '0.625rem', color: 'var(--text-muted)' }}>{segments.length} segment{segments.length !== 1 ? 's' : ''}</span>
+                        
+                        {meetingId && item.id !== '_unlinked' && (
+                            <button
+                                className="btn-icon btn-icon-sm"
+                                onClick={(e) => { e.stopPropagation(); setIsEditing(true); }}
+                                title="Edit agenda item"
+                            >
+                                <Icon icon={PencilEdit02Icon} size={12} />
+                            </button>
+                        )}
+                        <Icon icon={expanded ? ArrowUp01Icon : ArrowDown01Icon} size={12} />
+                    </>
+                )}
             </div>
 
             {summary && (

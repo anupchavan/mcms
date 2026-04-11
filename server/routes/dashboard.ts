@@ -22,6 +22,12 @@ export = function ({ Meeting, User, protect, usingMongo }: any) {
             }
 
             const userId = req.user.id;
+            
+            // If the user's token ID is a temporary in-memory ID (e.g. user_177...), force logout
+            if (!/^[0-9a-fA-F]{24}$/.test(userId)) {
+                return res.status(401).json({ message: 'Session expired (switched to MongoDB). Please log in again.' });
+            }
+
             const user = await User.findById(userId).select('name');
             const userName = user?.name || 'User';
 

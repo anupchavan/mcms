@@ -258,6 +258,9 @@ export default function ActionItems({ items, meetingId, fetchWithAuth, onRefresh
                             >
                                 <div className="ai-card-top">
                                     <Icon icon={status.icon} size={16} style={{ color: status.color, flexShrink: 0 }} />
+                                    <span style={{ fontSize: '0.65rem', color: status.color, opacity: 0.8, textTransform: 'uppercase', fontWeight: 600, marginRight: '4px' }}>
+                                        {item.status}
+                                    </span>
                                     <span className="ai-card-title">{item.title}</span>
                                     {item.source === 'ai-extracted' && (
                                         <span className="chip chip-purple" style={{ fontSize: '0.5625rem', padding: '1px 5px' }}>

@@ -824,6 +824,20 @@ io.on('connection', (socket: any) => {
 										aiConfidence: a.confidence || null,
 									});
 								}
+								if (io) {
+									const dbItems = await ActionItem.find({ meetingId }).populate('assignee', 'name email').sort({ createdAt: 1 });
+									const processed = dbItems.map((item: any) => ({
+										id: (item._id || item.id).toString(),
+										title: item.title,
+										assignee: item.assigneeName || item.assignee?.name || 'Unassigned',
+										assigneeId: (item.assignee?._id || item.assignee)?.toString(),
+										category: item.category,
+										status: item.status,
+										deadline: item.deadline,
+										meetingId: meetingId.toString(),
+									}));
+									io.to(`meeting:${meetingId}`).emit('action_items_sync', { meetingId, items: processed });
+								}
 							} catch (e: any) {
 								console.error('AI action extraction failed:', e.message);
 							}

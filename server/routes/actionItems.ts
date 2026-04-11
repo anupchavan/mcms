@@ -2,7 +2,7 @@ import express from 'express';
 const router = express.Router();
 import ActionItem = require('../models/ActionItem');
 
-export = function ({ protect, usingMongo, Notification, emitToUser, inMemoryActionItems, io, ActionItem: DbActionItem }: any) {
+export = function ({ protect, usingMongo, Notification, emitToUser, inMemoryActionItems, io, ActionItem: DbActionItem, User }: any) {
     const processItem = (i: any) => {
         const item = i.toObject ? i.toObject() : i;
         let status = item.status;
@@ -45,7 +45,7 @@ export = function ({ protect, usingMongo, Notification, emitToUser, inMemoryActi
     router.get('/mine', protect, async (req: any, res: any) => {
         try {
             if (usingMongo() && ActionItem) {
-                const items = await ActionItem.find({ assignee: req.user._id })
+                const items = await ActionItem.find({ assignee: req.user.id })
                     .populate('meetingId', 'title')
                     .populate('assignee', 'name email')
                     .sort({ deadline: 1 });
@@ -88,10 +88,35 @@ export = function ({ protect, usingMongo, Notification, emitToUser, inMemoryActi
                 return res.status(201).json(item);
             }
 
+            let finalAssigneeId = assignee || null;
+            let finalAssigneeName = assigneeName || null;
+
+            // If assignee is provided but is just a string name, push it to assigneeName
+            if (finalAssigneeId && !/^[0-9a-fA-F]{24}$/.test(finalAssigneeId)) {
+                finalAssigneeName = finalAssigneeId;
+                finalAssigneeId = null;
+            }
+
+            // Attempt name-based resolution
+            if (usingMongo() && User && !finalAssigneeId && finalAssigneeName) {
+                const safeAssignee = finalAssigneeName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+                const globalUser = await User.findOne({ 
+                    $or: [
+                        { name: { $regex: new RegExp(`^${safeAssignee}$`, 'i') } },
+                        { email: { $regex: new RegExp(`^${safeAssignee}$`, 'i') } }
+                    ]
+                });
+                if (globalUser) {
+                    finalAssigneeId = globalUser._id;
+                    // Keep the formal name if possible
+                    finalAssigneeName = globalUser.name;
+                }
+            }
+
             const item = await ActionItem.create({
                 meetingId: req.params.meetingId,
-                title, assignee: assignee || null,
-                assigneeName: assigneeName || null,
+                title, assignee: finalAssigneeId,
+                assigneeName: finalAssigneeName,
                 category: category || 'Technical',
                 status: status || 'pending',
                 deadline: deadline || null,
@@ -100,14 +125,14 @@ export = function ({ protect, usingMongo, Notification, emitToUser, inMemoryActi
                 aiConfidence: aiConfidence || null,
             });
 
-            if (assignee && Notification) {
+            if (finalAssigneeId && Notification) {
                 try {
                     const notif = await Notification.create({
-                        userId: assignee, type: 'action_item_assigned',
+                        userId: finalAssigneeId, type: 'action_item_assigned',
                         meetingId: req.params.meetingId,
                         message: `You've been assigned: "${title}"`,
                     });
-                    emitToUser(assignee, 'notification', {
+                    emitToUser(finalAssigneeId, 'notification', {
                         _id: notif._id, type: notif.type,
                         meetingId: req.params.meetingId, message: notif.message,
                         read: false, createdAt: notif.createdAt,
@@ -125,12 +150,49 @@ export = function ({ protect, usingMongo, Notification, emitToUser, inMemoryActi
 
     router.put('/:id', protect, async (req: any, res: any) => {
         try {
-            if (!usingMongo()) return res.status(400).json({ message: 'Database required' });
-
             const updates: any = {};
             const allowed = ['title', 'assignee', 'assigneeName', 'category', 'status', 'deadline'];
             for (const key of allowed) {
                 if (req.body[key] !== undefined) updates[key] = req.body[key];
+            }
+
+            if (!usingMongo()) {
+                // In-memory fallback
+                let found = null;
+                for (const mId in inMemoryActionItems) {
+                    const idx = inMemoryActionItems[mId].findIndex((i: any) => (i.id || i._id) === req.params.id);
+                    if (idx !== -1) {
+                        found = { mId, idx };
+                        break;
+                    }
+                }
+                if (!found) return res.status(404).json({ message: 'Item not found' });
+                const item = inMemoryActionItems[found.mId][found.idx];
+                Object.assign(item, updates);
+                if (updates.assigneeName) item.assignee = updates.assigneeName;
+                broadcastSync(found.mId);
+                return res.json(item);
+            }
+
+            // If assignee is provided but is just a string name, push it to assigneeName
+            if (updates.assignee && !/^[0-9a-fA-F]{24}$/.test(updates.assignee)) {
+                updates.assigneeName = updates.assignee;
+                delete updates.assignee;
+            }
+
+            // Name resolution if assigneeName provided but no assignee ObjectId
+            if (usingMongo() && User && updates.assigneeName && !updates.assignee) {
+                const safeAssignee = updates.assigneeName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+                const globalUser = await User.findOne({
+                    $or: [
+                        { name: { $regex: new RegExp(`^${safeAssignee}$`, 'i') } },
+                        { email: { $regex: new RegExp(`^${safeAssignee}$`, 'i') } }
+                    ]
+                });
+                if (globalUser) {
+                    updates.assignee = globalUser._id;
+                    updates.assigneeName = globalUser.name;
+                }
             }
 
             const item = await ActionItem.findByIdAndUpdate(req.params.id, updates, { new: true })
@@ -147,7 +209,21 @@ export = function ({ protect, usingMongo, Notification, emitToUser, inMemoryActi
 
     router.delete('/:id', protect, async (req: any, res: any) => {
         try {
-            if (!usingMongo()) return res.status(400).json({ message: 'Database required' });
+            if (!usingMongo()) {
+                let found = null;
+                for (const mId in inMemoryActionItems) {
+                    const idx = inMemoryActionItems[mId].findIndex((i: any) => (i.id || i._id) === req.params.id);
+                    if (idx !== -1) {
+                        found = { mId, idx };
+                        break;
+                    }
+                }
+                if (!found) return res.status(404).json({ message: 'Not found' });
+                inMemoryActionItems[found.mId].splice(found.idx, 1);
+                broadcastSync(found.mId);
+                return res.json({ message: 'Deleted' });
+            }
+            
             const item = await ActionItem.findById(req.params.id);
             if (!item) return res.status(404).json({ message: 'Not found' });
             const meetingId = item.meetingId;
