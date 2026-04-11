@@ -14,6 +14,7 @@ import ProfileSettings from "./components/ProfileSettings";
 import ArchiveView from "./components/ArchiveView";
 import LocationMapModal from "./components/LocationMapModal";
 import RubricSidebar from "./components/RubricSidebar";
+import AttendanceMarkPage from "./components/AttendanceMarkPage";
 import useKeyboardShortcuts from "./hooks/useKeyboardShortcuts";
 import Icon from "./components/Icon";
 import { Search01Icon, Calendar02Icon, Clock01Icon, Location01Icon, UserIcon } from "@hugeicons/core-free-icons";
@@ -723,11 +724,16 @@ function DashboardApp() {
 export default function App() {
   const { user, loading } = useAuth();
   const [authView, setAuthView] = useState("login");
+  const searchParams = typeof window !== "undefined" ? new URLSearchParams(window.location.search) : null;
+  const attendanceMeetingId = searchParams?.get('meeting') || null;
+  const attendanceToken = searchParams?.get('token') || null;
+  const isAttendanceFlow = searchParams?.get('attendance') === '1';
 
   useEffect(() => {
     if (loading) document.title = "Concord";
+    else if (isAttendanceFlow) document.title = "Attendance — Concord";
     else if (!user) document.title = authView === "login" ? "Login — Concord" : "Signup — Concord";
-  }, [loading, user, authView]);
+  }, [loading, user, authView, isAttendanceFlow]);
 
   if (loading) {
     return (
@@ -740,6 +746,10 @@ export default function App() {
   if (!user) {
     if (authView === "login") return <Login onNavigate={setAuthView} />;
     if (authView === "signup") return <Signup onNavigate={setAuthView} />;
+  }
+
+  if (isAttendanceFlow) {
+    return <AttendanceMarkPage meetingId={attendanceMeetingId} token={attendanceToken} />;
   }
 
   return <DashboardApp />;
