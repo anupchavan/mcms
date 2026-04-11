@@ -7,6 +7,7 @@ import {
     FlashIcon, PinIcon, Notebook01Icon, PencilEdit02Icon, Location01Icon
 } from '@hugeicons/core-free-icons';
 import * as chrono from 'chrono-node';
+import LocationMapModal from './LocationMapModal';
 
 const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:5001/api';
 
@@ -326,6 +327,7 @@ export default function ArchiveView({ fetchWithAuth }: ArchiveViewProps) {
     const [finalSummary, setFinalSummary] = useState<ArchiveDetail['meetingSummary']>(null);
     const [loadingFinalSummary, setLoadingFinalSummary] = useState(false);
     const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+    const [locationModalAddress, setLocationModalAddress] = useState<string | null>(null);
 
     const search = useCallback(async (searchInput: string) => {
         const { textQuery, dateFrom, dateTo } = parseArchiveSearchInput(searchInput);
@@ -424,14 +426,13 @@ export default function ArchiveView({ fetchWithAuth }: ArchiveViewProps) {
                     {detail.meeting.location && (
                         <>
                         &middot; 
-                        <a 
-                            href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(detail.meeting.location)}`}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            style={{ color: 'inherit', textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: '3px' }}
+                        <button
+                            type="button"
+                            onClick={() => setLocationModalAddress(detail.meeting.location!)}
+                            style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'inherit', display: 'inline-flex', alignItems: 'center', gap: '3px', padding: 0, font: 'inherit', fontSize: '0.8125rem' }}
                         >
                             <Icon icon={Location01Icon} size={12} /> {detail.meeting.location}
-                        </a>
+                        </button>
                         </>
                     )}
                 </p>
@@ -541,6 +542,7 @@ export default function ArchiveView({ fetchWithAuth }: ArchiveViewProps) {
     }
 
     return (
+        <>
         <div className="archive-container">
             <div className="page-header">
                 <h2 style={{ fontSize: 'var(--font-size-title3)', fontWeight: 600, marginBottom: 'var(--lk-size-2xs)', letterSpacing: '-0.022em' }}>Meeting Archives</h2>
@@ -578,15 +580,20 @@ export default function ArchiveView({ fetchWithAuth }: ArchiveViewProps) {
                                 {meeting.date && <span><Icon icon={Calendar02Icon} size={14} /> {formatDate(meeting.date)}</span>}
                                 <span><Icon icon={UserIcon} size={14} /> {meeting.host}</span>
                                 {meeting.location && (
-                                    <a 
-                                        href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(meeting.location)}`}
-                                        target="_blank"
-                                        rel="noopener noreferrer"
-                                        style={{ color: 'inherit', textDecoration: 'none', display: 'flex', alignItems: 'center', gap: '4px' }}
-                                        onClick={(e) => e.stopPropagation()}
+                                    <button
+                                        type="button"
+                                        onClick={(e) => { e.stopPropagation(); setLocationModalAddress(meeting.location!); }}
+                                        style={{
+                                            display: 'inline-flex', alignItems: 'center', gap: '4px',
+                                            padding: '1px 8px', borderRadius: '999px',
+                                            border: '1px solid var(--border)', background: 'var(--bg-elevated)',
+                                            cursor: 'pointer', color: 'var(--text-secondary)',
+                                            fontSize: '0.75rem', fontWeight: 500, lineHeight: 1.6,
+                                        }}
+                                        title={meeting.location}
                                     >
-                                        <Icon icon={Location01Icon} size={14} /> {meeting.location}
-                                    </a>
+                                        <Icon icon={Location01Icon} size={12} /> Location
+                                    </button>
                                 )}
                                 <span className="chip chip-emerald">Completed</span>
                             </div>
@@ -607,6 +614,10 @@ export default function ArchiveView({ fetchWithAuth }: ArchiveViewProps) {
                 </div>
             )}
         </div>
+        {locationModalAddress && (
+            <LocationMapModal address={locationModalAddress} onClose={() => setLocationModalAddress(null)} />
+        )}
+        </>
     );
 }
 

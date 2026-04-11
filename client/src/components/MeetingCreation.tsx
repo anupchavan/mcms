@@ -13,6 +13,8 @@ import {
   Copy01Icon,
   Tick01Icon,
   Add01Icon,
+  ArrowExpand01Icon,
+  ArrowShrink01Icon,
 } from "@hugeicons/core-free-icons";
 import * as chrono from "chrono-node";
 import { useAuth } from "../context/AuthContext";
@@ -232,30 +234,30 @@ function buildSuggestions(query: string): Suggestion[] {
   return results.slice(0, 6);
 }
 
-function LocationMapPicker({ 
-  markerPos, 
-  onLocationSelect 
-}: { 
-  markerPos: L.LatLng | null; 
+
+function LocationMapPicker({
+  markerPos,
+  onLocationSelect,
+}: {
+  markerPos: L.LatLng | null;
   onLocationSelect: (pos: L.LatLng, address: string) => void;
 }) {
   useMapEvents({
     click(e) {
       const { lat, lng } = e.latlng;
-      // Use Nominatim for free reverse geocoding
-      fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}`)
-        .then(res => res.json())
-        .then(data => {
-          if (data && data.display_name) {
-            onLocationSelect(e.latlng, data.display_name);
-          } else {
-            onLocationSelect(e.latlng, `${lat.toFixed(4)}, ${lng.toFixed(4)}`);
-          }
-        })
-        .catch(err => {
-          console.error("Reverse geocoding failed", err);
-          onLocationSelect(e.latlng, `${lat.toFixed(4)}, ${lng.toFixed(4)}`);
-        });
+      fetch(
+        `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}`,
+      )
+        .then((r) => r.json())
+        .then((data) =>
+          onLocationSelect(
+            e.latlng,
+            data?.display_name || `${lat.toFixed(5)}, ${lng.toFixed(5)}`,
+          ),
+        )
+        .catch(() =>
+          onLocationSelect(e.latlng, `${lat.toFixed(5)}, ${lng.toFixed(5)}`),
+        );
     },
   });
   return markerPos ? <Marker position={markerPos} /> : null;
@@ -271,7 +273,12 @@ export default function MeetingCreation({
   const [location, setLocation] = useState("");
   const [locationType, setLocationType] = useState<"Inside" | "Outside">("Inside");
   const [mapPos, setMapPos] = useState<L.LatLng | null>(null);
+  const [mapCenter, setMapCenter] = useState<[number, number]>([17.5947, 78.123]);
+  const [mapKey, setMapKey] = useState(0);
   const [showMap, setShowMap] = useState(false);
+  const [mapExpanded, setMapExpanded] = useState(false);
+  const [geocoding, setGeocoding] = useState(false);
+  const geocodeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [roomNo, setRoomNo] = useState("");
   const [building, setBuilding] = useState("");
   const [duration, setDuration] = useState<number>(30);
@@ -386,6 +393,34 @@ export default function MeetingCreation({
     document.addEventListener("keydown", handleEscape);
     return () => document.removeEventListener("keydown", handleEscape);
   }, [handleClose, showDropdown, showUserDropdown]);
+
+  // Input → Map: debounced geocode when user types in the location field
+  useEffect(() => {
+    if (!showMap || locationType !== "Outside") return;
+    if (geocodeTimerRef.current) clearTimeout(geocodeTimerRef.current);
+    const trimmed = location.trim();
+    if (!trimmed) return;
+    geocodeTimerRef.current = setTimeout(() => {
+      setGeocoding(true);
+      fetch(
+        `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(trimmed)}&limit=1`,
+      )
+        .then((r) => r.json())
+        .then((data) => {
+          if (data && data.length > 0) {
+            const lat = parseFloat(data[0].lat);
+            const lng = parseFloat(data[0].lon);
+            const newPos = L.latLng(lat, lng);
+            setMapPos(newPos);
+            setMapCenter([lat, lng]);   // update reactive center
+            setMapKey((k) => k + 1);   // force MapContainer remount at new center
+          }
+        })
+        .catch(() => {/* ignore */})
+        .finally(() => setGeocoding(false));
+    }, 700);
+    return () => { if (geocodeTimerRef.current) clearTimeout(geocodeTimerRef.current); };
+  }, [location, showMap, locationType]);
 
   const fetchParticipantSuggestions = useCallback(
     async (query: string) => {
@@ -932,36 +967,136 @@ export default function MeetingCreation({
                     />
                     <button
                       type="button"
-                      className={`btn btn-secondary ${showMap ? 'active' : ''}`}
+                      className={`btn btn-secondary${showMap ? ' active' : ''}`}
                       onClick={() => setShowMap(!showMap)}
                       style={{ flexShrink: 0, padding: "0 0.75rem", background: showMap ? "var(--bg-hover)" : undefined }}
-                      title="Select on Map"
+                      title={showMap ? "Hide map" : "Show map"}
                     >
-                      <Icon icon={Location01Icon} size={14} /> Map
+                      <Icon icon={Location01Icon} size={14} /> {showMap ? "Hide" : "Map"}
                     </button>
                   </div>
+
                   {showMap && (
-                    <div style={{ marginTop: "0.5rem", height: "200px", borderRadius: "var(--radius-sm)", overflow: "hidden", border: "1px solid var(--border)" }}>
-                      <MapContainer center={mapPos || [17.5947, 78.1230]} zoom={13} style={{ height: "100%", width: "100%" }}>
-                        <TileLayer
-                          attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OSM</a>'
-                          url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-                        />
-                        <LocationMapPicker 
-                          markerPos={mapPos} 
-                          onLocationSelect={(pos, address) => {
-                            setMapPos(pos);
-                            setLocation(address);
-                            // Keep map open so they can see the marker
-                          }} 
-                        />
-                      </MapContainer>
+                    <div style={{ marginTop: "0.5rem", borderRadius: "var(--radius-sm)", overflow: "hidden", border: "1px solid var(--border)" }}>
+                      {/* status bar */}
+                      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "4px 8px", background: "var(--bg-elevated)", borderBottom: "1px solid var(--border)", fontSize: "0.7rem", color: "var(--text-muted)", gap: "6px" }}>
+                        <span style={{ flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                          {geocoding
+                            ? "🔍 Locating…"
+                            : mapPos
+                            ? `📍 ${mapPos.lat.toFixed(5)}, ${mapPos.lng.toFixed(5)}`
+                            : "Click the map or type an address above"}
+                        </span>
+                        <div style={{ display: "flex", alignItems: "center", gap: "4px", flexShrink: 0 }}>
+                          {mapPos && (
+                            <button
+                              type="button"
+                              onClick={() => { setMapPos(null); setMapCenter([17.5947, 78.123]); setMapKey(k => k + 1); setLocation(""); }}
+                              style={{ background: "none", border: "none", cursor: "pointer", color: "var(--accent-rose, #f87171)", fontSize: "0.7rem", padding: "0 3px" }}
+                            >
+                              Clear
+                            </button>
+                          )}
+                          {/* Expand button */}
+                          <button
+                            type="button"
+                            onClick={() => setMapExpanded(true)}
+                            style={{ background: "none", border: "none", cursor: "pointer", color: "var(--text-muted)", padding: "2px 3px", display: "flex", alignItems: "center" }}
+                            title="Expand map"
+                          >
+                            <Icon icon={ArrowExpand01Icon} size={13} />
+                          </button>
+                        </div>
+                      </div>
+                      <div style={{ height: "220px" }}>
+                        <MapContainer key={mapKey} center={mapCenter} zoom={15} style={{ height: "100%", width: "100%" }}>
+                          <TileLayer
+                            attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OSM</a>'
+                            url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+                          />
+                          <LocationMapPicker
+                            markerPos={mapPos}
+                            onLocationSelect={(pos, address) => {
+                              setMapPos(pos);
+                              setLocation(address);
+                            }}
+                          />
+                        </MapContainer>
+                      </div>
                     </div>
                   )}
-                  {showMap && (
-                      <div style={{ fontSize: "0.7rem", color: "var(--text-muted)", marginTop: "4px" }}>
-                        Click anywhere on the map to set the location.
+
+                  {/* Expanded map portal */}
+                  {mapExpanded && createPortal(
+                    <div
+                      style={{
+                        position: "fixed", inset: 0, zIndex: 99999,
+                        display: "flex", alignItems: "center", justifyContent: "center",
+                        background: "rgba(0,0,0,0.7)", backdropFilter: "blur(6px)",
+                      }}
+                      onClick={() => setMapExpanded(false)}
+                    >
+                      <div
+                        onClick={e => e.stopPropagation()}
+                        style={{
+                          width: "min(860px, 96vw)", height: "min(580px, 92vh)",
+                          borderRadius: "var(--radius-md, 12px)", overflow: "hidden",
+                          border: "1px solid var(--border)",
+                          display: "flex", flexDirection: "column",
+                          boxShadow: "0 24px 64px rgba(0,0,0,0.5)",
+                        }}
+                      >
+                        {/* expanded header */}
+                        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "8px 14px", background: "var(--bg-elevated)", borderBottom: "1px solid var(--border)", fontSize: "0.8rem", color: "var(--text-muted)" }}>
+                          <span>
+                            {geocoding ? "🔍 Locating…" : mapPos ? `📍 ${mapPos.lat.toFixed(5)}, ${mapPos.lng.toFixed(5)}` : "Click to pin a location"}
+                          </span>
+                          <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                            <button
+                              type="button"
+                              onClick={() => setMapExpanded(false)}
+                              style={{ background: "none", border: "none", cursor: "pointer", color: "var(--text-muted)", display: "flex", alignItems: "center", padding: "2px" }}
+                              title="Close"
+                            >
+                              <Icon icon={ArrowShrink01Icon} size={15} />
+                            </button>
+                          </div>
+                        </div>
+                        {/* expanded map */}
+                        <div style={{ flex: 1 }}>
+                          <MapContainer key={`exp-${mapKey}`} center={mapCenter} zoom={15} style={{ height: "100%", width: "100%" }}>
+                            <TileLayer
+                              attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OSM</a>'
+                              url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+                            />
+                            <LocationMapPicker
+                              markerPos={mapPos}
+                              onLocationSelect={(pos, address) => {
+                                setMapPos(pos);
+                                setLocation(address);
+                                setMapCenter([pos.lat, pos.lng]);
+                                setMapKey(k => k + 1);
+                              }}
+                            />
+                          </MapContainer>
+                        </div>
+                        {/* expanded footer */}
+                        <div style={{ padding: "8px 14px", background: "var(--bg-elevated)", borderTop: "1px solid var(--border)", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                          <span style={{ fontSize: "0.75rem", color: "var(--text-secondary)", flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                            {location || "No location selected"}
+                          </span>
+                          <button
+                            type="button"
+                            className="btn btn-primary btn-sm"
+                            onClick={() => setMapExpanded(false)}
+                            style={{ flexShrink: 0, marginLeft: "12px" }}
+                          >
+                            Confirm Location
+                          </button>
+                        </div>
                       </div>
+                    </div>,
+                    document.body,
                   )}
                 </>
               )}

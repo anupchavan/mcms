@@ -12,6 +12,7 @@ import ProductivityDashboard from "./components/ProductivityDashboard";
 import PollVoting from "./components/PollVoting";
 import ProfileSettings from "./components/ProfileSettings";
 import ArchiveView from "./components/ArchiveView";
+import LocationMapModal from "./components/LocationMapModal";
 import RubricSidebar from "./components/RubricSidebar";
 import useKeyboardShortcuts from "./hooks/useKeyboardShortcuts";
 import Icon from "./components/Icon";
@@ -149,6 +150,7 @@ function DashboardApp() {
   });
   const [nowTs, setNowTs] = useState(() => Date.now());
   const [scheduleSearchQuery, setScheduleSearchQuery] = useState("");
+  const [locationModalAddress, setLocationModalAddress] = useState<string | null>(null);
 
   const [meetings, setMeetings] = useState<any[]>([]);
   const [agendaItems, setAgendaItems] = useState<any[]>([]);
@@ -494,15 +496,20 @@ function DashboardApp() {
                       {(meeting.confirmedDate || meeting.date) && <span><Icon icon={Calendar02Icon} size={14} /> {formatDate(meeting.confirmedDate || meeting.date)}</span>}
                       {(meeting.confirmedTime || meeting.time) && <span><Icon icon={Clock01Icon} size={14} /> {meeting.confirmedTime || meeting.time}</span>}
                       {shouldShowMeetingLocation(meeting) && (
-                        <a 
-                          href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(meeting.location)}`}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          style={{ color: 'inherit', textDecoration: 'none', display: 'flex', alignItems: 'center', gap: '4px' }}
-                          onClick={(e) => e.stopPropagation()}
+                        <button
+                          type="button"
+                          onClick={(e) => { e.stopPropagation(); setLocationModalAddress(meeting.location); }}
+                          style={{
+                            display: 'inline-flex', alignItems: 'center', gap: '4px',
+                            padding: '1px 8px', borderRadius: '999px',
+                            border: '1px solid var(--border)', background: 'var(--bg-elevated)',
+                            cursor: 'pointer', color: 'var(--text-secondary)',
+                            fontSize: '0.75rem', fontWeight: 500, lineHeight: 1.6,
+                          }}
+                          title={meeting.location}
                         >
-                          <Icon icon={Location01Icon} size={14} /> {meeting.location}
-                        </a>
+                          <Icon icon={Location01Icon} size={12} /> Location
+                        </button>
                       )}
                       <span><Icon icon={UserIcon} size={14} /> {meeting.host}</span>
                     </div>
@@ -621,15 +628,20 @@ function DashboardApp() {
                     {(meeting.confirmedDate || meeting.date) && <span><Icon icon={Calendar02Icon} size={14} /> {formatDate(meeting.confirmedDate || meeting.date)}</span>}
                     {(meeting.confirmedTime || meeting.time) && <span><Icon icon={Clock01Icon} size={14} /> {meeting.confirmedTime || meeting.time}</span>}
                     {shouldShowMeetingLocation(meeting) && (
-                      <a 
-                        href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(meeting.location)}`}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        style={{ color: 'inherit', textDecoration: 'none', display: 'flex', alignItems: 'center', gap: '4px' }}
-                        onClick={(e) => e.stopPropagation()}
+                      <button
+                        type="button"
+                        onClick={(e) => { e.stopPropagation(); setLocationModalAddress(meeting.location); }}
+                        style={{
+                          display: 'inline-flex', alignItems: 'center', gap: '4px',
+                          padding: '1px 8px', borderRadius: '999px',
+                          border: '1px solid var(--border)', background: 'var(--bg-elevated)',
+                          cursor: 'pointer', color: 'var(--text-secondary)',
+                          fontSize: '0.75rem', fontWeight: 500, lineHeight: 1.6,
+                        }}
+                        title={meeting.location}
                       >
-                        <Icon icon={Location01Icon} size={14} /> {meeting.location}
-                      </a>
+                        <Icon icon={Location01Icon} size={12} /> Location
+                      </button>
                     )}
                     <span><Icon icon={UserIcon} size={14} /> {meeting.host}</span>
                   </div>
@@ -698,6 +710,10 @@ function DashboardApp() {
 
       {pollMeetingId && (
         <PollVoting meetingId={pollMeetingId} onClose={() => setPollMeetingId(null)} />
+      )}
+
+      {locationModalAddress && (
+        <LocationMapModal address={locationModalAddress} onClose={() => setLocationModalAddress(null)} />
       )}
 
     </div>
