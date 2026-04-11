@@ -18,19 +18,21 @@ async function callAISummarize(transcriptSegments: any[], agendaItems: any[]) {
 
 async function callAIExtractActions(transcriptText: string, minutesItems: any[] = []) {
     try {
+        console.log(`[AI-SERVICE] Sending POST to ${AI_SERVICE_URL}/extract-actions`);
         const resp = await fetch(`${AI_SERVICE_URL}/extract-actions`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ text: transcriptText, minutes_items: minutesItems }),
         });
-        if (!resp.ok) throw new Error(`AI service returned ${resp.status}`);
+        if (!resp.ok) throw new Error(`AI service (${AI_SERVICE_URL}) returned ${resp.status}`);
         const data: any = await resp.json();
         return data.actions || [];
     } catch (error: any) {
-        console.error('AI extract-actions call failed:', error.message);
+        console.error(`AI extract-actions call failed for url ${AI_SERVICE_URL}:`, error.message);
         throw error;
     }
 }
+
 
 async function callAIMeetingSummary(payload: {
     meeting_title?: string;

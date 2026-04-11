@@ -22,9 +22,9 @@ app.add_middleware(
 )
 
 async def add_process_time_header(request, call_next):
-    print(f"DEBUG: Incoming {request.method} request to {request.url.path}")
+    print(f"DEBUG: Incoming {request.method} request to {request.url.path}", flush=True)
     response = await call_next(request)
-    print(f"DEBUG: Completed {request.method} {request.url.path} with status {response.status_code}")
+    print(f"DEBUG: Completed {request.method} {request.url.path} with status {response.status_code}", flush=True)
     return response
 
 app.middleware("http")(add_process_time_header)
