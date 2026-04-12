@@ -169,9 +169,10 @@ function DashboardApp() {
   const meetingLayoutRef = useRef<HTMLDivElement | null>(null);
 
   const triggerAddActionItem = useCallback(() => {
+    if (!selectedMeeting) return;
     setRightPanelOpen(true);
     setAddActionItemTrigger(t => t + 1);
-  }, []);
+  }, [selectedMeeting]);
 
   const triggerAddAgendaItem = useCallback(() => {
     setAgendaPanelOpen(true);
@@ -587,6 +588,7 @@ function DashboardApp() {
                         addActionItemTrigger={addActionItemTrigger}
                         onAddTriggered={() => setAddActionItemTrigger(0)}
                         participants={liveParticipants.length > 0 ? liveParticipants : (selectedMeeting.participants || [])}
+                        canAdd={isHost}
                       />
                     </div>
                   </div>

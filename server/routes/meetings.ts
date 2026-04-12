@@ -201,7 +201,7 @@ export = function ({ User, Meeting, Poll, Notification, Agenda, protect, usingMo
                 description: description || undefined,
                 durationMinutes: durationMinutes != null ? Number(durationMinutes) : undefined,
                 date: slot?.date, time: slot?.time, location,
-                host: hostName, participants: participants || [],
+                host: hostName, hostId: req.user.id, participants: participants || [],
                 status: isSingleSlot ? 'scheduled' : 'pending_poll',
                 meetingUrl,
             };

@@ -51,7 +51,8 @@ function computeRMS(buffer: Float32Array): number {
 export default function useTranscriptionCapture(
     socket: any,
     meetingId: string | null,
-    localStream: MediaStream | null
+    localStream: MediaStream | null,
+    enabled: boolean = true,
 ) {
     const audioContextRef = useRef<AudioContext | null>(null);
     const processorRef = useRef<ScriptProcessorNode | null>(null);
@@ -72,7 +73,7 @@ export default function useTranscriptionCapture(
     }, []);
 
     const startCapture = useCallback(() => {
-        if (!socket || !meetingId || !localStream || activeRef.current) return;
+        if (!enabled || !socket || !meetingId || !localStream || activeRef.current) return;
         const audioTrack = localStream.getAudioTracks()[0];
         if (!audioTrack) return;
         activeRef.current = true;
@@ -102,7 +103,11 @@ export default function useTranscriptionCapture(
         };
         source.connect(processor);
         processor.connect(audioCtx.destination);
-    }, [socket, meetingId, localStream]);
+    }, [enabled, socket, meetingId, localStream]);
+
+    useEffect(() => {
+        if (!enabled) stopCapture();
+    }, [enabled, stopCapture]);
 
     useEffect(() => {
         if (!socket || !meetingId) return;

@@ -67,9 +67,10 @@ interface ActionItemsProps {
     addActionItemTrigger?: number;
     onAddTriggered?: () => void;
     participants?: any[];
+    canAdd?: boolean;
 }
 
-export default function ActionItems({ items, meetingId, fetchWithAuth, onRefresh, addActionItemTrigger, onAddTriggered, participants }: ActionItemsProps) {
+export default function ActionItems({ items, meetingId, fetchWithAuth, onRefresh, addActionItemTrigger, onAddTriggered, participants, canAdd = false }: ActionItemsProps) {
     const [adding, setAdding] = useState(false);
     const [newTitle, setNewTitle] = useState('');
     const [newCategory, setNewCategory] = useState('Technical');
@@ -106,11 +107,11 @@ export default function ActionItems({ items, meetingId, fetchWithAuth, onRefresh
         setEditData(prev => prev ? { ...prev, [field]: value } : null);
     };
     useEffect(() => {
-        if (addActionItemTrigger && addActionItemTrigger > 0) {
+        if (canAdd && addActionItemTrigger && addActionItemTrigger > 0) {
             setAdding(true);
             onAddTriggered?.();
         }
-    }, [addActionItemTrigger, onAddTriggered]);
+    }, [addActionItemTrigger, onAddTriggered, canAdd]);
 
     const resetFields = () => {
         setNewTitle('');
@@ -399,7 +400,7 @@ export default function ActionItems({ items, meetingId, fetchWithAuth, onRefresh
                             </div>
                         </div>
                     ) : (
-                        meetingId && (
+                        canAdd && meetingId && (
                             <ShortcutTooltip keys={['Shift', 'A']} position="top" fullWidth>
                                 <button
                                     className="btn btn-secondary"

@@ -2,7 +2,20 @@ import express from 'express';
 const router = express.Router();
 import ActionItem = require('../models/ActionItem');
 
-export = function ({ protect, usingMongo, Notification, emitToUser, inMemoryActionItems, io, ActionItem: DbActionItem, User }: any) {
+export = function ({ protect, usingMongo, Notification, emitToUser, inMemoryActionItems, io, ActionItem: DbActionItem, User, Meeting, inMemoryMeetings }: any) {
+    const checkIsHost = async (req: any, meetingId: string): Promise<boolean> => {
+        if (usingMongo() && Meeting) {
+            const meeting = await Meeting.findById(meetingId).select('hostId');
+            if (!meeting) return false;
+            if (!meeting.hostId) return true;
+            return meeting.hostId.toString() === req.user.id.toString();
+        }
+        const meeting = inMemoryMeetings?.find((m: any) => String(m.id || m._id) === String(meetingId));
+        if (!meeting) return false;
+        if (!meeting.hostId) return true;
+        return String(meeting.hostId) === String(req.user.id);
+    };
+
     const processItem = (i: any) => {
         const item = i.toObject ? i.toObject() : i;
         let status = item.status;
@@ -74,6 +87,9 @@ export = function ({ protect, usingMongo, Notification, emitToUser, inMemoryActi
 
     router.post('/:meetingId', protect, async (req: any, res: any) => {
         try {
+            const isHost = await checkIsHost(req, req.params.meetingId);
+            if (!isHost) return res.status(403).json({ message: 'Only the host can add action items.' });
+
             const { title, assignee, assigneeName, category, status, deadline, agendaItemId, source, aiConfidence } = req.body;
 
             if (!usingMongo()) {

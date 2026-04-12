@@ -121,6 +121,19 @@ function emitToUser(userId: any, event: string, data: any) {
 	io.to(`user:${userId.toString()}`).emit(event, data);
 }
 
+async function isMeetingHost(meetingId: string, userId: string) {
+	if (usingMongoFlag && Meeting) {
+		const meetingDoc = await Meeting.findById(meetingId).select('hostId');
+		if (!meetingDoc) return false;
+		if (!meetingDoc.hostId) return true;
+		return meetingDoc.hostId.toString() === userId.toString();
+	}
+	const memMtg = inMemoryMeetings.find((m: any) => String(m.id || m._id) === String(meetingId));
+	if (!memMtg) return false;
+	if (!memMtg.hostId) return true;
+	return String(memMtg.hostId) === String(userId);
+}
+
 // email setup
 let transporter: any = null;
 async function getMailTransporter() {
@@ -635,11 +648,12 @@ io.on('connection', (socket: any) => {
 
 		const session = transcriptionSessions.get(meetingId);
 		if (session && session.active) {
+			socket.emit('transcription_started', { meetingId });
 			const ws = createSarvamWS(meetingId, socket.id, name || 'User', profileImage || null);
 			session.speakers.set(socket.id, {
+				userId: socket.userId,
 				ws, name: name || 'User', image: profileImage || null, streamBuffer: '',
 			});
-			socket.emit('transcription_started', { meetingId });
 		}
 	});
 
@@ -665,8 +679,12 @@ io.on('connection', (socket: any) => {
 	});
 
 	// transcription control
-	socket.on('start_transcription', ({ meetingId }: any) => {
+	socket.on('start_transcription', async ({ meetingId }: any) => {
 		if (!meetingId) return;
+		if (!(await isMeetingHost(meetingId, socket.userId))) {
+			socket.emit('error', { message: 'Only the host can start recording.' });
+			return;
+		}
 		const room = meetingRooms.get(meetingId);
 		if (!room) return;
 
@@ -675,15 +693,21 @@ io.on('connection', (socket: any) => {
 		for (const [sid, info] of room.entries()) {
 			const ws = createSarvamWS(meetingId, sid, info.name, info.profileImage);
 			speakers.set(sid, {
+				userId: info.userId,
 				ws, name: info.name, image: info.profileImage, streamBuffer: '',
 			});
 		}
+		if (speakers.size === 0) return;
 		transcriptionSessions.set(meetingId, { active: true, speakers, aggregator: null, liveDraftId: null });
 		io.to(`meeting:${meetingId}`).emit('transcription_started', { meetingId });
 	});
 
-	socket.on('stop_transcription', ({ meetingId }: any) => {
+	socket.on('stop_transcription', async ({ meetingId }: any) => {
 		if (!meetingId) return;
+		if (!(await isMeetingHost(meetingId, socket.userId))) {
+			socket.emit('error', { message: 'Only the host can stop recording.' });
+			return;
+		}
 		const session = transcriptionSessions.get(meetingId);
 		if (session) {
 			flushSessionAggregator(meetingId, session);
@@ -701,8 +725,21 @@ io.on('connection', (socket: any) => {
 	socket.on('audio_chunk', ({ meetingId, data }: any) => {
 		const session = transcriptionSessions.get(meetingId);
 		if (!session || !session.active) return;
-		const speaker = session.speakers.get(socket.id);
-		if (!speaker || !speaker.ws || speaker.ws.readyState !== WebSocket.OPEN) return;
+		let speaker = session.speakers.get(socket.id);
+		if (!speaker || !speaker.ws || speaker.ws.readyState === WebSocket.CLOSED || speaker.ws.readyState === WebSocket.CLOSING) {
+			const roomInfo = meetingRooms.get(meetingId)?.get(socket.id);
+			if (!roomInfo) return;
+			const ws = createSarvamWS(meetingId, socket.id, roomInfo.name, roomInfo.profileImage);
+			speaker = {
+				userId: roomInfo.userId,
+				ws,
+				name: roomInfo.name,
+				image: roomInfo.profileImage,
+				streamBuffer: speaker?.streamBuffer || '',
+			};
+			session.speakers.set(socket.id, speaker);
+		}
+		if (!speaker.ws || speaker.ws.readyState !== WebSocket.OPEN) return;
 		try {
 			speaker.ws.send(JSON.stringify({ audio: { data, sample_rate: '16000', encoding: 'audio/wav' } }));
 		} catch { }

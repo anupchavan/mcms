@@ -47,18 +47,18 @@ const HostControls = forwardRef<HostControlsRef, HostControlsProps>(function Hos
 
     useImperativeHandle(ref, () => ({
         toggleRecording: () => {
-            if (!socket || !meetingId) return;
+            if (!socket || !meetingId || !isHost) return;
             if (recording) socket.emit('stop_transcription', { meetingId });
             else socket.emit('start_transcription', { meetingId });
         },
         showAttendance: () => setShowQR(true),
         endMeeting: () => {
-            if (!socket || !meetingId) return;
+            if (!socket || !meetingId || !isHost) return;
             if (recording) socket.emit('stop_transcription', { meetingId });
             socket.emit('end_meeting', { meetingId });
             onMeetingEnded?.();
         },
-    }), [socket, meetingId, recording, onMeetingEnded]);
+    }), [socket, meetingId, recording, onMeetingEnded, isHost]);
 
     useEffect(() => {
         if (!socket) return;
@@ -73,13 +73,13 @@ const HostControls = forwardRef<HostControlsRef, HostControlsProps>(function Hos
     }, [socket, meetingId]);
 
     const toggleRecording = useCallback(() => {
-        if (!socket || !meetingId) return;
+        if (!socket || !meetingId || !isHost) return;
         if (recording) {
             socket.emit('stop_transcription', { meetingId });
         } else {
             socket.emit('start_transcription', { meetingId });
         }
-    }, [socket, meetingId, recording]);
+    }, [socket, meetingId, recording, isHost]);
 
     const handleEndMeeting = useCallback(() => {
         if (!socket || !meetingId) return;
@@ -135,17 +135,19 @@ const HostControls = forwardRef<HostControlsRef, HostControlsProps>(function Hos
 
                             <div className="controls-divider"></div>
 
-                            <ShortcutTooltip label={recording ? 'Stop recording' : 'Record'} keys={['R']} position="top">
-                                <button
-                                    className={`control-btn ${recording ? 'recording' : ''}`}
-                                    onClick={toggleRecording}
-                                    disabled={!hasJoined}
-                                >
-                                    <Icon icon={RecordIcon} size={16} />
-                                    <span>{recording ? 'Recording' : 'Record'}</span>
-                                    {recording && <div className="rec-dot"></div>}
-                                </button>
-                            </ShortcutTooltip>
+                            {isHost && (
+                                <ShortcutTooltip label={recording ? 'Stop recording' : 'Record'} keys={['R']} position="top">
+                                    <button
+                                        className={`control-btn ${recording ? 'recording' : ''}`}
+                                        onClick={toggleRecording}
+                                        disabled={!hasJoined}
+                                    >
+                                        <Icon icon={RecordIcon} size={16} />
+                                        <span>{recording ? 'Recording' : 'Record'}</span>
+                                        {recording && <div className="rec-dot"></div>}
+                                    </button>
+                                </ShortcutTooltip>
+                            )}
                         </>
                     )}
 

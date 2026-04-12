@@ -186,7 +186,7 @@ export default function VideoArea({
   };
 
   const handleAddActionItem = async (type: string) => {
-    if (!meetingId) return;
+    if (!meetingId || !isHost) return;
     const title = activeNote.trim() || `Action item: ${type}`;
     try {
       const res = await (fetch as any)(`${SERVER_BASE}/api/action-items/${meetingId}`, {
@@ -299,10 +299,10 @@ export default function VideoArea({
 
   const meetingShortcuts = useMemo(() => [
     { key: 'm', handler: () => hasJoined && toggleAudio(), allowInInput: false },
-    { key: 'r', handler: () => hasJoined && hostControlsRef.current?.toggleRecording(), allowInInput: false },
+    { key: 'r', handler: () => isHost && hasJoined && hostControlsRef.current?.toggleRecording(), allowInInput: false },
     { key: 'c', handler: () => hasJoined && toggleVideo(), allowInInput: false },
     { key: 'a', handler: () => onTriggerAddAgendaItem?.(), allowInInput: false },
-    { key: 'a', shift: true, handler: () => onTriggerAddActionItem?.(), allowInInput: false },
+    { key: 'a', shift: true, handler: () => isHost && onTriggerAddActionItem?.(), allowInInput: false },
     { key: 'Enter', handler: () => !hasJoined && handleJoin(), allowInInput: false },
     { key: 'l', mod: true, shift: true, handler: () => hasJoined && handleLeave(), allowInInput: false },
     // End meeting shortcut only fires for the host
@@ -468,14 +468,14 @@ export default function VideoArea({
                     <div className="focus-note-card">
                       <textarea
                         className="focus-note-input"
-                        placeholder="Type a note, decision, or action item..."
+                        placeholder={isHost ? "Type a note, decision, or action item..." : "Type a note or parking-lot item..."}
                         value={activeNote}
                         onChange={(e) => setActiveNote(e.target.value)}
                       ></textarea>
                       <div className="focus-note-actions">
-                        <button className="focus-note-btn" onClick={() => handleAddActionItem('Technical')}>+ Technical</button>
-                        <button className="focus-note-btn" onClick={() => handleAddActionItem('Decision')}>+ Decision</button>
-                        <button className="focus-note-btn" onClick={() => handleAddActionItem('Follow-up')}>+ Follow-up</button>
+                        {isHost && <button className="focus-note-btn" onClick={() => handleAddActionItem('Technical')}>+ Technical</button>}
+                        {isHost && <button className="focus-note-btn" onClick={() => handleAddActionItem('Decision')}>+ Decision</button>}
+                        {isHost && <button className="focus-note-btn" onClick={() => handleAddActionItem('Follow-up')}>+ Follow-up</button>}
                         <button className="focus-note-btn" onClick={handleAddParkingLot}>+ Parking</button>
                         <button className="focus-note-btn primary" onClick={handleAddNote}>Save Note</button>
                       </div>
