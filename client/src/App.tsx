@@ -521,6 +521,8 @@ function DashboardApp() {
           );
         }
         const isOffline = selectedMeeting?.modality === 'Offline';
+        const isHost = !!user && !!selectedMeeting?.hostId &&
+          String(selectedMeeting.hostId) === String((user as any)._id || (user as any).id);
         return (
           <div ref={meetingLayoutRef} className={`meeting-layout ${isOffline ? 'offline-mode' : ''} ${!agendaPanelOpen ? 'agenda-hidden' : ''} ${!rightPanelOpen ? 'right-hidden' : ''}`}>
             {agendaPanelOpen && (
@@ -528,6 +530,7 @@ function DashboardApp() {
                 <AgendaPanel
                   agendaItems={agendaItems}
                   onItemChange={handleAgendaChange}
+                  isHost={isHost}
                 />
                 <RubricSidebar
                   meetingId={selectedMeeting.id}
@@ -557,6 +560,7 @@ function DashboardApp() {
               onMinutesChange={handleMinutesChange}
               onRefreshActionItems={() => fetchActionItems(selectedMeeting.id)}
               onParticipantsUpdate={setLiveParticipants}
+              isHost={isHost}
             />
             {rightPanelOpen && (
               <div className="meeting-side-panel meeting-side-panel-right open">

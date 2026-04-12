@@ -773,10 +773,24 @@ io.on('connection', (socket: any) => {
 		}
 	});
 
-	// end meeting
+	// end meeting — only the host may end the meeting for everyone
 	socket.on('end_meeting', async ({ meetingId }: any) => {
 		if (!meetingId) return;
 		try {
+			// Host authorisation check
+			if (usingMongoFlag && Meeting) {
+				const meetingDoc = await Meeting.findById(meetingId).select('hostId');
+				if (meetingDoc && meetingDoc.hostId && meetingDoc.hostId.toString() !== socket.userId.toString()) {
+					socket.emit('error', { message: 'Only the host can end the meeting.' });
+					return;
+				}
+			} else {
+				const memMtg = inMemoryMeetings.find((m: any) => String(m.id || m._id) === String(meetingId));
+				if (memMtg && memMtg.hostId && String(memMtg.hostId) !== String(socket.userId)) {
+					socket.emit('error', { message: 'Only the host can end the meeting.' });
+					return;
+				}
+			}
 			if (usingMongoFlag && Meeting) {
 				const meeting = await Meeting.findById(meetingId).populate('participants');
 				if (meeting && meeting.status !== 'completed') {

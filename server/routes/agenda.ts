@@ -2,7 +2,22 @@ import express from 'express';
 const router = express.Router();
 import Agenda = require('../models/Agenda');
 
-export = function ({ protect, usingMongo, inMemoryAgendas, io, Agenda: DbAgenda }: any) {
+export = function ({ protect, usingMongo, inMemoryAgendas, io, Agenda: DbAgenda, Meeting, inMemoryMeetings }: any) {
+    /** Returns true if the authenticated user is the host of the meeting */
+    const checkIsHost = async (req: any, meetingId: string): Promise<boolean> => {
+        if (usingMongo() && Meeting) {
+            const meeting = await Meeting.findById(meetingId).select('hostId');
+            if (!meeting) return false; // meeting not found — block write
+            if (!meeting.hostId) return true; // no hostId recorded — allow (legacy data)
+            return meeting.hostId.toString() === req.user.id.toString();
+        } else {
+            const m = inMemoryMeetings && inMemoryMeetings.find((m: any) => String(m.id || m._id) === String(meetingId));
+            if (!m) return false;
+            if (!m.hostId) return true; // no hostId recorded — allow
+            return String(m.hostId) === String(req.user.id);
+        }
+    };
+
     const broadcastSync = async (meetingId: string) => {
         if (!io) return;
         const mId = meetingId.toString();
@@ -30,6 +45,9 @@ export = function ({ protect, usingMongo, inMemoryAgendas, io, Agenda: DbAgenda 
 
     router.post('/:meetingId', protect, async (req: any, res: any) => {
         try {
+            const isHost = await checkIsHost(req, req.params.meetingId);
+            if (!isHost) return res.status(403).json({ message: 'Only the host can modify agenda items.' });
+
             if (!usingMongo()) {
                 const { items } = req.body;
                 inMemoryAgendas[req.params.meetingId] = items || [];
@@ -52,6 +70,8 @@ export = function ({ protect, usingMongo, inMemoryAgendas, io, Agenda: DbAgenda 
 
     router.post('/:meetingId/items', protect, async (req: any, res: any) => {
         try {
+            const isHost = await checkIsHost(req, req.params.meetingId);
+            if (!isHost) return res.status(403).json({ message: 'Only the host can add agenda items.' });
             const { title, duration } = req.body;
             const newItem: any = {
                 id: `ag-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
@@ -86,6 +106,8 @@ export = function ({ protect, usingMongo, inMemoryAgendas, io, Agenda: DbAgenda 
 
     router.put('/:meetingId/items/:itemId', protect, async (req: any, res: any) => {
         try {
+            const isHost = await checkIsHost(req, req.params.meetingId);
+            if (!isHost) return res.status(403).json({ message: 'Only the host can update agenda items.' });
             const { status, notes, title, duration } = req.body;
 
             if (!usingMongo()) {

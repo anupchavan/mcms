@@ -17,9 +17,11 @@ interface AgendaItem {
 interface AgendaPanelProps {
   agendaItems: AgendaItem[];
   onItemChange?: (items: AgendaItem[]) => void;
+  /** When false (non-host), the panel is read-only: no adding items, no status changes */
+  isHost?: boolean;
 }
 
-const AgendaPanel: FC<AgendaPanelProps> = ({ agendaItems = [], onItemChange }) => {
+const AgendaPanel: FC<AgendaPanelProps> = ({ agendaItems = [], onItemChange, isHost = false }) => {
   const [isAdding, setIsAdding] = useState(false);
   const [newTitle, setNewTitle] = useState('');
   const [newDuration, setNewDuration] = useState('15');
@@ -43,13 +45,16 @@ const AgendaPanel: FC<AgendaPanelProps> = ({ agendaItems = [], onItemChange }) =
     <div className="agenda-panel panel">
       <div className="section-header">
         <span className="section-title">📋 Agenda</span>
-        <button
-          className={`btn-icon ${isAdding ? 'active' : ''}`}
-          id="btn-add-agenda"
-          onClick={() => setIsAdding(!isAdding)}
-        >
-          <Icon icon={isAdding ? Cancel01Icon : Add01Icon} size={16} />
-        </button>
+        {isHost && (
+          <button
+            className={`btn-icon ${isAdding ? 'active' : ''}`}
+            id="btn-add-agenda"
+            onClick={() => setIsAdding(!isAdding)}
+            title="Add agenda item (host only)"
+          >
+            <Icon icon={isAdding ? Cancel01Icon : Add01Icon} size={16} />
+          </button>
+        )}
       </div>
 
       {isAdding && (
@@ -124,15 +129,17 @@ const AgendaPanel: FC<AgendaPanelProps> = ({ agendaItems = [], onItemChange }) =
               borderRadius: 'var(--radius-sm)',
               marginBottom: '0.5rem',
               border: item.status === 'active' ? '1px solid var(--primary)' : '1px solid var(--border)',
-              cursor: 'pointer',
-              transition: 'background-color 0.2s, border-color 0.2s'
+              cursor: isHost ? 'pointer' : 'default',
+              transition: 'background-color 0.2s, border-color 0.2s',
+              opacity: isHost ? 1 : undefined,
             }}
             onClick={() => {
+              if (!isHost) return;
               const newStatus = item.status === 'pending' ? 'active' : item.status === 'active' ? 'completed' : 'pending';
               const updatedItems = items.map(i => i.id === item.id ? { ...i, status: newStatus as any } : i);
               onItemChange?.(updatedItems);
             }}
-            title="Click to change status (Pending -> Active -> Completed)"
+            title={isHost ? 'Click to change status (Pending → Active → Completed)' : undefined}
             >
               <Icon icon={Clock01Icon} size={16} />
               <div style={{ flex: 1 }}>

@@ -61,6 +61,8 @@ interface VideoAreaProps {
   onMinutesChange?: (items: any[]) => void;
   onRefreshActionItems?: () => void;
   onParticipantsUpdate?: (participants: any[]) => void;
+  /** Whether the current user is the meeting host */
+  isHost?: boolean;
 }
 
 function VideoTile({ stream, name, profileImage, muted, isSelf, isScreenShare, speaking }: VideoTileProps) {
@@ -160,6 +162,7 @@ export default function VideoArea({
   onMinutesChange,
   onRefreshActionItems,
   onParticipantsUpdate,
+  isHost = false,
 }: VideoAreaProps) {
   const { socket, connected } = useSocket();
   const [elapsedTime, setElapsedTime] = useState(0);
@@ -302,8 +305,9 @@ export default function VideoArea({
     { key: 'a', shift: true, handler: () => onTriggerAddActionItem?.(), allowInInput: false },
     { key: 'Enter', handler: () => !hasJoined && handleJoin(), allowInInput: false },
     { key: 'l', mod: true, shift: true, handler: () => hasJoined && handleLeave(), allowInInput: false },
-    { key: 'e', mod: true, shift: true, handler: () => hasJoined && hostControlsRef.current?.endMeeting(), allowInInput: false },
-  ], [hasJoined, toggleAudio, toggleVideo, handleJoin, handleLeave, onTriggerAddActionItem, onTriggerAddAgendaItem]);
+    // End meeting shortcut only fires for the host
+    { key: 'e', mod: true, shift: true, handler: () => isHost && hasJoined && hostControlsRef.current?.endMeeting(), allowInInput: false },
+  ], [hasJoined, isHost, toggleAudio, toggleVideo, handleJoin, handleLeave, onTriggerAddActionItem, onTriggerAddAgendaItem]);
 
   useKeyboardShortcuts(meetingShortcuts);
 
@@ -612,6 +616,7 @@ export default function VideoArea({
         onLeave={handleLeave}
         hasJoined={hasJoined}
         onMeetingEnded={onMeetingEnded}
+        isHost={isHost}
       />
 
       <style>{`
