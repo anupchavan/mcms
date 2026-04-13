@@ -40,13 +40,26 @@ function shouldAutoCompleteMeeting(meeting: any, now = new Date()) {
     return now.getTime() >= meetingEndWithBuffer;
 }
 
+function isUserParticipant(meeting: any, userId: string): boolean {
+    const uid = String(userId);
+    const hostId = meeting?.hostId ? String(meeting.hostId) : null;
+    if (hostId && hostId === uid) return true;
+    if (!Array.isArray(meeting?.participants)) return false;
+    return meeting.participants.some((p: any) => String(p?._id || p?.id || p) === uid);
+}
+
 export = function ({ User, Meeting, Poll, Notification, Agenda, protect, usingMongo, emitToUser, sendRsvpEmail, generateICS, CLIENT_URL, inMemoryMeetings, inMemoryAgendas }: any) {
 
     router.get('/', protect, async (req: any, res: any) => {
         try {
             if (usingMongo() && Meeting) {
                 const base = (CLIENT_URL || 'http://localhost:5173').replace(/\/$/, '');
-                const dbMeetings = await Meeting.find({}).sort({ createdAt: -1 }).populate('participants', 'name email');
+                const dbMeetings = await Meeting.find({
+                    $or: [
+                        { hostId: req.user.id },
+                        { participants: req.user.id },
+                    ],
+                }).sort({ createdAt: -1 }).populate('participants', 'name email');
                 const expiredMeetings = dbMeetings.filter((meeting: any) => shouldAutoCompleteMeeting(meeting));
                 if (expiredMeetings.length > 0) {
                     await Promise.all(expiredMeetings.map(async (meeting: any) => {
@@ -71,11 +84,12 @@ export = function ({ User, Meeting, Poll, Notification, Agenda, protect, usingMo
                 }));
                 return res.json(formatted);
             }
-            inMemoryMeetings.forEach((meeting: any) => {
+            const visibleMeetings = inMemoryMeetings.filter((meeting: any) => isUserParticipant(meeting, req.user.id));
+            visibleMeetings.forEach((meeting: any) => {
                 if (shouldAutoCompleteMeeting(meeting)) meeting.status = 'completed';
             });
-            console.log(`[API] Returning ${inMemoryMeetings.length} in-memory meetings.`);
-            res.json(inMemoryMeetings);
+            console.log(`[API] Returning ${visibleMeetings.length} in-memory meetings.`);
+            res.json(visibleMeetings);
         } catch (error: any) {
             res.status(500).json({ message: 'Server error', error: error.message });
         }

@@ -118,13 +118,24 @@ export = function ({ Meeting, User, protect, usingMongo }: any) {
                 badges.push({ name: 'Getting Started', icon: '🌱', description: 'Keep attending meetings!' });
             }
 
+            let speakingSumMin = 0;
+            let speakingMeetings = 0;
+            for (const rec of attendanceRecords) {
+                if ((rec as any).joinTimestamp) {
+                    speakingSumMin += ((rec as any).speakingSecondsTotal || 0) / 60;
+                    speakingMeetings++;
+                }
+            }
+            const speakingTime = speakingMeetings > 0 ? Math.round(speakingSumMin / speakingMeetings) : 0;
+
             res.json({
                 user: userName, role: 'Participant',
                 streak: streak, totalMeetings, totalHours: Math.round(totalHours * 10) / 10,
                 punctualityRate, tasksCompleted, tasksTotal,
                 badges, weeklyHeatmap, monthlyAttendance,
                 sentimentProfile: { positive: 50, neutral: 40, negative: 10 },
-                speakingTime: 0, avgMeetingDuration: totalMeetings > 0 ? Math.round((totalHours / totalMeetings) * 60) : 0,
+                speakingTime,
+                avgMeetingDuration: totalMeetings > 0 ? Math.round((totalHours / totalMeetings) * 60) : 0,
             });
         } catch (error: any) {
             console.error('Dashboard stats error:', error);

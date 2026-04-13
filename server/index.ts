@@ -134,6 +134,82 @@ async function isMeetingHost(meetingId: string, userId: string) {
 	return String(memMtg.hostId) === String(userId);
 }
 
+function parseMeetingStart(meeting: any): Date | null {
+	const dateStr = meeting?.confirmedDate || meeting?.date;
+	const timeStr = meeting?.confirmedTime || meeting?.time || '00:00';
+	if (!dateStr) return null;
+	const [year, month, day] = String(dateStr).split('-').map(Number);
+	const [hours, minutes] = String(timeStr).split(':').map(Number);
+	if (![year, month, day].every(Number.isFinite)) return null;
+	return new Date(
+		year,
+		(month || 1) - 1,
+		day || 1,
+		Number.isFinite(hours) ? hours : 0,
+		Number.isFinite(minutes) ? minutes : 0,
+		0,
+		0,
+	);
+}
+
+function getMeetingDurationMinutes(meeting: any): number {
+	const value = Number(meeting?.durationMinutes);
+	return Number.isFinite(value) && value > 0 ? value : 30;
+}
+
+async function getMeetingForUserAccess(meetingId: string) {
+	if (usingMongoFlag && Meeting) {
+		const meeting = await Meeting.findById(meetingId).select(
+			'hostId participants status confirmedDate confirmedTime date time durationMinutes'
+		);
+		if (!meeting) return null;
+		return {
+			hostId: meeting.hostId ? String(meeting.hostId) : null,
+			participants: Array.isArray(meeting.participants) ? meeting.participants.map((p: any) => String(p)) : [],
+			status: meeting.status,
+			confirmedDate: meeting.confirmedDate,
+			confirmedTime: meeting.confirmedTime,
+			date: meeting.date,
+			time: meeting.time,
+			durationMinutes: meeting.durationMinutes,
+		};
+	}
+	const memMeeting = inMemoryMeetings.find((m: any) => String(m.id || m._id) === String(meetingId));
+	if (!memMeeting) return null;
+	return {
+		hostId: memMeeting.hostId ? String(memMeeting.hostId) : null,
+		participants: Array.isArray(memMeeting.participants)
+			? memMeeting.participants.map((p: any) => String(p?._id || p?.id || p))
+			: [],
+		status: memMeeting.status,
+		confirmedDate: memMeeting.confirmedDate,
+		confirmedTime: memMeeting.confirmedTime,
+		date: memMeeting.date,
+		time: memMeeting.time,
+		durationMinutes: memMeeting.durationMinutes,
+	};
+}
+
+async function canJoinMeetingNow(meetingId: string, userId: string) {
+	const meeting = await getMeetingForUserAccess(meetingId);
+	if (!meeting) return { ok: false, reason: 'Meeting not found.' };
+	const uid = String(userId);
+	const isParticipant = meeting.hostId === uid || meeting.participants.includes(uid);
+	if (!isParticipant) return { ok: false, reason: 'Only invited participants can join this meeting.' };
+	if (meeting.status === 'completed' || meeting.status === 'cancelled') {
+		return { ok: false, reason: 'This meeting has already ended.' };
+	}
+	if (meeting.status === 'pending_poll') return { ok: false, reason: 'This meeting is not scheduled yet.' };
+	const start = parseMeetingStart(meeting);
+	if (!start) return { ok: false, reason: 'Meeting time is unavailable.' };
+	const now = Date.now();
+	const joinOpensAt = start.getTime() - 15 * 60 * 1000;
+	const meetingEndsAt = start.getTime() + getMeetingDurationMinutes(meeting) * 60 * 1000 + 10 * 60 * 1000;
+	if (now < joinOpensAt) return { ok: false, reason: 'You can join up to 15 minutes before the meeting starts.' };
+	if (now > meetingEndsAt) return { ok: false, reason: 'This meeting window has ended.' };
+	return { ok: true, reason: '' };
+}
+
 // email setup
 let transporter: any = null;
 async function getMailTransporter() {
@@ -629,6 +705,11 @@ io.on('connection', (socket: any) => {
 	// WebRTC Signaling
 	socket.on('join_room', async ({ meetingId, name, profileImage }: any) => {
 		if (!meetingId) return;
+		const access = await canJoinMeetingNow(meetingId, socket.userId);
+		if (!access.ok) {
+			socket.emit('error', { message: access.reason || 'You are not allowed to join this meeting.' });
+			return;
+		}
 		socket.join(`meeting:${meetingId}`);
 
 		if (!meetingRooms.has(meetingId)) meetingRooms.set(meetingId, new Map());
@@ -640,6 +721,26 @@ io.on('connection', (socket: any) => {
 		}
 
 		room.set(socket.id, { userId: socket.userId, name: name || 'User', profileImage: profileImage || null });
+
+		if (usingMongoFlag && Attendance) {
+			try {
+				await Attendance.findOneAndUpdate(
+					{ meetingId, userId: socket.userId },
+					{
+						$setOnInsert: {
+							joinTimestamp: new Date(),
+							method: 'auto',
+							punctual: null,
+							leaveTimestamp: null,
+						},
+					},
+					{ upsert: true },
+				);
+			} catch (err: any) {
+				console.warn('Attendance upsert on join_room:', err?.message);
+			}
+		}
+
 		socket.emit('room_peers', { peers: existingPeers });
 		socket.to(`meeting:${meetingId}`).emit('peer_joined', {
 			socketId: socket.id, userId: socket.userId,
@@ -720,6 +821,36 @@ io.on('connection', (socket: any) => {
 		pauseClock(meetingRecordingClock, meetingId);
 		transcriptionSessions.delete(meetingId);
 		io.to(`meeting:${meetingId}`).emit('transcription_stopped', { meetingId });
+	});
+
+	/** Client-side VAD speaking time (no Sarvam); only accepted while socket is in the meeting room. */
+	socket.on('speaking_vad_report', async ({ meetingId, deltaMs }: any) => {
+		if (!meetingId || !socket.userId) return;
+		const room = meetingRooms.get(meetingId);
+		if (!room || !room.has(socket.id)) return;
+		const raw = Number(deltaMs);
+		if (!Number.isFinite(raw) || raw < 400) return;
+		const cappedMs = Math.min(raw, 90_000);
+		const incSec = Math.round(cappedMs / 1000);
+		if (incSec < 1) return;
+		if (!(usingMongoFlag && Attendance)) return;
+		try {
+			await Attendance.findOneAndUpdate(
+				{ meetingId, userId: socket.userId },
+				{
+					$inc: { speakingSecondsTotal: incSec },
+					$setOnInsert: {
+						joinTimestamp: new Date(),
+						method: 'auto',
+						punctual: null,
+						leaveTimestamp: null,
+					},
+				},
+				{ upsert: true },
+			);
+		} catch (err: any) {
+			console.warn('speaking_vad_report:', err?.message);
+		}
 	});
 
 	socket.on('audio_chunk', ({ meetingId, data }: any) => {

@@ -8,6 +8,8 @@ const attendanceSchema = new mongoose.Schema({
     leaveTimestamp: { type: Date, default: null },
     punctual: { type: Boolean, default: null },
     qrToken: { type: String, default: null },
+    /** Cumulative seconds the mic was open with voice activity (client VAD), per meeting. */
+    speakingSecondsTotal: { type: Number, default: 0 },
 }, {
     timestamps: true,
 });
