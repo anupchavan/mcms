@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import Icon from './Icon';
 import {
     Cancel01Icon,
@@ -9,6 +9,7 @@ import {
 } from '@hugeicons/core-free-icons';
 import { useAuth } from '../context/AuthContext';
 import { useSocket } from '../context/SocketContext';
+import { useShowScrollbarWhileScrolling } from '../hooks/useShowScrollbarWhileScrolling';
 
 interface PollSlot {
     date: string;
@@ -37,6 +38,8 @@ const API_BASE = _raw.endsWith('/api') ? _raw : `${_raw}/api`;
 export default function PollVoting({ meetingId, onClose }: PollVotingProps) {
     const { user } = useAuth();
     const { socket } = useSocket();
+    const modalScrollRef = useRef<HTMLDivElement>(null);
+    useShowScrollbarWhileScrolling(modalScrollRef);
     const [poll, setPoll] = useState<Poll | null>(null);
     const [meetingTitle, setMeetingTitle] = useState('');
     const [modality, setModality] = useState('');
@@ -131,7 +134,7 @@ export default function PollVoting({ meetingId, onClose }: PollVotingProps) {
 
     return (
         <div className="modal-overlay" onClick={onClose}>
-            <div className="modal-content poll-modal" onClick={e => e.stopPropagation()}>
+            <div ref={modalScrollRef} className="modal-content poll-modal" onClick={e => e.stopPropagation()}>
                 <div className="modal-header">
                     <h2 className="modal-title">{isResolved ? 'Poll Results' : 'Vote on Meeting Time'}</h2>
                     <button className="btn-icon" onClick={onClose}>

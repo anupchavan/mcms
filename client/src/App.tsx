@@ -494,9 +494,9 @@ function DashboardApp() {
 
       case "tasks":
         return (
-          <div style={{ flex: 1, overflow: "auto", padding: '1rem' }}>
+          <div style={{ flex: 1, overflow: "auto" }}>
             <div className="page-header">
-              <h2 style={{ fontSize: 'var(--font-size-title2)', fontWeight: 700, marginBottom: '1.5rem' }}>My Tasks</h2>
+              <h2 className="page-title">My Tasks</h2>
             </div>
             <ActionItems
               items={myActionItems}
@@ -510,13 +510,15 @@ function DashboardApp() {
         if (!selectedMeeting) {
           const hasJoinable = liveMeetingOptions.some((m) => canJoinMeetingNow(m, nowTs));
           return (
-            <div style={{ flex: 1, overflow: "auto", padding: "1.5rem" }}>
-              <h2 style={{ fontSize: "1.375rem", fontWeight: 700, marginBottom: "1rem" }}>Live Meeting</h2>
-              <p style={{ color: "var(--text-muted)", marginBottom: "1rem" }}>
+            <div style={{ flex: 1, overflow: "auto" }}>
+              <div className="page-header">
+				<h2 className="page-title">Live Meeting</h2>
+              	<p className="page-desc">
                 {hasJoinable
                   ? "Select your scheduled meeting to join the call and see agenda, minutes, and action items."
                   : "No joinable live meeting right now. Showing your latest attended meeting if available."}
-              </p>
+              	</p>
+			  </div>
               <div className="meeting-list">
                 {liveMeetingOptions.map(meeting => (
                   <div
@@ -678,9 +680,9 @@ function DashboardApp() {
         return (
           <div style={{ flex: 1, overflow: "auto" }}>
             <div className="page-header">
-              <h2 style={{ fontSize: 'var(--font-size-title3)', fontWeight: 600, marginBottom: 'var(--lk-size-2xs)', letterSpacing: '-0.022em' }}>Scheduled Meetings</h2>
+              <h2 className="page-title">Scheduled Meetings</h2>
             </div>
-            <div className="archive-search-bar" style={{ marginBottom: '1.5rem', marginLeft: 'var(--lk-size-md)', marginRight: 'var(--lk-size-md)' }}>
+            <div className="archive-search-bar">
                 <div className="archive-search-input-wrap">
                     <Icon icon={Search01Icon} size={14} className="archive-search-icon" />
                     <input
@@ -731,7 +733,7 @@ function DashboardApp() {
                 </div>
               ))}
               {filteredUpcomingMeetings.length === 0 && (
-                <p style={{ color: 'var(--text-muted)', fontSize: '0.875rem', padding: '0 var(--lk-size-md)' }}>
+                <p className="page-desc">
                   {scheduleSearchQuery.trim() ? "No meetings match your search." : "No scheduled meetings."}
                 </p>
               )}

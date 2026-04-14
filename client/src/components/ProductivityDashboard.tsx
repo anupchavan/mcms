@@ -162,10 +162,10 @@ export default function ProductivityDashboard({ stats, userName }: ProductivityD
     return (
         <div className="productivity-dashboard">
             <div className="page-header">
-                    <h2 style={{ fontSize: 'var(--font-size-title3)', fontWeight: 600, marginBottom: 'var(--lk-size-2xs)', letterSpacing: '-0.022em' }}>
+                    <h2 className="page-title">
                         Productivity Dashboard
                     </h2>
-                    <p style={{ fontSize: 'var(--font-size-body)', color: 'var(--text-secondary)', marginBottom: 'calc(var(--lk-size-sm) * var(--font-size-title3)/1rem)' }}>
+                    <p className="page-desc">
                         Welcome back, <strong>{userName || stats.user}</strong>. Here's your meeting intelligence overview.
                     </p>
             </div>

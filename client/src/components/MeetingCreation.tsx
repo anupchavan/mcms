@@ -18,6 +18,7 @@ import {
 } from "@hugeicons/core-free-icons";
 import * as chrono from "chrono-node";
 import { useAuth } from "../context/AuthContext";
+import { useShowScrollbarWhileScrolling } from "../hooks/useShowScrollbarWhileScrolling";
 import "leaflet/dist/leaflet.css";
 import { MapContainer, TileLayer, Marker, useMapEvents } from "react-leaflet";
 import L from "leaflet";
@@ -297,6 +298,8 @@ export default function MeetingCreation({
   const [labelText, setLabelText] = useState("Scheduling Poll Slots");
   const [labelFading, setLabelFading] = useState(false);
   const [closing, setClosing] = useState(false);
+  const modalScrollRef = useRef<HTMLDivElement>(null);
+  useShowScrollbarWhileScrolling(modalScrollRef);
 
   const handleClose = useCallback(() => {
     if (closing) return;
@@ -639,6 +642,7 @@ export default function MeetingCreation({
       onClick={handleClose}
     >
       <div
+        ref={modalScrollRef}
         className={`modal-content${closing ? " modal-content-closing" : ""}`}
         onClick={(e) => e.stopPropagation()}
       >
@@ -692,12 +696,12 @@ export default function MeetingCreation({
               </span>
             </div>
             <textarea
-              className="input"
+              className="input font-mono"
               placeholder="What is this meeting about?"
               value={description}
               onChange={(e) => setDescription(e.target.value)}
               rows={3}
-              style={{ resize: "vertical", fontFamily: "inherit" }}
+              style={{ resize: "vertical"}}
               id="input-meeting-description"
               maxLength={500}
             />

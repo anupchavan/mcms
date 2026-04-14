@@ -3,6 +3,14 @@ import Icon from './Icon';
 import ShortcutTooltip from './ShortcutTooltip';
 import { PinIcon, ArrowDown01Icon, ArrowUp01Icon, Notebook01Icon, SidebarRightIcon } from '@hugeicons/core-free-icons';
 
+const SERVER_BASE = (import.meta.env.VITE_API_URL || 'http://localhost:5001').replace(/\/api$/, '');
+
+function absoluteSpeakerImageUrl(path?: string | null): string | null {
+    if (!path) return null;
+    if (/^https?:\/\//i.test(path)) return path;
+    return `${SERVER_BASE}${path.startsWith('/') ? path : `/${path}`}`;
+}
+
 interface TranscriptEntry {
     id: string;
     speaker: string;
@@ -64,6 +72,7 @@ function speakerInitials(speaker: string): string {
 export default function TranscriptFeed({ transcripts, isLive, onClosePanel, onPinResource, pins = [] }: TranscriptFeedProps) {
     const listRef = useRef<HTMLDivElement | null>(null);
     const [collapsed, setCollapsed] = useState(false);
+    const [brokenAvatarIds, setBrokenAvatarIds] = useState<Record<string, true>>({});
 
     const lastText = transcripts.length ? transcripts[transcripts.length - 1]?.text : '';
     useEffect(() => {
@@ -102,6 +111,8 @@ export default function TranscriptFeed({ transcripts, isLive, onClosePanel, onPi
                         {transcripts.map((entry) => {
                             const rowPins = pins.filter(p => p.transcriptTimestamp === entry.timestamp);
                             const speaker = entry.speaker || 'Unknown';
+                            const avatarSrc = absoluteSpeakerImageUrl(entry.speakerImage);
+                            const showAvatarImg = Boolean(avatarSrc && !brokenAvatarIds[entry.id]);
                             return (
                                 <div key={String(entry.id)} className="transcript-group">
                                     <div
@@ -113,11 +124,12 @@ export default function TranscriptFeed({ transcripts, isLive, onClosePanel, onPi
                                         <div className="transcript-header">
                                             <div className="transcript-speaker-row">
                                                 <div className="transcript-avatar">
-                                                    {entry.speakerImage ? (
+                                                    {showAvatarImg ? (
                                                         <img
                                                             className="transcript-avatar-img"
-                                                            src={entry.speakerImage}
+                                                            src={avatarSrc!}
                                                             alt=""
+                                                            onError={() => setBrokenAvatarIds((prev) => ({ ...prev, [entry.id]: true }))}
                                                         />
                                                     ) : (
                                                         speakerInitials(speaker)

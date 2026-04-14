@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
+import { useState, useEffect, useCallback, useRef, useMemo, type ReactNode } from 'react';
 import Icon from './Icon';
 import ActionItems from './ActionItems';
 import {
@@ -134,6 +134,70 @@ function flattenTranscripts(detail: ArchiveDetail): TranscriptSegment[] {
     );
 }
 
+/** Inline SVG: stroke uses CSS `color` reliably (Hugeicons passes a `color` prop that can override class-based colors). */
+function ArchiveCollapsibleChevron({ collapsed }: { collapsed: boolean }) {
+    return (
+        <svg
+            className="archive-collapsible-chevron"
+            width={18}
+            height={18}
+            viewBox="0 0 24 24"
+            fill="none"
+            xmlns="http://www.w3.org/2000/svg"
+            aria-hidden
+        >
+            {collapsed ? (
+                <path
+                    d="M9.00005 6C9.00005 6 15 10.4189 15 12C15 13.5812 9 18 9 18"
+                    stroke="currentColor"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={1.5}
+                />
+            ) : (
+                <path
+                    d="M18 9.00005C18 9.00005 13.5811 15 12 15C10.4188 15 6 9 6 9"
+                    stroke="currentColor"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={1.5}
+                />
+            )}
+        </svg>
+    );
+}
+
+/** Collapsible archive block; uses shared `.collapsible-header` / `.collapsible-body` styles. */
+function ArchiveCollapsibleSection({ title, children }: { title: string; children: ReactNode }) {
+    const [collapsed, setCollapsed] = useState(false);
+    const toggle = () => setCollapsed((c) => !c);
+
+    return (
+        <div style={{ marginBottom: '1.5rem' }}>
+            <div
+                role="button"
+                tabIndex={0}
+                aria-expanded={!collapsed}
+                className="collapsible-header archive-collapsible-header"
+                data-collapsed={collapsed ? 'true' : 'false'}
+                onClick={toggle}
+                onKeyDown={(e) => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                        e.preventDefault();
+                        toggle();
+                    }
+                }}
+            >
+                <h3 className="page-section-title">{title}</h3>
+                <ArchiveCollapsibleChevron collapsed={collapsed} />
+            </div>
+            <div className={`collapsible-body ${collapsed ? 'collapsed' : ''}`}>
+                <div className="collapsible-body-inner">{children}</div>
+            </div>
+        </div>
+    );
+}
+
 function ArchiveTranscriptExplorer({
     meetingId,
     detail,
@@ -239,10 +303,7 @@ function ArchiveTranscriptExplorer({
         serverSegments.length < serverTotal;
 
     return (
-        <div style={{ marginBottom: '1.5rem' }}>
-            <h3 style={{ fontSize: '0.875rem', fontWeight: 600, marginBottom: '0.5rem' }}>
-                <Icon icon={Search01Icon} size={14} /> Transcript search
-            </h3>
+        <ArchiveCollapsibleSection title="Transcript search">
             <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginBottom: '0.75rem' }}>
                 Filter by text, meeting time (e.g. 5:30 = 5 min 30 sec from start of recording), or speaker. Large meetings use indexed search automatically; you can force it below.
             </p>
@@ -314,7 +375,7 @@ function ArchiveTranscriptExplorer({
                     Load more results
                 </button>
             )}
-        </div>
+        </ArchiveCollapsibleSection>
     );
 }
 
@@ -417,41 +478,68 @@ export default function ArchiveView({ fetchWithAuth, initialMeetingId = null, on
     };
 
     if (selectedMeeting && detail) {
+        const exitToArchiveList = () => {
+            setSelectedMeeting(null);
+            setDetail(null);
+            setSummaries({});
+            setFinalSummary(null);
+        };
+
         return (
-            <div style={{ flex: 1, overflow: 'auto', padding: '1.5rem' }}>
-                <button
-                    className="btn btn-secondary btn-sm"
-                    onClick={() => { setSelectedMeeting(null); setDetail(null); setSummaries({}); setFinalSummary(null); }}
-                    style={{ marginBottom: '1rem' }}
-                >
-                    Back to Archives
-                </button>
-
-                <h2 style={{ fontSize: '1.25rem', fontWeight: 700, marginBottom: '0.25rem' }}>
-                    {detail.meeting.title}
-                </h2>
-                <p style={{ fontSize: '0.8125rem', color: 'var(--text-muted)', marginBottom: '1rem' }}>
-                    <Icon icon={Calendar02Icon} size={12} /> {formatDate(detail.meeting.date)}
-                    {detail.meeting.time && <> &middot; <Icon icon={Clock01Icon} size={12} /> {detail.meeting.time}</>}
-                    &middot; <Icon icon={UserIcon} size={12} /> {detail.meeting.host}
-                    {detail.meeting.location && (
-                        <>
-                        &middot; 
-                        <button
-                            type="button"
-                            onClick={() => setLocationModalAddress(detail.meeting.location!)}
-                            style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'inherit', display: 'inline-flex', alignItems: 'center', gap: '3px', padding: 0, font: 'inherit', fontSize: '0.8125rem' }}
+            <div className="archive-container" style={{ flex: 1, overflow: 'auto' }}>
+                <div className="page-header">
+                    <h1 className="page-title page-title--breadcrumb">
+                        <a
+                            className="muted internal-link"
+                            href="/archives"
+                            onClick={(e) => {
+                                e.preventDefault();
+                                exitToArchiveList();
+                            }}
                         >
-                            <Icon icon={Location01Icon} size={12} /> {detail.meeting.location}
-                        </button>
-                        </>
-                    )}
-                </p>
+                            <span className="muted">Archives</span>
+                        </a>
+                        <span className="faint font-normal"> / </span>
+                        {detail.meeting.title}
+                    </h1>
+                    <p className="page-desc archive-detail-meta">
+                        <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.25rem' }}>
+                             {formatDate(detail.meeting.date)}
+                        </span>
+                        {detail.meeting.time && (
+                            <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.25rem' }}>
+                                <Icon icon={Clock01Icon} size={16} /> {detail.meeting.time}
+                            </span>
+                        )}
+                        <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.25rem' }}>
+                            <Icon icon={UserIcon} size={16} /> {detail.meeting.host}
+                        </span>
+                        {detail.meeting.location && (
+                            <button
+                                type="button"
+                                onClick={() => setLocationModalAddress(detail.meeting.location!)}
+                                className="internal-link"
+                                style={{
+                                    background: 'none',
+                                    border: 'none',
+                                    cursor: 'pointer',
+                                    color: 'inherit',
+                                    display: 'inline-flex',
+                                    alignItems: 'center',
+                                    gap: '3px',
+                                    padding: 0,
+                                    font: 'inherit',
+                                    fontSize: 'inherit',
+                                }}
+                            >
+                                <Icon icon={Location01Icon} size={12} /> {detail.meeting.location}
+                            </button>
+                        )}
+                    </p>
+                </div>
 
-                <div style={{ marginBottom: '1.5rem' }}>
-                    <h3 style={{ fontSize: '0.875rem', fontWeight: 600, marginBottom: '0.5rem' }}>
-                        <Icon icon={Notebook01Icon} size={14} /> Meeting Summary
-                    </h3>
+                <div className="archive-detail-body">
+                <ArchiveCollapsibleSection title="Summary">
                     {finalSummary ? (
                         <div className="glass-card" style={{ padding: '14px 16px' }}>
                             <p style={{ fontSize: '0.875rem', lineHeight: 1.55, color: 'var(--text-primary)', marginBottom: '0.75rem' }}>
@@ -469,14 +557,16 @@ export default function ArchiveView({ fetchWithAuth, initialMeetingId = null, on
                         </div>
                     ) : (
                         <button
+                            type="button"
                             className="btn btn-sm btn-primary"
+                            style={{ alignSelf: 'flex-start' }}
                             onClick={() => loadFinalSummary(selectedMeeting)}
                             disabled={loadingFinalSummary}
                         >
                             {loadingFinalSummary ? 'Generating...' : 'Generate Meeting Summary'}
                         </button>
                     )}
-                </div>
+                </ArchiveCollapsibleSection>
 
                 {!Object.keys(summaries).length && (
                     <button
@@ -519,7 +609,7 @@ export default function ArchiveView({ fetchWithAuth, initialMeetingId = null, on
 
                 {detail.actionItems.length > 0 && (
                     <div style={{ marginBottom: '1.5rem', marginTop: '-0.5rem' }}>
-                        <ActionItems 
+                        <ActionItems
                             items={detail.actionItems as any}
                             meetingId={selectedMeeting}
                             fetchWithAuth={fetchWithAuth}
@@ -548,6 +638,7 @@ export default function ArchiveView({ fetchWithAuth, initialMeetingId = null, on
                         ))}
                     </div>
                 )}
+                </div>
             </div>
         );
     }
@@ -556,8 +647,8 @@ export default function ArchiveView({ fetchWithAuth, initialMeetingId = null, on
         <>
         <div className="archive-container">
             <div className="page-header">
-                <h2 style={{ fontSize: 'var(--font-size-title3)', fontWeight: 600, marginBottom: 'var(--lk-size-2xs)', letterSpacing: '-0.022em' }}>Meeting Archives</h2>
-                <p style={{ fontSize: 'var(--font-size-body)', color: 'var(--text-secondary)', marginBottom: 'calc(var(--lk-size-sm) * var(--font-size-title3)/1rem)' }}>Search and browse past meeting transcripts, summaries, and action items.</p>
+                <h2 className="page-title">Archives</h2>
+                <p className="page-desc">Search and browse past meeting transcripts, summaries, and action items.</p>
             </div>
 
             <div className="archive-search-bar">
@@ -588,7 +679,7 @@ export default function ArchiveView({ fetchWithAuth, initialMeetingId = null, on
                         >
                             <div className="meeting-card-title">{meeting.title}</div>
                             <div className="meeting-card-meta">
-                                {meeting.date && <span><Icon icon={Calendar02Icon} size={14} /> {formatDate(meeting.date)}</span>}
+                                {meeting.date && <span>{formatDate(meeting.date)}</span>}
                                 <span><Icon icon={UserIcon} size={14} /> {meeting.host}</span>
                                 {meeting.location && (
                                     <button
@@ -681,7 +772,7 @@ function AgendaSection({ item, index, segments, summary, meetingId, fetchWithAut
                 onClick={() => { if (!isEditing) setExpanded(e => !e); }}
             >
                 {index >= 0 && <span style={{ fontWeight: 600, fontSize: '0.75rem', color: 'var(--text-muted)' }}>{index + 1}.</span>}
-                
+
                 {isEditing ? (
                     <div style={{ display: 'flex', gap: '8px', flex: 1, alignItems: 'center' }} onClick={e => e.stopPropagation()}>
                         <input
@@ -705,7 +796,7 @@ function AgendaSection({ item, index, segments, summary, meetingId, fetchWithAut
                         <span style={{ fontWeight: 500, fontSize: '0.8125rem', flex: 1 }}>{item.title}</span>
                         {item.duration > 0 && <span style={{ fontSize: '0.6875rem', color: 'var(--text-muted)' }}>{item.duration}m</span>}
                         <span style={{ fontSize: '0.625rem', color: 'var(--text-muted)' }}>{segments.length} segment{segments.length !== 1 ? 's' : ''}</span>
-                        
+
                         {meetingId && item.id !== '_unlinked' && (
                             <button
                                 className="btn-icon btn-icon-sm"

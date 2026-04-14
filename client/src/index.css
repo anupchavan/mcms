@@ -237,6 +237,16 @@
   --flair-purple-color: var(--flexoki-purple-400);
 }
 
+:root {
+	--font-mono: ui-monospace, SFMono-Regular, "Cascadia Code", "IBM Plex Mono", "Roboto Mono", "DejaVu Sans Mono", "Liberation Mono", Menlo, Monaco, "Consolas", "Source Code Pro", monospace;
+	--font-ui: -apple-system, BlinkMacSystemFont, "Inter", "IBM Plex Sans", Segoe UI, Helvetica, Arial, sans-serif;
+}
+.font-mono {
+	font-family: var(--font-mono);
+}
+.font-ui {
+	font-family: var(--font-ui);
+}
 
 /* ═══════════════════════════════════════════════════════════════
    3. LIGHT THEME
@@ -437,10 +447,136 @@ body {
 .lk-capline-bold { font-weight: 600; }
 .lk-capline      { font-weight: 400; }
 
+:root {
+	--page-content-padding: var(--lk-size-sm) calc(var(--lk-size-lg) * var(--font-size-title3)/(1rem)) calc(var(--lk-size-lg) * var(--font-size-title3)/(1rem));
+}
 .page-header {
           padding: calc(var(--lk-size-lg) * var(--font-size-title3)/(1rem)) calc(var(--lk-size-lg) * var(--font-size-title3)/(1rem)) var(--lk-size-sm);
 		  padding-top: calc(var(--lk-size-lg) * var(--font-size-title3)/1.272rem);
         }
+
+.page-title {
+  font-size: var(--font-size-title3);
+  font-weight: 600;
+  margin-bottom: var(--lk-size-2xs);
+  letter-spacing: -0.022em;
+}
+
+.page-desc {
+  font-size: var(--font-size-body);
+  color: var(--text-secondary);
+  margin-bottom: calc(var(--lk-size-sm) * var(--font-size-title3) / 1rem);
+}
+.page-section-title {
+  font-size: var(--font-size-heading);
+font-weight: 600;
+letter-spacing: -0.022em;
+margin-bottom: var(--lk-size-sm);
+}
+.page-title.page-title--breadcrumb {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  column-gap: 0.35em;
+  row-gap: 0.15em;
+}
+
+
+
+.page-title.page-title--breadcrumb .internal-link,
+.page-title.page-title--breadcrumb .internal-link .muted {
+  color: var(--text-muted);
+}
+
+.page-title.page-title--breadcrumb .internal-link:hover,
+.page-title.page-title--breadcrumb .internal-link:hover .muted {
+  text-decoration: none;
+}
+
+.muted {
+  color: var(--text-muted);
+}
+
+.internal-link {
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.internal-link:hover {
+  text-decoration: underline;
+}
+
+.faint {
+  color: var(--text-muted);
+  opacity: 0.85;
+}
+
+.font-normal {
+  font-weight: 400;
+}
+
+.page-desc.archive-detail-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.35em 0.5em;
+}
+
+.archive-detail-body {
+  padding: 0 calc(var(--lk-size-lg) * var(--font-size-title3) / (1rem)) calc(var(--lk-size-lg) * var(--font-size-title3) / (1rem));
+}
+
+/* Archive detail: collapsible sections (reuses .collapsible-header / .collapsible-body) */
+.archive-collapsible-header.collapsible-header {
+  position: relative;
+  display: block;
+  padding: 0.25rem 0;
+  margin-bottom: var(--lk-size-sm);
+  border-bottom: none;
+  /* Override global .collapsible-header hover fill (panel-style headers) */
+  background: transparent;
+}
+
+.archive-collapsible-header.collapsible-header:hover,
+.archive-collapsible-header.collapsible-header:focus-visible {
+  background: transparent;
+}
+
+.archive-collapsible-header .page-section-title {
+  margin-bottom: 0;
+  min-width: 0;
+}
+
+/* Chevron sits in the gutter left of the title (does not shift heading text). */
+.archive-collapsible-chevron {
+  position: absolute;
+  left: 0;
+  top: 50%;
+  transform: translate(calc(-100% - 0.35rem), -50%);
+  display: block;
+  color: var(--text-muted);
+  transition: color 0.12s ease, opacity 0.12s ease;
+  pointer-events: none;
+}
+
+/* Collapsed: always show. Open: only on header hover / keyboard focus. */
+.archive-collapsible-header[data-collapsed="true"] .archive-collapsible-chevron {
+  opacity: 1;
+}
+
+.archive-collapsible-header[data-collapsed="false"] .archive-collapsible-chevron {
+  opacity: 0;
+}
+
+.archive-collapsible-header[data-collapsed="false"]:hover .archive-collapsible-chevron,
+.archive-collapsible-header[data-collapsed="false"]:focus-visible .archive-collapsible-chevron {
+  opacity: 1;
+}
+
+.archive-collapsible-header.collapsible-header:hover .archive-collapsible-chevron,
+.archive-collapsible-header.collapsible-header:focus-visible .archive-collapsible-chevron {
+  color: var(--text-secondary);
+}
 
 /* ═══════════════════════════════════════════════════════════════
    6. CARDS
@@ -697,6 +833,53 @@ input[type="date"].input-field {
   overflow-y: auto;
   box-shadow: var(--shadow-lg);
   animation: slideUp 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+
+  /* Hidden until scroll — see `.modal-scroll--active` (toggled by useShowScrollbarWhileScrolling) */
+  scrollbar-width: none;
+}
+
+.modal-content::-webkit-scrollbar {
+  width: 0;
+  height: 0;
+}
+
+.modal-content.modal-scroll--active,
+.u-scroll-thumb-on-scroll.modal-scroll--active {
+  scrollbar-width: thin;
+}
+
+.modal-content.modal-scroll--active::-webkit-scrollbar,
+.u-scroll-thumb-on-scroll.modal-scroll--active::-webkit-scrollbar {
+  width: var(--lk-size-2xs);
+}
+
+.modal-content.modal-scroll--active::-webkit-scrollbar-track,
+.u-scroll-thumb-on-scroll.modal-scroll--active::-webkit-scrollbar-track {
+  background: transparent;
+  margin: 0.375rem 0;
+}
+
+.modal-content.modal-scroll--active::-webkit-scrollbar-thumb,
+.u-scroll-thumb-on-scroll.modal-scroll--active::-webkit-scrollbar-thumb {
+  background-color: var(--flexoki-800);
+  border-radius: 999px;
+  border: 0.25rem solid transparent;
+  background-clip: content-box;
+}
+
+.modal-content.modal-scroll--active::-webkit-scrollbar-thumb:hover,
+.u-scroll-thumb-on-scroll.modal-scroll--active::-webkit-scrollbar-thumb:hover {
+  background-color: var(--flexoki-700);
+}
+
+/* Optional: any scrollable panel — add overflow-y: auto + useShowScrollbarWhileScrolling */
+.u-scroll-thumb-on-scroll {
+  scrollbar-width: none;
+}
+
+.u-scroll-thumb-on-scroll::-webkit-scrollbar {
+  width: 0;
+  height: 0;
 }
 
 .modal-overlay.modal-closing {
@@ -1001,6 +1184,7 @@ input[type="date"].input-field {
   flex: 1;
   min-height: 0;
   overflow: hidden;
+  padding: var(--page-content-padding);
 }
 
 .action-items-body {
@@ -1373,8 +1557,7 @@ input[type="date"].input-field {
   display: flex;
   flex-direction: column;
   gap: calc(var(--lk-size-xs) * var(--font-size-title3)/(1rem));
-  padding: calc(var(--lk-size-lg) * var(--font-size-title3)/(1rem));
-  padding-top: calc(var(--lk-size-sm) * var(--font-size-title3)/1rem);
+  padding: var(--page-content-padding);
 }
 
 .meeting-card {
@@ -2686,7 +2869,7 @@ font-family: 'Unica One', cursive;
   font-size: 0.8125rem;
   color: var(--primary);
   word-break: break-all;
-  font-family: 'SF Mono', 'Menlo', 'Monaco', monospace;
+  font-family: var(--font-mono);
   min-width: 0;
 }
 
