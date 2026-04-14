@@ -123,6 +123,7 @@ function emitToUser(userId: any, event: string, data: any) {
 
 async function isMeetingHost(meetingId: string, userId: string) {
 	if (usingMongoFlag && Meeting) {
+		if (!/^[0-9a-fA-F]{24}$/.test(meetingId)) return false;
 		const meetingDoc = await Meeting.findById(meetingId).select('hostId');
 		if (!meetingDoc) return false;
 		if (!meetingDoc.hostId) return true;
@@ -159,21 +160,33 @@ function getMeetingDurationMinutes(meeting: any): number {
 
 async function getMeetingForUserAccess(meetingId: string) {
 	if (usingMongoFlag && Meeting) {
-		const meeting = await Meeting.findById(meetingId).select(
-			'hostId participants status confirmedDate confirmedTime date time durationMinutes'
-		);
-		if (!meeting) return null;
-		return {
-			hostId: meeting.hostId ? String(meeting.hostId) : null,
-			participants: Array.isArray(meeting.participants) ? meeting.participants.map((p: any) => String(p)) : [],
-			status: meeting.status,
-			confirmedDate: meeting.confirmedDate,
-			confirmedTime: meeting.confirmedTime,
-			date: meeting.date,
-			time: meeting.time,
-			durationMinutes: meeting.durationMinutes,
-		};
+		try {
+			const mongoose = require('mongoose');
+			if (!mongoose.Types.ObjectId.isValid(meetingId)) {
+				// Fall through to in-memory if invalid ObjectId
+			} else {
+				const meeting = await Meeting.findById(meetingId).select(
+					'hostId participants status confirmedDate confirmedTime date time durationMinutes'
+				);
+				if (meeting) {
+					return {
+						hostId: meeting.hostId ? String(meeting.hostId) : null,
+						participants: Array.isArray(meeting.participants) ? meeting.participants.map((p: any) => String(p)) : [],
+						status: meeting.status,
+						confirmedDate: meeting.confirmedDate,
+						confirmedTime: meeting.confirmedTime,
+						date: meeting.date,
+						time: meeting.time,
+						durationMinutes: meeting.durationMinutes,
+					};
+				}
+			}
+		} catch (e) {
+			console.error('Mongo fetch meeting error:', e);
+		}
 	}
+	// Fallback to in-memory store
+	if (!inMemoryMeetings) return null;
 	const memMeeting = inMemoryMeetings.find((m: any) => String(m.id || m._id) === String(meetingId));
 	if (!memMeeting) return null;
 	return {
@@ -182,8 +195,8 @@ async function getMeetingForUserAccess(meetingId: string) {
 			? memMeeting.participants.map((p: any) => String(p?._id || p?.id || p))
 			: [],
 		status: memMeeting.status,
-		confirmedDate: memMeeting.confirmedDate,
-		confirmedTime: memMeeting.confirmedTime,
+		confirmedDate: memMeeting.confirmedDate || memMeeting.date,
+		confirmedTime: memMeeting.confirmedTime || memMeeting.time,
 		date: memMeeting.date,
 		time: memMeeting.time,
 		durationMinutes: memMeeting.durationMinutes,
@@ -194,7 +207,15 @@ async function canJoinMeetingNow(meetingId: string, userId: string) {
 	const meeting = await getMeetingForUserAccess(meetingId);
 	if (!meeting) return { ok: false, reason: 'Meeting not found.' };
 	const uid = String(userId);
-	const isParticipant = meeting.hostId === uid || meeting.participants.includes(uid);
+	
+	// Fix: Robust check for participant/host status handling ObjectIds and strings
+	const hostId = meeting.hostId ? String(meeting.hostId) : null;
+	const participantIds = Array.isArray(meeting.participants) 
+		? meeting.participants.map((p: any) => String(p._id || p.id || p)) 
+		: [];
+	
+	const isParticipant = (hostId === uid) || participantIds.includes(uid);
+	
 	if (!isParticipant) return { ok: false, reason: 'Only invited participants can join this meeting.' };
 	if (meeting.status === 'completed' || meeting.status === 'cancelled') {
 		return { ok: false, reason: 'This meeting has already ended.' };
