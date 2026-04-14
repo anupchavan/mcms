@@ -418,14 +418,24 @@ async function processRealtimeActions(meetingId: string, agg: TranscriptAgg) {
 					let assigneeId = null;
 					if (a.assignee) {
 						const safeAssignee = a.assignee.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-						const matchedParticipant = meetingUsers.find((u: any) =>
-							u.name?.toLowerCase() === a.assignee.toLowerCase() ||
-							u.email?.toLowerCase() === a.assignee.toLowerCase()
-						);
+						const matchedParticipant = meetingUsers.find((u: any) => {
+							const userName = (u.name || '').toLowerCase();
+							const userEmail = (u.email || '').toLowerCase();
+							const extracted = a.assignee.toLowerCase();
+							return userName === extracted || 
+							       userEmail === extracted || 
+							       userName.includes(extracted) || 
+							       extracted.includes(userName);
+						});
 						if (matchedParticipant) {
 							assigneeId = matchedParticipant._id;
 						} else if (User) {
-							const globalUser = await User.findOne({ name: { $regex: new RegExp(`^${safeAssignee}$`, 'i') } });
+							const globalUser = await User.findOne({ 
+								$or: [
+									{ name: { $regex: new RegExp(`^${safeAssignee}$`, 'i') } },
+									{ name: { $regex: new RegExp(safeAssignee, 'i') } }
+								]
+							});
 							if (globalUser) assigneeId = globalUser._id;
 						}
 					}
@@ -534,8 +544,8 @@ function flushAggToClients(meetingId: string, agg: TranscriptAgg, session: any) 
 		});
 	}
 
-	// Trigger real-time action extraction is commented out to defer to post-meeting extraction
-	// processRealtimeActions(meetingId, agg);
+	// Trigger real-time action extraction
+	processRealtimeActions(meetingId, agg);
 }
 
 // split transcript into paragraphs

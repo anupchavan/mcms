@@ -119,6 +119,7 @@ export = function ({ protect, usingMongo, Notification, emitToUser, inMemoryActi
                 const globalUser = await User.findOne({ 
                     $or: [
                         { name: { $regex: new RegExp(`^${safeAssignee}$`, 'i') } },
+                        { name: { $regex: new RegExp(safeAssignee, 'i') } },
                         { email: { $regex: new RegExp(`^${safeAssignee}$`, 'i') } }
                     ]
                 });
@@ -202,6 +203,7 @@ export = function ({ protect, usingMongo, Notification, emitToUser, inMemoryActi
                 const globalUser = await User.findOne({
                     $or: [
                         { name: { $regex: new RegExp(`^${safeAssignee}$`, 'i') } },
+                        { name: { $regex: new RegExp(safeAssignee, 'i') } },
                         { email: { $regex: new RegExp(`^${safeAssignee}$`, 'i') } }
                     ]
                 });
