@@ -54,6 +54,13 @@ export = function ({ User, Meeting, Poll, Notification, Agenda, protect, usingMo
         try {
             if (usingMongo() && Meeting) {
                 const base = (CLIENT_URL || 'http://localhost:5173').replace(/\/$/, '');
+                
+                // Safety check for valid ID before querying Mongo
+                if (!/^[0-9a-fA-F]{24}$/.test(req.user.id)) {
+                     // If ID is not an ObjectId but we are in Mongo mode, session is invalid
+                     return res.status(401).json({ message: 'Session expired. Please log in again.' });
+                }
+
                 const dbMeetings = await Meeting.find({
                     $or: [
                         { hostId: req.user.id },
@@ -62,25 +69,29 @@ export = function ({ User, Meeting, Poll, Notification, Agenda, protect, usingMo
                 }).sort({ createdAt: -1 }).populate('participants', 'name email');
                 const expiredMeetings = dbMeetings.filter((meeting: any) => shouldAutoCompleteMeeting(meeting));
                 if (expiredMeetings.length > 0) {
-                    await Promise.all(expiredMeetings.map(async (meeting: any) => {
-                        meeting.status = 'completed';
-                        await meeting.save();
-                    }));
+                    try {
+                        await Promise.all(expiredMeetings.map(async (meeting: any) => {
+                            meeting.status = 'completed';
+                            await meeting.save();
+                        }));
+                    } catch (saveErr) {
+                        console.error('Error auto-completing meetings:', saveErr);
+                    }
                 }
                 const formatted = dbMeetings.map((m: any) => ({
-                    id: m._id,
-                    title: m.title,
-                    modality: m.modality,
+                    id: String(m._id),
+                    title: m.title || 'Untitled Meeting',
+                    modality: m.modality || 'Online',
                     date: m.confirmedDate || m.date,
                     time: m.confirmedTime || m.time,
                     durationMinutes: m.durationMinutes,
                     location: m.location,
                     host: m.host || 'Unknown',
-                    hostId: m.hostId,
+                    hostId: m.hostId ? String(m.hostId) : null,
                     participants: m.participants,
                     status: m.status,
                     meetingUrl: m.modality !== 'Offline' ? `${base}?meeting=${m._id}` : null,
-                    pollId: m.pollId,
+                    pollId: m.pollId ? String(m.pollId) : null,
                 }));
                 return res.json(formatted);
             }
