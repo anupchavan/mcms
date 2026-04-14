@@ -603,19 +603,20 @@ export default function MeetingCreation({
       }
     }
 
-    onSubmit({
+    const payload = {
       title,
       description,
       location: finalLocation,
-      duration,
+      durationMinutes: duration,
       modality,
       participants: participants.map((p) => p._id),
       agenda: agenda.filter((a) => a.title.trim() !== ""),
       timeSlots: filledSlots.map((s) => ({
-        date: s.date.toISOString().split("T")[0],
+        date: `${s.date.getFullYear()}-${String(s.date.getMonth() + 1).padStart(2, '0')}-${String(s.date.getDate()).padStart(2, '0')}`,
         time: s.date.toTimeString().slice(0, 5),
       })),
-    });
+    };
+    onSubmit(payload);
     onClose();
   };
 
