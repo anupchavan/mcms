@@ -609,6 +609,7 @@ export default function MeetingCreation({
       location: finalLocation,
       duration,
       modality,
+      participants: participants.map((p) => p._id),
       agenda: agenda.filter((a) => a.title.trim() !== ""),
       timeSlots: filledSlots.map((s) => ({
         date: s.date.toISOString().split("T")[0],

@@ -109,6 +109,8 @@ interface ArchiveDetail {
 
 interface ArchiveViewProps {
     fetchWithAuth?: (url: string, options?: RequestInit) => Promise<Response>;
+    initialMeetingId?: string | null;
+    onInitialMeetingHandled?: () => void;
 }
 
 interface AgendaSectionProps {
@@ -316,7 +318,7 @@ function ArchiveTranscriptExplorer({
     );
 }
 
-export default function ArchiveView({ fetchWithAuth }: ArchiveViewProps) {
+export default function ArchiveView({ fetchWithAuth, initialMeetingId = null, onInitialMeetingHandled }: ArchiveViewProps) {
     const [query, setQuery] = useState('');
     const [results, setResults] = useState<ArchiveMeeting[]>([]);
     const [loading, setLoading] = useState(false);
@@ -328,6 +330,7 @@ export default function ArchiveView({ fetchWithAuth }: ArchiveViewProps) {
     const [loadingFinalSummary, setLoadingFinalSummary] = useState(false);
     const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
     const [locationModalAddress, setLocationModalAddress] = useState<string | null>(null);
+    const initialMeetingLoadedRef = useRef<string | null>(null);
 
     const search = useCallback(async (searchInput: string) => {
         const { textQuery, dateFrom, dateTo } = parseArchiveSearchInput(searchInput);
@@ -351,6 +354,14 @@ export default function ArchiveView({ fetchWithAuth }: ArchiveViewProps) {
         debounceRef.current = setTimeout(() => search(query), SEARCH_DEBOUNCE_MS);
         return () => { if (debounceRef.current) clearTimeout(debounceRef.current); };
     }, [query, search]);
+
+    useEffect(() => {
+        if (!initialMeetingId) return;
+        if (initialMeetingLoadedRef.current === initialMeetingId) return;
+        initialMeetingLoadedRef.current = initialMeetingId;
+        loadDetail(initialMeetingId);
+        onInitialMeetingHandled?.();
+    }, [initialMeetingId, onInitialMeetingHandled]);
 
     const loadDetail = async (meetingId: string) => {
         setSelectedMeeting(meetingId);

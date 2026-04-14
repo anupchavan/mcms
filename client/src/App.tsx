@@ -37,6 +37,7 @@ function formatDate(dateStr: string): string {
 
 const MEETING_COMPLETION_BUFFER_MINUTES = 10;
 const DEFAULT_MEETING_DURATION_MINUTES = 30;
+const JOIN_WINDOW_BEFORE_START_MINUTES = 15;
 
 function parseMeetingStart(meeting: any): Date | null {
   const dateStr = meeting.confirmedDate || meeting.date;
@@ -84,6 +85,27 @@ function sortMeetingsBySchedule(a: any, b: any): number {
 
 function shouldShowMeetingLocation(meeting: any): boolean {
   return (meeting.modality === "Offline" || meeting.modality === "Hybrid") && Boolean(String(meeting.location || "").trim());
+}
+
+function isUserMeetingParticipant(meeting: any, user: any): boolean {
+  const uid = String((user as any)?._id || (user as any)?.id || "");
+  if (!uid) return false;
+  const hostId = meeting?.hostId ? String(meeting.hostId) : "";
+  if (hostId && hostId === uid) return true;
+  if (!Array.isArray(meeting?.participants)) return false;
+  return meeting.participants.some((p: any) => String(p?._id || p?.id || p) === uid);
+}
+
+function canJoinMeetingNow(meeting: any, nowTs: number): boolean {
+  if (!meeting) return false;
+  if (!["scheduled", "in-progress"].includes(String(meeting.status || ""))) return false;
+  const start = parseMeetingStart(meeting);
+  if (!start) return false;
+  const joinOpensAt = start.getTime() - JOIN_WINDOW_BEFORE_START_MINUTES * 60 * 1000;
+  const endWithBuffer = start.getTime()
+    + getMeetingDurationMinutes(meeting) * 60 * 1000
+    + MEETING_COMPLETION_BUFFER_MINUTES * 60 * 1000;
+  return nowTs >= joinOpensAt && nowTs <= endWithBuffer;
 }
 
 /** Parse natural language date range from search input. Returns { textQuery, dateFrom, dateTo }. */
@@ -152,6 +174,8 @@ function DashboardApp() {
   const [nowTs, setNowTs] = useState(() => Date.now());
   const [scheduleSearchQuery, setScheduleSearchQuery] = useState("");
   const [locationModalAddress, setLocationModalAddress] = useState<string | null>(null);
+  const [justEndedMeetingId, setJustEndedMeetingId] = useState<string | null>(null);
+  const [archiveTargetMeetingId, setArchiveTargetMeetingId] = useState<string | null>(null);
 
   const [meetings, setMeetings] = useState<any[]>([]);
   const [agendaItems, setAgendaItems] = useState<any[]>([]);
@@ -219,12 +243,12 @@ function DashboardApp() {
     const meetingId = params.get('meeting');
     if (meetingId && meetings.length > 0) {
       const meeting = meetings.find(m => (m.id || m._id)?.toString() === meetingId.toString());
-      if (meeting) {
+      if (meeting && isUserMeetingParticipant(meeting, user)) {
         setSelectedMeeting(meeting);
         setCurrentView('meeting');
       }
     }
-  }, [meetings]);
+  }, [meetings, user]);
 
   useEffect(() => {
     if (typeof document !== "undefined") document.documentElement.setAttribute("data-theme", theme);
@@ -241,25 +265,37 @@ function DashboardApp() {
     [meetings, nowTs],
   );
 
+  const liveMeetingOptions = useMemo(() => {
+    const accessible = meetings
+      .filter((meeting) => isUserMeetingParticipant(meeting, user))
+      .sort(sortMeetingsBySchedule);
+    const joinable = accessible.filter((meeting) => canJoinMeetingNow(meeting, nowTs));
+    if (joinable.length > 0) return joinable;
+    const lastAttended = [...accessible]
+      .filter((meeting) => isMeetingCompletedByTime(meeting, nowTs))
+      .sort((a, b) => (parseMeetingStart(b)?.getTime() || 0) - (parseMeetingStart(a)?.getTime() || 0))[0];
+    return lastAttended ? [lastAttended] : [];
+  }, [meetings, nowTs, user]);
+
   const filteredUpcomingMeetings = useMemo(() => {
     if (!scheduleSearchQuery.trim()) return upcomingMeetings;
-    
+
     const { textQuery, dateFrom, dateTo } = parseSearchInput(scheduleSearchQuery);
     const textLower = textQuery.toLowerCase();
-    
+
     return upcomingMeetings.filter(m => {
       let matchesText = true;
       if (textLower) {
         matchesText = (m.title?.toLowerCase().includes(textLower)) || (m.host?.toLowerCase().includes(textLower));
       }
-      
+
       let matchesDate = true;
       const mDateStr = m.confirmedDate || m.date; // YYYY-MM-DD
       if (mDateStr) {
         if (dateFrom && mDateStr < dateFrom) matchesDate = false;
         if (dateTo && mDateStr > dateTo) matchesDate = false;
       }
-      
+
       return matchesText && matchesDate;
     });
   }, [upcomingMeetings, scheduleSearchQuery]);
@@ -321,11 +357,8 @@ function DashboardApp() {
     };
     const handleMeetingEndedSync = ({ meetingId: mid }: { meetingId: string }) => {
       if (mid?.toString() === meetingId) {
+        setJustEndedMeetingId(meetingId);
         setMeetings(prev => prev.map(m => (String(m.id || m._id) === meetingId ? { ...m, status: 'completed' } : m)));
-        if (selectedMeeting && String(selectedMeeting.id || selectedMeeting._id) === meetingId) {
-          setSelectedMeeting(null);
-          setCurrentView('dashboard');
-        }
         fetchMeetings();
         fetchMyActionItems();
       }
@@ -360,7 +393,6 @@ function DashboardApp() {
       if (res.ok) {
         const data = await res.json();
         setMeetings(data);
-        if (data.length > 0) setSelectedMeeting(data[0]);
       }
     } catch (err) { console.error("Failed to fetch meetings:", err); }
   };
@@ -426,9 +458,8 @@ function DashboardApp() {
   const handleMeetingEnded = () => {
     if (selectedMeeting) {
       const mid = selectedMeeting.id || selectedMeeting._id;
+      setJustEndedMeetingId(String(mid));
       setMeetings(prev => prev.map(m => (String(m.id || m._id) === String(mid) ? { ...m, status: 'completed' } : m)));
-      setSelectedMeeting(null);
-      setCurrentView('dashboard');
       fetchMeetings();
     }
   };
@@ -477,15 +508,31 @@ function DashboardApp() {
 
       case "meeting":
         if (!selectedMeeting) {
+          const hasJoinable = liveMeetingOptions.some((m) => canJoinMeetingNow(m, nowTs));
           return (
             <div style={{ flex: 1, overflow: "auto", padding: "1.5rem" }}>
               <h2 style={{ fontSize: "1.375rem", fontWeight: 700, marginBottom: "1rem" }}>Live Meeting</h2>
               <p style={{ color: "var(--text-muted)", marginBottom: "1rem" }}>
-                Select a meeting below to join the call and see agenda, minutes, and action items.
+                {hasJoinable
+                  ? "Select your scheduled meeting to join the call and see agenda, minutes, and action items."
+                  : "No joinable live meeting right now. Showing your latest attended meeting if available."}
               </p>
               <div className="meeting-list">
-                {upcomingMeetings.map(meeting => (
-                  <div key={meeting.id} className="meeting-card glass-card" onClick={() => setSelectedMeeting(meeting)}>
+                {liveMeetingOptions.map(meeting => (
+                  <div
+                    key={meeting.id}
+                    className="meeting-card glass-card"
+                    onClick={() => {
+                      const meetingId = String(meeting.id || meeting._id || "");
+                      if (!canJoinMeetingNow(meeting, nowTs) && isMeetingCompletedByTime(meeting, nowTs) && meetingId) {
+                        setArchiveTargetMeetingId(meetingId);
+                        setCurrentView("archive");
+                        return;
+                      }
+                      setJustEndedMeetingId(null);
+                      setSelectedMeeting(meeting);
+                    }}
+                  >
                     {meeting.status === "pending_poll" && meeting.pollId && (
                       <button className="btn btn-sm btn-primary" style={{ position: 'absolute', top: 'var(--lk-size-md)', right: 'var(--lk-size-md)' }} onClick={(e) => { e.stopPropagation(); setPollMeetingId(meeting.id); }}>Vote</button>
                     )}
@@ -517,13 +564,41 @@ function DashboardApp() {
                     </div>
                   </div>
                 ))}
+                {liveMeetingOptions.length === 0 && (
+                  <p style={{ color: "var(--text-muted)", fontSize: "0.875rem" }}>
+                    No meetings scheduled for now.
+                  </p>
+                )}
               </div>
             </div>
           );
         }
         const isOffline = selectedMeeting?.modality === 'Offline';
+        const selectedMeetingId = String(selectedMeeting?.id || selectedMeeting?._id || "");
+        const selectedMeetingJoinable = canJoinMeetingNow(selectedMeeting, nowTs);
+        const selectedMeetingEnded = justEndedMeetingId === selectedMeetingId;
         const isHost = !!user && !!selectedMeeting?.hostId &&
           String(selectedMeeting.hostId) === String((user as any)._id || (user as any).id);
+        if (selectedMeetingEnded) {
+          return (
+            <div style={{ flex: 1, overflow: "auto", padding: "1.5rem" }}>
+              <h2 style={{ fontSize: "1.375rem", fontWeight: 700, marginBottom: "0.75rem" }}>Meeting Ended</h2>
+              <p style={{ color: "var(--text-muted)", marginBottom: "1rem" }}>
+                This meeting has ended for all participants.
+              </p>
+              <button
+                className="btn btn-primary"
+                onClick={() => {
+                  setJustEndedMeetingId(null);
+                  setSelectedMeeting(null);
+                  setCurrentView("dashboard");
+                }}
+              >
+                Go to Home
+              </button>
+            </div>
+          );
+        }
         return (
           <div ref={meetingLayoutRef} className={`meeting-layout ${isOffline ? 'offline-mode' : ''} ${!agendaPanelOpen ? 'agenda-hidden' : ''} ${!rightPanelOpen ? 'right-hidden' : ''}`}>
             {agendaPanelOpen && (
@@ -562,6 +637,7 @@ function DashboardApp() {
               onRefreshActionItems={() => fetchActionItems(selectedMeeting.id)}
               onParticipantsUpdate={setLiveParticipants}
               isHost={isHost}
+              canJoin={selectedMeetingJoinable}
             />
             {rightPanelOpen && (
               <div className="meeting-side-panel meeting-side-panel-right open">
@@ -620,7 +696,7 @@ function DashboardApp() {
                 <div
                   key={meeting.id}
                   className={`meeting-card glass-card ${selectedMeeting?.id === meeting.id ? "selected" : ""}`}
-                  onClick={() => { setSelectedMeeting(meeting); setCurrentView("meeting"); }}
+                  onClick={() => { setJustEndedMeetingId(null); setSelectedMeeting(meeting); setCurrentView("meeting"); }}
                   style={selectedMeeting?.id === meeting.id ? { borderColor: "var(--primary-border)" } : {}}
                 >
                   {meeting.status === "pending_poll" && meeting.pollId && (
@@ -664,7 +740,13 @@ function DashboardApp() {
         );
 
       case "archive":
-        return <ArchiveView fetchWithAuth={fetchWithAuth} />;
+        return (
+          <ArchiveView
+            fetchWithAuth={fetchWithAuth}
+            initialMeetingId={archiveTargetMeetingId}
+            onInitialMeetingHandled={() => setArchiveTargetMeetingId(null)}
+          />
+        );
 
       case "analytics":
         return (
@@ -702,12 +784,23 @@ function DashboardApp() {
         onLogout={logout}
         onOpenPoll={(meetingId) => setPollMeetingId(meetingId)}
         searchInputRef={searchInputRef}
-        onViewChange={setCurrentView}
-        onSearchResultSelect={(meeting) => { setSelectedMeeting(meeting); setCurrentView('meeting'); }}
+        onViewChange={(view) => {
+          setArchiveTargetMeetingId(null);
+          setCurrentView(view);
+        }}
+        onSearchResultSelect={(meeting) => { setJustEndedMeetingId(null); setSelectedMeeting(meeting); setCurrentView('meeting'); }}
       />
 
       <div className="main-area">
-        <Sidebar currentView={currentView} onViewChange={setCurrentView} collapsed={sidebarCollapsed} onLogout={logout} />
+        <Sidebar
+          currentView={currentView}
+          onViewChange={(view) => {
+            setArchiveTargetMeetingId(null);
+            setCurrentView(view);
+          }}
+          collapsed={sidebarCollapsed}
+          onLogout={logout}
+        />
         <div className="content-area">{renderContent()}</div>
       </div>
 

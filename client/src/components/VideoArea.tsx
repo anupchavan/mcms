@@ -30,6 +30,7 @@ import { useSocket } from "../context/SocketContext";
 const SERVER_BASE = (import.meta.env.VITE_API_URL || "http://localhost:5001").replace(/\/api$/, "");
 
 interface VideoTileProps {
+  tileId: string;
   stream: MediaStream | null;
   name?: string;
   profileImage?: string | null;
@@ -37,6 +38,8 @@ interface VideoTileProps {
   isSelf: boolean;
   /** When true, skip horizontal mirror (screen share must stay left–right correct). */
   isScreenShare?: boolean;
+  pinned?: boolean;
+  onTogglePin?: (tileId: string) => void;
   speaking?: boolean;
 }
 
@@ -63,10 +66,24 @@ interface VideoAreaProps {
   onParticipantsUpdate?: (participants: any[]) => void;
   /** Whether the current user is the meeting host */
   isHost?: boolean;
+  /** Whether the meeting can be joined right now */
+  canJoin?: boolean;
 }
 
-function VideoTile({ stream, name, profileImage, muted, isSelf, isScreenShare, speaking }: VideoTileProps) {
+function VideoTile({
+  tileId,
+  stream,
+  name,
+  profileImage,
+  muted,
+  isSelf,
+  isScreenShare,
+  pinned,
+  onTogglePin,
+  speaking,
+}: VideoTileProps) {
   const videoRef = useRef<HTMLVideoElement | null>(null);
+  const videoBackdropRef = useRef<HTMLVideoElement | null>(null);
   const [hasVideo, setHasVideo] = useState<boolean>(false);
 
   useEffect(() => {
@@ -102,12 +119,36 @@ function VideoTile({ stream, name, profileImage, muted, isSelf, isScreenShare, s
     if (videoRef.current && stream) {
       videoRef.current.srcObject = stream;
     }
+    if (videoBackdropRef.current && stream) {
+      videoBackdropRef.current.srcObject = stream;
+    }
   }, [stream]);
 
   const initial: string = name?.charAt(0)?.toUpperCase() || "?";
 
   return (
-    <div className={`video-tile ${speaking ? "speaking" : ""}`}>
+    <div
+      className={`video-tile ${speaking ? "speaking" : ""} ${pinned ? "pinned" : ""} ${isScreenShare ? "screen-share" : ""}`}
+    >
+      <button
+        type="button"
+        className={`video-tile-pin ${pinned ? "active" : ""}`}
+        onClick={() => onTogglePin?.(tileId)}
+      >
+        {pinned ? "Unpin" : "Pin"}
+      </button>
+      <video
+        ref={videoBackdropRef}
+        autoPlay
+        playsInline
+        muted={true}
+        aria-hidden
+        className="video-tile-video-backdrop"
+        style={isSelf && !isScreenShare
+          ? { transform: "scaleX(-1)", display: hasVideo ? undefined : "none" }
+          : { display: hasVideo ? undefined : "none" }
+        }
+      />
       <video
         ref={videoRef}
         autoPlay
@@ -163,6 +204,7 @@ export default function VideoArea({
   onRefreshActionItems,
   onParticipantsUpdate,
   isHost = false,
+  canJoin = true,
 }: VideoAreaProps) {
   const { socket, connected } = useSocket();
   const [elapsedTime, setElapsedTime] = useState(0);
@@ -268,7 +310,7 @@ export default function VideoArea({
     toggleScreenShare,
   } = useWebRTC(socket, meetingId, currentUser);
 
-  useTranscriptionCapture(socket, meetingId || null, localStream);
+  useTranscriptionCapture(socket, meetingId || null, localStream, audioEnabled);
 
   useEffect(() => {
     const list = [];
@@ -288,9 +330,10 @@ export default function VideoArea({
   const hostControlsRef = useRef<HostControlsRef | null>(null);
 
   const handleJoin = useCallback(async () => {
+    if (!canJoin) return;
     const success = await joinRoom();
     if (success) setHasJoined(true);
-  }, [joinRoom]);
+  }, [joinRoom, canJoin]);
 
   const handleLeave = useCallback(() => {
     leaveRoom();
@@ -303,11 +346,11 @@ export default function VideoArea({
     { key: 'c', handler: () => hasJoined && toggleVideo(), allowInInput: false },
     { key: 'a', handler: () => onTriggerAddAgendaItem?.(), allowInInput: false },
     { key: 'a', shift: true, handler: () => isHost && onTriggerAddActionItem?.(), allowInInput: false },
-    { key: 'Enter', handler: () => !hasJoined && handleJoin(), allowInInput: false },
+    { key: 'Enter', handler: () => !hasJoined && canJoin && handleJoin(), allowInInput: false },
     { key: 'l', mod: true, shift: true, handler: () => hasJoined && handleLeave(), allowInInput: false },
     // End meeting shortcut only fires for the host
     { key: 'e', mod: true, shift: true, handler: () => isHost && hasJoined && hostControlsRef.current?.endMeeting(), allowInInput: false },
-  ], [hasJoined, isHost, toggleAudio, toggleVideo, handleJoin, handleLeave, onTriggerAddActionItem, onTriggerAddAgendaItem]);
+  ], [hasJoined, isHost, canJoin, toggleAudio, toggleVideo, handleJoin, handleLeave, onTriggerAddActionItem, onTriggerAddAgendaItem]);
 
   useKeyboardShortcuts(meetingShortcuts);
 
@@ -358,17 +401,47 @@ export default function VideoArea({
   }, [currentUser, peers]);
 
   const totalParticipants = 1 + peers.length;
+  const [pinnedTileIds, setPinnedTileIds] = useState<Set<string>>(new Set());
 
-  const gridClass =
-    totalParticipants <= 1
-      ? "grid-1"
-      : totalParticipants <= 2
-        ? "grid-2"
-        : totalParticipants <= 4
-          ? "grid-4"
-          : totalParticipants <= 6
-            ? "grid-6"
-            : "grid-many";
+  const togglePin = useCallback((tileId: string) => {
+    setPinnedTileIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(tileId)) next.delete(tileId);
+      else next.add(tileId);
+      return next;
+    });
+  }, []);
+
+  const meetingTiles = useMemo(() => {
+    const selfTile = {
+      id: screenStream ? "self-screen-share" : "self-camera",
+      stream: screenStream || localStream,
+      name: currentUser?.name,
+      profileImage: currentUser?.profileImage || null,
+      muted: true,
+      isSelf: true,
+      isScreenShare: !!screenStream,
+      speaking: false,
+    };
+    const peerTiles = peers.map((peer) => ({
+      id: `peer-${peer.socketId}`,
+      stream: peer.stream,
+      name: peer.name,
+      profileImage: peer.profileImage,
+      muted: false,
+      isSelf: false,
+      isScreenShare: false,
+      speaking: false,
+    }));
+    const allTiles = [selfTile, ...peerTiles];
+    return allTiles.sort((a, b) => {
+      const aPinned = pinnedTileIds.has(a.id);
+      const bPinned = pinnedTileIds.has(b.id);
+      if (aPinned !== bPinned) return aPinned ? -1 : 1;
+      if (a.isScreenShare !== b.isScreenShare) return a.isScreenShare ? -1 : 1;
+      return 0;
+    });
+  }, [screenStream, localStream, currentUser?.name, currentUser?.profileImage, peers, pinnedTileIds]);
 
   return (
     <div className="video-area">
@@ -564,8 +637,14 @@ export default function VideoArea({
                   )}
                 </div>
                 <h3 className="prejoin-title">{meetingTitle}</h3>
-                <p className="prejoin-subtitle">{mediaError ? 'Allow camera/mic access and try again.' : 'Ready to join?'}</p>
-                <button className="btn btn-primary prejoin-btn" onClick={handleJoin}>
+                <p className="prejoin-subtitle">
+                  {mediaError
+                    ? 'Allow camera/mic access and try again.'
+                    : canJoin
+                      ? 'Ready to join?'
+                      : 'You can join this meeting 15 minutes before start.'}
+                </p>
+                <button className="btn btn-primary prejoin-btn" onClick={handleJoin} disabled={!canJoin}>
                   {mediaError ? 'Try Again' : <>Join Meeting <Kbd keys={['↵']} className="prejoin-enter" /></>}
                 </button>
               </div>
@@ -577,23 +656,20 @@ export default function VideoArea({
                   {mediaError}
                 </div>
               )}
-              <div className={`video-grid ${gridClass}`}>
-                <VideoTile
-                  stream={screenStream || localStream}
-                  name={currentUser?.name}
-                  profileImage={currentUser?.profileImage}
-                  muted={true}
-                  isSelf={true}
-                  isScreenShare={!!screenStream}
-                />
-                {peers.map((peer) => (
+              <div className="video-grid">
+                {meetingTiles.map((tile) => (
                   <VideoTile
-                    key={peer.socketId}
-                    stream={peer.stream}
-                    name={peer.name}
-                    profileImage={peer.profileImage}
-                    muted={false}
-                    isSelf={false}
+                    key={tile.id}
+                    tileId={tile.id}
+                    stream={tile.stream}
+                    name={tile.name}
+                    profileImage={tile.profileImage}
+                    muted={tile.muted}
+                    isSelf={tile.isSelf}
+                    isScreenShare={tile.isScreenShare}
+                    speaking={tile.speaking}
+                    pinned={pinnedTileIds.has(tile.id)}
+                    onTogglePin={togglePin}
                   />
                 ))}
               </div>
@@ -756,15 +832,17 @@ export default function VideoArea({
         /* Video grid */
         .video-grid {
           display: grid;
-          gap: 0.375rem;
+          grid-template-columns: repeat(auto-fit, minmax(20rem, 1fr));
+          grid-template-rows: minmax(0, 1fr);
+          grid-auto-rows: minmax(0, 1fr);
+          grid-auto-flow: dense;
+          gap: 0.5rem;
           width: 100%;
           height: 100%;
+          align-content: start;
+          overflow-y: auto;
+          padding-right: 0.125rem;
         }
-        .grid-1 { grid-template-columns: 1fr; }
-        .grid-2 { grid-template-columns: repeat(2, 1fr); }
-        .grid-4 { grid-template-columns: repeat(2, 1fr); grid-template-rows: repeat(2, 1fr); }
-        .grid-6 { grid-template-columns: repeat(3, 1fr); grid-template-rows: repeat(2, 1fr); }
-        .grid-many { grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); }
 
         .video-tile {
           position: relative;
@@ -778,6 +856,34 @@ export default function VideoArea({
           overflow: hidden;
           animation: slideUp 0.4s ease both;
           transition: border-color 0.3s;
+          width: 100%;
+          min-height: 0;
+        }
+        .video-tile.pinned,
+        .video-tile.screen-share {
+          grid-column: span 2;
+          grid-row: span 2;
+        }
+        .video-tile.screen-share {
+          min-height: 20rem;
+        }
+        .video-tile-pin {
+          position: absolute;
+          top: 0.5rem;
+          left: 0.5rem;
+          z-index: 3;
+          padding: 0.1875rem 0.45rem;
+          border: 0.0625rem solid rgba(255, 255, 255, 0.25);
+          border-radius: 999px;
+          background: rgba(0, 0, 0, 0.55);
+          color: #fff;
+          font-size: 0.625rem;
+          line-height: 1;
+          cursor: pointer;
+        }
+        .video-tile-pin.active {
+          border-color: var(--primary);
+          color: var(--primary);
         }
         .video-tile:hover {
           border-color: var(--border-hover);
@@ -789,8 +895,21 @@ export default function VideoArea({
         .video-tile-video {
           width: 100%;
           height: 100%;
-          object-fit: cover;
+          object-fit: contain;
           border-radius: inherit;
+          position: relative;
+          z-index: 2;
+        }
+        .video-tile-video-backdrop {
+          position: absolute;
+          inset: 0;
+          width: 100%;
+          height: 100%;
+          object-fit: cover;
+          filter: blur(24px) brightness(0.55);
+          transform: scale(1.05);
+          opacity: 0.9;
+          z-index: 1;
         }
         .video-tile-avatar {
           width: 3.5rem;

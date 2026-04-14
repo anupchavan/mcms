@@ -34,6 +34,104 @@ interface ProductivityDashboardProps {
 
 const TABS = ['overview', 'attendance', 'engagement'];
 
+function buildRecommendations(stats: DashboardStats): Array<{ emoji: string; text: string }> {
+    const {
+        speakingTime,
+        avgMeetingDuration,
+        tasksCompleted,
+        tasksTotal,
+        streak,
+        punctualityRate,
+        weeklyHeatmap,
+        totalMeetings,
+    } = stats;
+
+    const items: Array<{ emoji: string; text: string }> = [];
+
+    if (speakingTime > 0 && avgMeetingDuration > 0) {
+        const speakPct = Math.round((speakingTime / avgMeetingDuration) * 100);
+        if (speakPct > 45) {
+            items.push({
+                emoji: '💡',
+                text: `Your average speaking time is about ${speakPct}% of the average meeting duration—consider leaving more room for others to contribute.`,
+            });
+        } else if (speakPct < 20 && totalMeetings >= 2) {
+            items.push({
+                emoji: '🎤',
+                text: `You use about ${speakPct}% of the typical meeting for speaking—share more if you have context others need.`,
+            });
+        }
+    }
+
+    if (tasksTotal > 0) {
+        const pct = Math.round((tasksCompleted / tasksTotal) * 1000) / 10;
+        if (pct >= 80) {
+            items.push({
+                emoji: '🎯',
+                text: `You've completed ${tasksCompleted} of ${tasksTotal} assigned action items (${pct}%).`,
+            });
+        } else if (pct < 50) {
+            items.push({
+                emoji: '✅',
+                text: `${tasksTotal - tasksCompleted} action items still open (${pct}% done). Clearing the oldest ones often unblocks the team fastest.`,
+            });
+        } else {
+            items.push({
+                emoji: '✅',
+                text: `${tasksCompleted} of ${tasksTotal} action items done (${pct}%).`,
+            });
+        }
+    }
+
+    const totalWeekHours = weeklyHeatmap.reduce((s, d) => s + d.hours, 0);
+    if (totalWeekHours > 0) {
+        const busiest = weeklyHeatmap.reduce((a, b) => (a.hours >= b.hours ? a : b));
+        const share = busiest.hours / totalWeekHours;
+        if (share >= 0.4 && busiest.hours >= 2) {
+            items.push({
+                emoji: '📅',
+                text: `Much of your meeting time clusters on ${busiest.day} (${Math.round(share * 100)}% of logged hours this period). Consider spreading load if it feels heavy.`,
+            });
+        }
+    }
+
+    if (streak > 0) {
+        items.push({
+            emoji: '⏰',
+            text: `Your meeting streak score is ${streak}. Keep joining on time to push it higher.`,
+        });
+    }
+
+    if (punctualityRate < 85 && totalMeetings > 0) {
+        items.push({
+            emoji: '⏱️',
+            text: `Punctuality is at ${punctualityRate}%. Joining at the scheduled start helps the whole group stay aligned.`,
+        });
+    }
+
+    const hasSpeakingInsight = items.some(i => i.emoji === '💡' || i.emoji === '🎤');
+    if (!hasSpeakingInsight && totalMeetings > 0 && speakingTime <= 0) {
+        items.push({
+            emoji: '📊',
+            text: 'Join meetings with your mic unmuted to record speaking time from on-device voice activity (no transcription required).',
+        });
+    }
+
+    if (tasksTotal === 0 && totalMeetings === 0) {
+        items.push({
+            emoji: '🌱',
+            text: 'Attend meetings and pick up action items to unlock personalized tips.',
+        });
+    } else if (tasksTotal === 0 && totalMeetings > 0) {
+        items.push({
+            emoji: '📋',
+            text: "You don't have assigned action items yet—when you do, completion trends will appear here.",
+        });
+    }
+
+    return items.slice(0, 4);
+}
+
 export default function ProductivityDashboard({ stats, userName }: ProductivityDashboardProps) {
     const [activeTab, setActiveTab] = useState('overview');
 
@@ -57,19 +155,19 @@ export default function ProductivityDashboard({ stats, userName }: ProductivityD
 
     if (!stats) return null;
 
-    const maxHours = Math.max(...stats.weeklyHeatmap.map(d => d.hours));
+    const maxHours = Math.max(0.0001, ...stats.weeklyHeatmap.map(d => d.hours));
+    const recommendations = buildRecommendations(stats);
+    const taskCompletionPct = stats.tasksTotal > 0 ? Math.round((stats.tasksCompleted / stats.tasksTotal) * 100) : 0;
 
     return (
         <div className="productivity-dashboard">
             <div className="page-header">
-                <div>
                     <h2 style={{ fontSize: 'var(--font-size-title3)', fontWeight: 600, marginBottom: 'var(--lk-size-2xs)', letterSpacing: '-0.022em' }}>
                         Productivity Dashboard
                     </h2>
                     <p style={{ fontSize: 'var(--font-size-body)', color: 'var(--text-secondary)', marginBottom: 'calc(var(--lk-size-sm) * var(--font-size-title3)/1rem)' }}>
                         Welcome back, <strong>{userName || stats.user}</strong>. Here's your meeting intelligence overview.
                     </p>
-                </div>
             </div>
 
             <div className="tabs" style={{ margin: '0 calc(var(--lk-size-lg) * var(--font-size-title3)/(1rem))' }}>
@@ -215,7 +313,7 @@ export default function ProductivityDashboard({ stats, userName }: ProductivityD
                                     <div className="attendance-bar-track">
                                         <div
                                             className="attendance-bar-fill"
-                                            style={{ width: `${(week.attended / week.total) * 100}%` }}
+                                            style={{ width: `${week.total > 0 ? (week.attended / week.total) * 100 : 0}%` }}
                                         ></div>
                                     </div>
                                     <span className="attendance-value">{week.attended}/{week.total}</span>
@@ -257,8 +355,8 @@ export default function ProductivityDashboard({ stats, userName }: ProductivityD
                         </div>
                         <div className="engagement-metrics">
                             <div className="engagement-metric">
-                                <div className="engagement-circle" style={{ '--pct': `${(stats.tasksCompleted / stats.tasksTotal) * 100}%` } as React.CSSProperties & Record<string, string>}>
-                                    <span>{Math.round((stats.tasksCompleted / stats.tasksTotal) * 100)}%</span>
+                                <div className="engagement-circle" style={{ '--pct': `${taskCompletionPct}%` } as React.CSSProperties & Record<string, string>}>
+                                    <span>{stats.tasksTotal > 0 ? `${taskCompletionPct}%` : '—'}</span>
                                 </div>
                                 <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '0.5rem' }}>Task Completion</div>
                             </div>
@@ -283,18 +381,12 @@ export default function ProductivityDashboard({ stats, userName }: ProductivityD
                             <span className="stat-label">AI-Generated Recommendations</span>
                         </div>
                         <div className="recommendations">
-                            <div className="recommendation-item">
-                                <span className="rec-emoji">💡</span>
-                                <p>Your speaking time is 41% of the average meeting duration — consider allowing more floor time for other participants.</p>
-                            </div>
-                            <div className="recommendation-item">
-                                <span className="rec-emoji">🎯</span>
-                                <p>Excellent task completion rate! You've completed 87.5% of assigned action items on time.</p>
-                            </div>
-                            <div className="recommendation-item">
-                                <span className="rec-emoji">⏰</span>
-                                <p>Your punctuality streak is at 7 meetings — keep it up to earn the "Perfect Month" badge!</p>
-                            </div>
+                            {recommendations.map((rec, i) => (
+                                <div key={i} className="recommendation-item">
+                                    <span className="rec-emoji">{rec.emoji}</span>
+                                    <p>{rec.text}</p>
+                                </div>
+                            ))}
                         </div>
                     </div>
                 </div>
