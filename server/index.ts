@@ -681,10 +681,20 @@ function ingestSarvamTranscript(
 }
 
 // create Sarvam WebSocket connection
-function createSarvamWS(meetingId: string, socketId: string, speakerName: string, speakerImage: string | null) {
+// onOpen is called exactly once when the WS actually establishes — callers use
+// this to know a real connection is live before confirming recording to the UI.
+function createSarvamWS(
+	meetingId: string,
+	socketId: string,
+	speakerName: string,
+	speakerImage: string | null,
+	onOpen?: () => void,
+	onFail?: () => void,
+) {
 	const apiKey = process.env.SARVAM_API_KEY;
 	if (!apiKey) {
 		console.log('SARVAM_API_KEY not set — transcription disabled');
+		onFail?.();
 		return null;
 	}
 
@@ -696,10 +706,14 @@ function createSarvamWS(meetingId: string, socketId: string, speakerName: string
 		ws = new WebSocket(url, { headers: { 'Api-Subscription-Key': apiKey } });
 	} catch (err: any) {
 		console.error('Sarvam WS creation failed:', err.message);
+		onFail?.();
 		return null;
 	}
 
-	ws.on('open', () => console.log(`Sarvam WS open for [${speakerName}] in meeting ${meetingId}`));
+	ws.on('open', () => {
+		console.log(`Sarvam WS open for [${speakerName}] in meeting ${meetingId}`);
+		onOpen?.();
+	});
 
 	// handle WebSocket message event
 	ws.on('message', (raw: WebSocket.RawData) => {
@@ -722,7 +736,10 @@ function createSarvamWS(meetingId: string, socketId: string, speakerName: string
 		} catch { }
 	});
 
-	ws.on('error', (err: Error) => console.error(`Sarvam WS error [${speakerName}]:`, err.message));
+	ws.on('error', (err: Error) => {
+		console.error(`Sarvam WS error [${speakerName}]:`, err.message);
+		onFail?.();
+	});
 	ws.on('close', (code: number, reason: Buffer) => console.log(`Sarvam WS closed for [${speakerName}] code=${code} reason=${reason}`));
 
 	return ws;
@@ -781,6 +798,9 @@ io.on('connection', (socket: any) => {
 		const session = transcriptionSessions.get(meetingId);
 		if (session && session.active) {
 			socket.emit('transcription_started', { meetingId });
+			// Open a WS for this late joiner. The audio_chunk handler already
+			// handles reconnection if WS is null or closes, so a failed open
+			// here is not fatal — we still add the speaker entry.
 			const ws = createSarvamWS(meetingId, socket.id, name || 'User', profileImage || null);
 			session.speakers.set(socket.id, {
 				userId: socket.userId,
@@ -818,20 +838,70 @@ io.on('connection', (socket: any) => {
 			return;
 		}
 		const room = meetingRooms.get(meetingId);
-		if (!room) return;
+		if (!room) {
+			// Room state mismatch — client thinks it's in a room the server doesn't have.
+			socket.emit('transcription_error', { meetingId, message: 'You are not in the meeting room. Try rejoining.' });
+			return;
+		}
 
 		resumeClock(meetingRecordingClock, meetingId);
 		const speakers = new Map<string, any>();
+
+		// Track how many WS connections have opened / failed so we can send a
+		// definitive started or error event only after the first real open.
+		const total = room.size;
+		if (total === 0) {
+			socket.emit('transcription_error', { meetingId, message: 'No participants are in the room yet.' });
+			return;
+		}
+
+		let confirmedOpen = false;
+		let failCount = 0;
+
+		const onOneOpen = () => {
+			if (confirmedOpen) return; // fire once
+			confirmedOpen = true;
+			clearTimeout(openTimeout);
+			io.to(`meeting:${meetingId}`).emit('transcription_started', { meetingId });
+		};
+
+		const onOneFail = () => {
+			if (confirmedOpen) return; // a different WS already succeeded
+			failCount++;
+			if (failCount >= total) {
+				// Every connection failed — roll back
+				clearTimeout(openTimeout);
+				pauseClock(meetingRecordingClock, meetingId);
+				console.error(`All ${total} Sarvam WS connections failed for meeting ${meetingId}`);
+				socket.emit('transcription_error', {
+					meetingId,
+					message: 'Could not connect to the transcription service. Check your API key or network.',
+				});
+			}
+		};
+
 		for (const [sid, info] of room.entries()) {
-			const ws = createSarvamWS(meetingId, sid, info.name, info.profileImage);
+			const ws = createSarvamWS(meetingId, sid, info.name, info.profileImage, onOneOpen, onOneFail);
 			speakers.set(sid, {
 				userId: info.userId,
 				ws, name: info.name, image: info.profileImage, streamBuffer: '',
 			});
 		}
-		if (speakers.size === 0) return;
+
 		transcriptionSessions.set(meetingId, { active: true, speakers, aggregator: null, liveDraftId: null });
-		io.to(`meeting:${meetingId}`).emit('transcription_started', { meetingId });
+
+		// Safety timeout: if no WS opens within 8 s, treat it as a full failure.
+		const openTimeout = setTimeout(() => {
+			if (!confirmedOpen) {
+				pauseClock(meetingRecordingClock, meetingId);
+				transcriptionSessions.delete(meetingId);
+				console.error(`Sarvam WS open-timeout for meeting ${meetingId}`);
+				socket.emit('transcription_error', {
+					meetingId,
+					message: 'Transcription service did not respond in time. Please try again.',
+				});
+			}
+		}, 8_000);
 	});
 
 	socket.on('stop_transcription', async ({ meetingId }: any) => {
