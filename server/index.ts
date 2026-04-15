@@ -770,6 +770,17 @@ io.on('connection', (socket: any) => {
 
 		room.set(socket.id, { userId: socket.userId, name: name || 'User', profileImage: profileImage || null });
 
+		// #region agent log
+		console.log('[MCMS-DEBUG-SERVER]', JSON.stringify({
+			hypothesisId: 'H3',
+			event: 'join_room',
+			pid: process.pid,
+			meetingId: String(meetingId),
+			existingPeerCount: existingPeers.length,
+			newSocketId: socket.id,
+		}));
+		// #endregion
+
 		if (usingMongoFlag && Attendance) {
 			try {
 				await Attendance.findOneAndUpdate(
@@ -809,7 +820,19 @@ io.on('connection', (socket: any) => {
 		}
 	});
 
-	socket.on('signal', ({ to, signal }: any) => io.to(to).emit('signal', { from: socket.id, signal }));
+	socket.on('signal', ({ to, signal }: any) => {
+		// #region agent log
+		console.log('[MCMS-DEBUG-SERVER]', JSON.stringify({
+			hypothesisId: 'H3',
+			event: 'signal_relay',
+			pid: process.pid,
+			from: socket.id,
+			to,
+			signalType: signal?.type,
+		}));
+		// #endregion
+		io.to(to).emit('signal', { from: socket.id, signal });
+	});
 
 	socket.on('leave_room', ({ meetingId }: any) => {
 		if (!meetingId) return;

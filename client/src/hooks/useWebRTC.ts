@@ -20,6 +20,17 @@ async function getIceServers(): Promise<RTCIceServer[]> {
 	return FALLBACK_ICE_SERVERS;
 }
 
+/** Copy lines starting with [MCMS-DEBUG] from the browser console for production diagnosis. */
+function mcmsWebRtcDebug(hypothesisId: string, message: string, data: Record<string, unknown>) {
+	// #region agent log
+	const payload = { sessionId: 'cb71ed', hypothesisId, location: 'useWebRTC.ts', message, data, timestamp: Date.now() };
+	try {
+		console.log('[MCMS-DEBUG]', JSON.stringify(payload));
+	} catch { /* ignore */ }
+	fetch('http://127.0.0.1:7607/ingest/bfa38a8b-67a3-4e1b-a36a-45339a78111c', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': 'cb71ed' }, body: JSON.stringify(payload) }).catch(() => { });
+	// #endregion
+}
+
 export interface PeerInfo {
 	userId: string | null;
 	name: string;
@@ -59,10 +70,6 @@ export default function useWebRTC(
 	const screenStreamRef = useRef<MediaStream | null>(null);
 	const joinedRef = useRef<boolean>(false);
 
-	// #region agent log
-	fetch('http://127.0.0.1:7607/ingest/bfa38a8b-67a3-4e1b-a36a-45339a78111c', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': 'cb71ed' }, body: JSON.stringify({ sessionId: 'cb71ed', location: 'useWebRTC.ts:entry', message: 'useWebRTC hook body start', data: { hasMeetingId: !!meetingId, hasSocket: !!socket }, timestamp: Date.now(), hypothesisId: 'H1' }) }).catch(() => { });
-	// #endregion
-
 	const updatePeerState = useCallback((remoteSocketId: string, remoteInfo: PeerInfo, remoteStream: MediaStream) => {
 		setPeers(prev => {
 			const filtered = prev.filter(p => p.socketId !== remoteSocketId);
@@ -85,10 +92,6 @@ export default function useWebRTC(
 		candidateBufferRef.current.delete(socketId);
 		setPeers(prev => prev.filter(p => p.socketId !== socketId));
 	}, []);
-
-	// #region agent log
-	fetch('http://127.0.0.1:7607/ingest/bfa38a8b-67a3-4e1b-a36a-45339a78111c', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': 'cb71ed' }, body: JSON.stringify({ sessionId: 'cb71ed', location: 'useWebRTC.ts:beforeCreatePc', message: 'about to register createPeerConnection useCallback', data: {}, timestamp: Date.now(), hypothesisId: 'H1' }) }).catch(() => { });
-	// #endregion
 
 	const createPeerConnection = useCallback((remoteSocketId: string, remoteInfo: PeerInfo, initiator: boolean) => {
 		if (peersRef.current.has(remoteSocketId)) {
@@ -131,9 +134,13 @@ export default function useWebRTC(
 		};
 
 		pc.onconnectionstatechange = () => {
+			mcmsWebRtcDebug('H2', 'pc_connectionstate', { remoteSocketId, state: pc.connectionState, iceState: pc.iceConnectionState });
 			if (pc.connectionState === 'failed') {
 				removePeer(remoteSocketId);
 			}
+		};
+		pc.oniceconnectionstatechange = () => {
+			mcmsWebRtcDebug('H2', 'pc_iceconnectionstate', { remoteSocketId, iceState: pc.iceConnectionState, connState: pc.connectionState });
 		};
 
 		peersRef.current.set(remoteSocketId, { pc, info: remoteInfo, stream: remoteStream });
@@ -145,6 +152,7 @@ export default function useWebRTC(
 			pc.createOffer()
 				.then(offer => pc.setLocalDescription(offer))
 				.then(() => {
+					mcmsWebRtcDebug('H5', 'signal_out_offer', { toSocketId: remoteSocketId, initiator: true });
 					socket.emit('signal', {
 						to: remoteSocketId,
 						signal: { type: 'offer', sdp: pc.localDescription!.sdp },
@@ -156,10 +164,6 @@ export default function useWebRTC(
 		return pc;
 	}, [socket, updatePeerState, removePeer]);
 
-	// #region agent log
-	fetch('http://127.0.0.1:7607/ingest/bfa38a8b-67a3-4e1b-a36a-45339a78111c', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': 'cb71ed' }, body: JSON.stringify({ sessionId: 'cb71ed', runId: 'post-fix', location: 'useWebRTC.ts:afterCreatePc', message: 'createPeerConnection useCallback registered', data: {}, timestamp: Date.now(), hypothesisId: 'H1' }) }).catch(() => { });
-	// #endregion
-
 	const joinRoom = useCallback(async (): Promise<boolean> => {
 		if (joinedRef.current) return true;
 		setMediaError(null);
@@ -170,6 +174,10 @@ export default function useWebRTC(
 		if (!meetingId) return false;
 
 		iceServersRef.current = await getIceServers();
+		mcmsWebRtcDebug('H2', 'ice_servers_ready', {
+			count: (iceServersRef.current || []).length,
+			meteredEnvSet: !!(METERED_API_KEY && METERED_APP),
+		});
 
 		try {
 			const stream = await navigator.mediaDevices.getUserMedia({
@@ -185,6 +193,7 @@ export default function useWebRTC(
 				name: currentUser?.name || 'User',
 				profileImage: currentUser?.profileImage || null,
 			});
+			mcmsWebRtcDebug('H1', 'join_room_emitted', { meetingId: String(meetingId), mySocketId: socket.id, connected: socket.connected });
 			return true;
 		} catch (err) {
 			const errObj = err as Error;
@@ -205,6 +214,7 @@ export default function useWebRTC(
 					name: currentUser?.name || 'User',
 					profileImage: currentUser?.profileImage || null,
 				});
+				mcmsWebRtcDebug('H1', 'join_room_emitted_audio_only', { meetingId: String(meetingId), mySocketId: socket.id, connected: socket.connected });
 				return true;
 			} catch (audioErr) {
 				const audioErrObj = audioErr as Error;
@@ -296,10 +306,16 @@ export default function useWebRTC(
 		if (!socket) return;
 		const handleRoomPeers = async ({ peers: existingPeers }: { peers: (PeerInfo & { socketId: string })[] }) => {
 			if (!iceServersRef.current) iceServersRef.current = await getIceServers();
+			mcmsWebRtcDebug('H3', 'room_peers', {
+				count: existingPeers.length,
+				peerSocketIds: existingPeers.map(p => p.socketId),
+				mySocketId: socket.id,
+			});
 			for (const peer of existingPeers) createPeerConnection(peer.socketId, peer, true);
 		};
 		const handlePeerJoined = async ({ socketId, userId, name, profileImage }: { socketId: string; userId: string | null; name: string; profileImage: string | null }) => {
 			if (!iceServersRef.current) iceServersRef.current = await getIceServers();
+			mcmsWebRtcDebug('H3', 'peer_joined', { peerSocketId: socketId, mySocketId: socket.id, hasUserId: !!userId });
 			createPeerConnection(socketId, { userId, name, profileImage }, false);
 		};
 		const handleSignal = async ({ from, signal }: { from: string; signal: { type: string; sdp?: string; candidate?: RTCIceCandidateInit } }) => {
@@ -313,6 +329,7 @@ export default function useWebRTC(
 			const { pc } = entry;
 			try {
 				if (signal.type === 'offer' && signal.sdp) {
+					mcmsWebRtcDebug('H5', 'signal_in_offer', { fromSocketId: from, signalingState: pc.signalingState });
 					if (pc.signalingState !== 'stable') {
 						await Promise.all([pc.setLocalDescription({ type: 'rollback' })]).catch(() => { });
 					}
@@ -322,8 +339,10 @@ export default function useWebRTC(
 					for (const c of buffered) await pc.addIceCandidate(new RTCIceCandidate(c)).catch(() => { });
 					const answer = await pc.createAnswer();
 					await pc.setLocalDescription(answer);
+					mcmsWebRtcDebug('H5', 'signal_out_answer', { toSocketId: from });
 					socket.emit('signal', { to: from, signal: { type: 'answer', sdp: pc.localDescription!.sdp } });
 				} else if (signal.type === 'answer' && signal.sdp) {
+					mcmsWebRtcDebug('H5', 'signal_in_answer', { fromSocketId: from, signalingState: pc.signalingState });
 					if (pc.signalingState === 'have-local-offer') {
 						await pc.setRemoteDescription(new RTCSessionDescription({ type: 'answer', sdp: signal.sdp }));
 						const buffered = candidateBufferRef.current.get(from) || [];
@@ -340,6 +359,8 @@ export default function useWebRTC(
 					}
 				}
 			} catch (err) {
+				const e = err as Error;
+				mcmsWebRtcDebug('H5', 'signal_handle_error', { fromSocketId: from, errName: e?.name, errMessage: e?.message });
 				console.error('Signal handling error:', err);
 			}
 		};

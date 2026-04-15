@@ -296,9 +296,6 @@ export default function VideoArea({
       triggerToast(nextPendingIdx === -1 ? "Agenda complete!" : "Advanced to next item");
     }
   };
-  // #region agent log
-  fetch('http://127.0.0.1:7607/ingest/bfa38a8b-67a3-4e1b-a36a-45339a78111c', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': 'cb71ed' }, body: JSON.stringify({ sessionId: 'cb71ed', location: 'VideoArea.tsx:beforeUseWebRTC', message: 'VideoArea about to call useWebRTC', data: { meetingId: meetingId ?? null }, timestamp: Date.now(), hypothesisId: 'H2' }) }).catch(() => { });
-  // #endregion
   const {
     localStream,
     peers,
@@ -312,10 +309,6 @@ export default function VideoArea({
     toggleVideo,
     toggleScreenShare,
   } = useWebRTC(socket, meetingId, currentUser);
-
-  // #region agent log
-  fetch('http://127.0.0.1:7607/ingest/bfa38a8b-67a3-4e1b-a36a-45339a78111c', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': 'cb71ed' }, body: JSON.stringify({ sessionId: 'cb71ed', runId: 'post-fix', location: 'VideoArea.tsx:afterUseWebRTC', message: 'VideoArea returned from useWebRTC', data: { peerCount: peers.length }, timestamp: Date.now(), hypothesisId: 'H4' }) }).catch(() => { });
-  // #endregion
 
   useTranscriptionCapture(socket, meetingId || null, localStream, audioEnabled);
 

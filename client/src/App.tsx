@@ -601,9 +601,6 @@ function DashboardApp() {
             </div>
           );
         }
-        // #region agent log
-        fetch('http://127.0.0.1:7607/ingest/bfa38a8b-67a3-4e1b-a36a-45339a78111c', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': 'cb71ed' }, body: JSON.stringify({ sessionId: 'cb71ed', location: 'App.tsx:meetingLayout', message: 'App rendering active meeting layout', data: { mid: String(selectedMeeting?.id || selectedMeeting?._id || '') }, timestamp: Date.now(), hypothesisId: 'H3' }) }).catch(() => { });
-        // #endregion
         return (
           <div ref={meetingLayoutRef} className={`meeting-layout ${isOffline ? 'offline-mode' : ''} ${!agendaPanelOpen ? 'agenda-hidden' : ''} ${!rightPanelOpen ? 'right-hidden' : ''}`}>
             {agendaPanelOpen && (
