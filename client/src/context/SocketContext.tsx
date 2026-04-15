@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useRef, useState, ReactNode } from 'react';
+import { createContext, useContext, useEffect, useState, ReactNode } from 'react';
 import { io, Socket } from 'socket.io-client';
 import { useAuth } from './AuthContext';
 
@@ -21,7 +21,9 @@ function socketDebugPayload(message: string, data: Record<string, unknown>) {
     try {
         console.log('[MCMS-DEBUG]', JSON.stringify(payload));
     } catch { /* ignore */ }
-    fetch('http://127.0.0.1:7607/ingest/bfa38a8b-67a3-4e1b-a36a-45339a78111c', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': 'cb71ed' }, body: JSON.stringify(payload) }).catch(() => { });
+    if (import.meta.env.DEV) {
+        fetch('http://127.0.0.1:7607/ingest/bfa38a8b-67a3-4e1b-a36a-45339a78111c', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': 'cb71ed' }, body: JSON.stringify(payload) }).catch(() => { });
+    }
     // #endregion
 }
 
@@ -31,20 +33,15 @@ interface SocketProviderProps {
 
 export const SocketProvider = ({ children }: SocketProviderProps) => {
     const { user } = useAuth();
-    const socketRef = useRef<Socket | null>(null);
+    const [socket, setSocket] = useState<Socket | null>(null);
     const [connected, setConnected] = useState(false);
 
     useEffect(() => {
         if (!user?.token) {
-            if (socketRef.current) {
-                socketRef.current.disconnect();
-                socketRef.current = null;
-                setConnected(false);
-            }
             return;
         }
 
-        const socket = io(SOCKET_URL, {
+        const s = io(SOCKET_URL, {
             auth: { token: user.token },
             transports: ['websocket', 'polling'],
         });
@@ -54,29 +51,29 @@ export const SocketProvider = ({ children }: SocketProviderProps) => {
             socketUrlHost = new URL(SOCKET_URL).host;
         } catch { /* keep raw */ }
 
-        socket.on('connect', () => {
-            socketDebugPayload('socket_connected', { socketUrlHost, socketId: socket.id, transport: (socket as any).io?.engine?.transport?.name });
+        setSocket(s);
+
+        s.on('connect', () => {
+            socketDebugPayload('socket_connected', { socketUrlHost, socketId: s.id, transport: (s as any).io?.engine?.transport?.name });
             setConnected(true);
         });
-        socket.on('connect_error', (err: Error) => {
+        s.on('connect_error', (err: Error) => {
             socketDebugPayload('socket_connect_error', { socketUrlHost, message: err?.message });
         });
-        socket.on('disconnect', (reason: string) => {
+        s.on('disconnect', (reason: string) => {
             socketDebugPayload('socket_disconnect', { socketUrlHost, reason });
             setConnected(false);
         });
 
-        socketRef.current = socket;
-
         return () => {
-            socket.disconnect();
-            socketRef.current = null;
+            s.disconnect();
+            setSocket(null);
             setConnected(false);
         };
     }, [user?.token]);
 
     return (
-        <SocketContext.Provider value={{ socket: socketRef.current, connected }}>
+        <SocketContext.Provider value={{ socket, connected }}>
             {children}
         </SocketContext.Provider>
     );

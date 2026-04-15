@@ -27,7 +27,9 @@ function mcmsWebRtcDebug(hypothesisId: string, message: string, data: Record<str
 	try {
 		console.log('[MCMS-DEBUG]', JSON.stringify(payload));
 	} catch { /* ignore */ }
-	fetch('http://127.0.0.1:7607/ingest/bfa38a8b-67a3-4e1b-a36a-45339a78111c', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': 'cb71ed' }, body: JSON.stringify(payload) }).catch(() => { });
+	if (import.meta.env.DEV) {
+		fetch('http://127.0.0.1:7607/ingest/bfa38a8b-67a3-4e1b-a36a-45339a78111c', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': 'cb71ed' }, body: JSON.stringify(payload) }).catch(() => { });
+	}
 	// #endregion
 }
 

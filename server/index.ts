@@ -207,15 +207,15 @@ async function canJoinMeetingNow(meetingId: string, userId: string) {
 	const meeting = await getMeetingForUserAccess(meetingId);
 	if (!meeting) return { ok: false, reason: 'Meeting not found.' };
 	const uid = String(userId);
-	
+
 	// Fix: Robust check for participant/host status handling ObjectIds and strings
 	const hostId = meeting.hostId ? String(meeting.hostId) : null;
-	const participantIds = Array.isArray(meeting.participants) 
-		? meeting.participants.map((p: any) => String(p._id || p.id || p)) 
+	const participantIds = Array.isArray(meeting.participants)
+		? meeting.participants.map((p: any) => String(p._id || p.id || p))
 		: [];
-	
+
 	const isParticipant = (hostId === uid) || participantIds.includes(uid);
-	
+
 	if (!isParticipant) return { ok: false, reason: 'Only invited participants can join this meeting.' };
 	if (meeting.status === 'completed' || meeting.status === 'cancelled') {
 		return { ok: false, reason: 'This meeting has already ended.' };
@@ -443,15 +443,15 @@ async function processRealtimeActions(meetingId: string, agg: TranscriptAgg) {
 							const userName = (u.name || '').toLowerCase();
 							const userEmail = (u.email || '').toLowerCase();
 							const extracted = a.assignee.toLowerCase();
-							return userName === extracted || 
-							       userEmail === extracted || 
-							       userName.includes(extracted) || 
-							       extracted.includes(userName);
+							return userName === extracted ||
+								userEmail === extracted ||
+								userName.includes(extracted) ||
+								extracted.includes(userName);
 						});
 						if (matchedParticipant) {
 							assigneeId = matchedParticipant._id;
 						} else if (User) {
-							const globalUser = await User.findOne({ 
+							const globalUser = await User.findOne({
 								$or: [
 									{ name: { $regex: new RegExp(`^${safeAssignee}$`, 'i') } },
 									{ name: { $regex: new RegExp(safeAssignee, 'i') } }
@@ -1445,5 +1445,6 @@ app.get('/mcms/*path', (req: any, res: any) => {
 server.listen(PORT, () => {
 	console.log(`\n🚀 MCMS Backend running at http://localhost:${PORT}`);
 	console.log(`🤖 AI Service URL: ${process.env.AI_SERVICE_URL || 'http://localhost:8000'}`);
-	console.log(`📦 Storage: ${usingMongoFlag ? 'MongoDB (Persistent)' : 'In-Memory (Volatile)'}\n`);
+	console.log(`📦 Storage: ${usingMongoFlag ? 'MongoDB (Persistent)' : 'In-Memory (Volatile)'}`);
+	console.log(`📡 WebRTC signaling uses in-memory rooms: run exactly ONE server instance (scale=1 on your host). Multiple processes cannot see each other’s sockets without a Socket.IO cluster adapter.\n`);
 });
