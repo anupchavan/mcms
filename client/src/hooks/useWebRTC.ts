@@ -45,23 +45,12 @@ export default function useWebRTC(
 	meetingId: string | null,
 	currentUser: { _id?: string; name?: string; profileImage?: string | null } | null
 ) {
-
-	console.log('socket', socket);
-	console.log('meetingId', meetingId);
-	console.log('currentUser', currentUser);
 	const [peers, setPeers] = useState<PeerState[]>([]);
 	const [localStream, setLocalStream] = useState<MediaStream | null>(null);
 	const [audioEnabled, setAudioEnabled] = useState<boolean>(true);
 	const [videoEnabled, setVideoEnabled] = useState<boolean>(true);
 	const [screenStream, setScreenStream] = useState<MediaStream | null>(null);
 	const [mediaError, setMediaError] = useState<string | null>(null);
-
-	console.log('peers', peers);
-	console.log('localStream', localStream);
-	console.log('audioEnabled', audioEnabled);
-	console.log('videoEnabled', videoEnabled);
-	console.log('screenStream', screenStream);
-	console.log('mediaError', mediaError);
 
 	const peersRef = useRef<Map<string, PeerEntry>>(new Map());
 	const iceServersRef = useRef<RTCIceServer[] | null>(null);
@@ -84,7 +73,14 @@ export default function useWebRTC(
 	}, []);
 
 	const createPeerConnection = useCallback((remoteSocketId: string, remoteInfo: PeerInfo, initiator: boolean) => {
-		if (peersRef.current.has(remoteSocketId)) return peersRef.current.get(remoteSocketId)!.pc;
+		if (peersRef.current.has(remoteSocketId)) {
+			const existing = peersRef.current.get(remoteSocketId)!;
+			if (remoteInfo.userId && (!existing.info.userId || existing.info.name === 'User')) {
+				existing.info = remoteInfo;
+				updatePeerState(remoteSocketId, remoteInfo, existing.stream);
+			}
+			return existing.pc;
+		}
 
 		const pc = new RTCPeerConnection({
 			iceServers: iceServersRef.current || FALLBACK_ICE_SERVERS,
@@ -112,7 +108,8 @@ export default function useWebRTC(
 					remoteStream.addTrack(track);
 				}
 			}
-			updatePeerState(remoteSocketId, remoteInfo, remoteStream);
+			const currentInfo = peersRef.current.get(remoteSocketId)?.info || remoteInfo;
+			updatePeerState(remoteSocketId, currentInfo, remoteStream);
 		};
 
 		pc.onconnectionstatechange = () => {
@@ -121,22 +118,10 @@ export default function useWebRTC(
 			}
 		};
 
-		pc.onnegotiationneeded = async () => {
-			if (!initiator) return;
-			try {
-				const offer = await pc.createOffer();
-				await pc.setLocalDescription(offer);
-				socket.emit('signal', {
-					to: remoteSocketId,
-					signal: { type: 'offer', sdp: pc.localDescription!.sdp },
-				});
-			} catch (err) {
-				console.error('Negotiation failed:', err);
-			}
-		};
-
 		peersRef.current.set(remoteSocketId, { pc, info: remoteInfo, stream: remoteStream });
 		candidateBufferRef.current.set(remoteSocketId, []);
+
+		updatePeerState(remoteSocketId, remoteInfo, remoteStream);
 
 		if (initiator) {
 			pc.createOffer()
@@ -151,7 +136,7 @@ export default function useWebRTC(
 		}
 
 		return pc;
-	}, [socket, updatePeerState]);
+	}, [socket, updatePeerState, removePeer]);
 
 	const removePeer = useCallback((socketId: string) => {
 		const entry = peersRef.current.get(socketId);

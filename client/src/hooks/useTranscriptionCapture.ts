@@ -11,7 +11,7 @@ const TARGET_SAMPLE_RATE = 16000;
 const BUFFER_SIZE = 4096;
 const RMS_GATE_THRESHOLD = 0.012;
 const VOICE_HOLD_FRAMES = 8;
-/** Batch client VAD speaking time to the server (no Sarvam required). */
+// Batch client VAD speaking time to the server (no Sarvam required).
 const SPEAKING_FLUSH_INTERVAL_MS = 20_000;
 const MIN_SPEAKING_FLUSH_MS = 800;
 
@@ -95,11 +95,14 @@ export default function useTranscriptionCapture(
 	const stopCapture = useCallback(() => {
 		if (!activeRef.current) return;
 		activeRef.current = false;
+		// clear the flush interval
 		if (flushTimerRef.current) {
 			clearInterval(flushTimerRef.current);
 			flushTimerRef.current = null;
 		}
-		flushPendingVad();
+		flushPendingVad(); // flush any remaining pending VAD time
+
+		// disconnect the processor
 		if (processorRef.current) {
 			processorRef.current.disconnect();
 			processorRef.current.onaudioprocess = null;
