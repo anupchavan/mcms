@@ -59,6 +59,10 @@ export default function useWebRTC(
 	const screenStreamRef = useRef<MediaStream | null>(null);
 	const joinedRef = useRef<boolean>(false);
 
+	// #region agent log
+	fetch('http://127.0.0.1:7607/ingest/bfa38a8b-67a3-4e1b-a36a-45339a78111c', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': 'cb71ed' }, body: JSON.stringify({ sessionId: 'cb71ed', location: 'useWebRTC.ts:entry', message: 'useWebRTC hook body start', data: { hasMeetingId: !!meetingId, hasSocket: !!socket }, timestamp: Date.now(), hypothesisId: 'H1' }) }).catch(() => { });
+	// #endregion
+
 	const updatePeerState = useCallback((remoteSocketId: string, remoteInfo: PeerInfo, remoteStream: MediaStream) => {
 		setPeers(prev => {
 			const filtered = prev.filter(p => p.socketId !== remoteSocketId);
@@ -71,6 +75,20 @@ export default function useWebRTC(
 			}];
 		});
 	}, []);
+
+	const removePeer = useCallback((socketId: string) => {
+		const entry = peersRef.current.get(socketId);
+		if (entry) {
+			entry.pc.close();
+			peersRef.current.delete(socketId);
+		}
+		candidateBufferRef.current.delete(socketId);
+		setPeers(prev => prev.filter(p => p.socketId !== socketId));
+	}, []);
+
+	// #region agent log
+	fetch('http://127.0.0.1:7607/ingest/bfa38a8b-67a3-4e1b-a36a-45339a78111c', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': 'cb71ed' }, body: JSON.stringify({ sessionId: 'cb71ed', location: 'useWebRTC.ts:beforeCreatePc', message: 'about to register createPeerConnection useCallback', data: {}, timestamp: Date.now(), hypothesisId: 'H1' }) }).catch(() => { });
+	// #endregion
 
 	const createPeerConnection = useCallback((remoteSocketId: string, remoteInfo: PeerInfo, initiator: boolean) => {
 		if (peersRef.current.has(remoteSocketId)) {
@@ -138,15 +156,9 @@ export default function useWebRTC(
 		return pc;
 	}, [socket, updatePeerState, removePeer]);
 
-	const removePeer = useCallback((socketId: string) => {
-		const entry = peersRef.current.get(socketId);
-		if (entry) {
-			entry.pc.close();
-			peersRef.current.delete(socketId);
-		}
-		candidateBufferRef.current.delete(socketId);
-		setPeers(prev => prev.filter(p => p.socketId !== socketId));
-	}, []);
+	// #region agent log
+	fetch('http://127.0.0.1:7607/ingest/bfa38a8b-67a3-4e1b-a36a-45339a78111c', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': 'cb71ed' }, body: JSON.stringify({ sessionId: 'cb71ed', runId: 'post-fix', location: 'useWebRTC.ts:afterCreatePc', message: 'createPeerConnection useCallback registered', data: {}, timestamp: Date.now(), hypothesisId: 'H1' }) }).catch(() => { });
+	// #endregion
 
 	const joinRoom = useCallback(async (): Promise<boolean> => {
 		if (joinedRef.current) return true;
