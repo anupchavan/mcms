@@ -1,8 +1,8 @@
 import { useState, useEffect, useCallback } from 'react';
 import { QRCodeSVG } from 'qrcode.react';
-import Icon from '../../../shared/components/Icon';
+import Icon from "../../../shared/components/Icon";
 import { Cancel01Icon } from '@hugeicons/core-free-icons';
-import { useAuth } from '../../../stores/AuthContext';
+import { useAuth } from "../../../stores/AuthContext";
 
 const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:5001/api';
 

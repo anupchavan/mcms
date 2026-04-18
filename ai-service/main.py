@@ -21,6 +21,14 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+async def add_process_time_header(request, call_next):
+    print(f"DEBUG: Incoming {request.method} request to {request.url.path}", flush=True)
+    response = await call_next(request)
+    print(f"DEBUG: Completed {request.method} {request.url.path} with status {response.status_code}", flush=True)
+    return response
+
+app.middleware("http")(add_process_time_header)
+
 GROK_API_KEY=os.getenv("GROK_API_KEY")
 GROK_BASE_URL=os.getenv("GROK_BASE_URL", "https://api.x.ai/v1")
 LOCAL_SUMMARY_MODEL=os.getenv(
@@ -63,6 +71,18 @@ def get_preferred_client(task="general"):
         if openai_client: return openai_client, AI_MODEL
         if groq_client: return groq_client, GROQ_MODEL
     return None, None
+
+last_ai_error = None
+
+@app.get("/")
+async def root():
+    return {
+        "status": "online",
+        "groq_initialized": groq_client is not None,
+        "grok_initialized": openai_client is not None,
+        "primary_model": get_preferred_client()[1],
+        "last_error": last_ai_error
+    }
 
 
 class TranscriptSegment(BaseModel):
@@ -381,9 +401,13 @@ async def summarize(req: SummarizeRequest):
             summaries=json.loads(response.choices[0].message.content)
             return {"summaries": summaries, "model": model}
         except Exception as e:
+            global last_ai_error
+            last_ai_error = str(e)
             print(f"AI summarize error: {e}")
+            return {"summaries": {}, "error": str(e), "model": model}
 
     summaries={}
+    # ... (rest of function)
     for item in req.agenda_items:
         texts=segments_by_agenda.get(item.id, [])
         if texts:
@@ -438,14 +462,14 @@ async def meeting_summary(req: MeetingSummaryRequest):
             summary["model"]=model
             return {"summary": summary}
         except Exception as exc:
+            global last_ai_error
+            last_ai_error = str(exc)
             print(f"AI meeting-summary error: {exc}")
-
-    local_summary=summarize_with_local_model(context_text)
-    if local_summary:
-        fallback=heuristic_meeting_summary(req)
-        fallback["overview"]=local_summary
-        fallback["model"]=LOCAL_SUMMARY_MODEL
-        return {"summary": fallback}
+            # Use heuristic summary as a lightweight non-LLM fallback
+            fallback=heuristic_meeting_summary(req)
+            fallback["overview"]=f"AI Error: {exc}. {fallback['overview']}"
+            fallback["model"]="error-fallback"
+            return {"summary": fallback}
 
     return {"summary": heuristic_meeting_summary(req)}
 
@@ -497,6 +521,8 @@ async def extract_actions(req: ExtractActionsRequest):
             except json.JSONDecodeError:
                 pass
         except Exception as e:
+            global last_ai_error
+            last_ai_error = str(e)
             print(f"AI extract-actions error: {e}")
 
     # Deduplicate Groq
@@ -607,6 +633,8 @@ async def sentiment(req: SentimentRequest):
             data=json.loads(response.choices[0].message.content)
             return {"score": data.get("score", "neutral")}
         except Exception as e:
+            global last_ai_error
+            last_ai_error = str(e)
             print(f"AI sentiment error: {e}")
 
     text_lower=req.text.lower()

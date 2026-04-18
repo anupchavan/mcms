@@ -12,6 +12,8 @@ import ProductivityDashboard from "./features/dashboard/components/ProductivityD
 import PollVoting from "./features/polls/components/PollVoting";
 import ProfileSettings from "./features/profile/components/ProfileSettings";
 import ArchiveView from "./features/dashboard/components/ArchiveView";
+import LocationMapModal from "./features/meeting/components/LocationMapModal";
+import AttendanceMarkPage from "./features/attendance/components/AttendanceMarkPage";
 import RubricSidebar from "./features/rubric/components/RubricSidebar";
 import useKeyboardShortcuts from "./hooks/useKeyboardShortcuts";
 import Icon from "./shared/components/Icon";
@@ -142,6 +144,7 @@ function DashboardApp() {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [showCreateMeeting, setShowCreateMeeting] = useState(false);
   const [pollMeetingId, setPollMeetingId] = useState<string | null>(null);
+  const [locationModalAddress, setLocationModalAddress] = useState<string | null>(null);
   const searchInputRef = useRef<HTMLInputElement | null>(null);
   const [theme, setTheme] = useState(() => {
     if (typeof window === "undefined") return "dark";
@@ -487,7 +490,17 @@ function DashboardApp() {
                       </span>
                       {(meeting.confirmedDate || meeting.date) && <span><Icon icon={Calendar02Icon} size={14} /> {formatDate(meeting.confirmedDate || meeting.date)}</span>}
                       {(meeting.confirmedTime || meeting.time) && <span><Icon icon={Clock01Icon} size={14} /> {meeting.confirmedTime || meeting.time}</span>}
-                      {shouldShowMeetingLocation(meeting) && <span><Icon icon={Location01Icon} size={14} /> {meeting.location}</span>}
+                      {shouldShowMeetingLocation(meeting) && (
+                        <span
+                          style={{ cursor: "pointer", textDecoration: "underline" }}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setLocationModalAddress(meeting.location);
+                          }}
+                        >
+                          <Icon icon={Location01Icon} size={14} /> {meeting.location}
+                        </span>
+                      )}
                       <span><Icon icon={UserIcon} size={14} /> {meeting.host}</span>
                     </div>
                   </div>
@@ -518,6 +531,7 @@ function DashboardApp() {
               participants={selectedMeeting?.participants || []}
               modality={selectedMeeting?.modality}
               currentUser={user}
+              isHost={selectedMeeting?.hostId === (user?.id || user?._id)}
               fullscreenRef={meetingLayoutRef}
               agendaPanelOpen={agendaPanelOpen}
               rightPanelOpen={rightPanelOpen}
@@ -604,7 +618,17 @@ function DashboardApp() {
                     </span>
                     {(meeting.confirmedDate || meeting.date) && <span><Icon icon={Calendar02Icon} size={14} /> {formatDate(meeting.confirmedDate || meeting.date)}</span>}
                     {(meeting.confirmedTime || meeting.time) && <span><Icon icon={Clock01Icon} size={14} /> {meeting.confirmedTime || meeting.time}</span>}
-                    {shouldShowMeetingLocation(meeting) && <span><Icon icon={Location01Icon} size={14} /> {meeting.location}</span>}
+                    {shouldShowMeetingLocation(meeting) && (
+                      <span
+                        style={{ cursor: "pointer", textDecoration: "underline", color: "var(--primary)", fontWeight: 500 }}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setLocationModalAddress(meeting.location);
+                        }}
+                      >
+                        <Icon icon={Location01Icon} size={14} /> {meeting.location}
+                      </span>
+                    )}
                     <span><Icon icon={UserIcon} size={14} /> {meeting.host}</span>
                   </div>
                 </div>
@@ -674,6 +698,9 @@ function DashboardApp() {
         <PollVoting meetingId={pollMeetingId} onClose={() => setPollMeetingId(null)} />
       )}
 
+      {locationModalAddress && (
+        <LocationMapModal address={locationModalAddress} onClose={() => setLocationModalAddress(null)} />
+      )}
     </div>
   );
 }
@@ -681,6 +708,11 @@ function DashboardApp() {
 export default function App() {
   const { user, loading } = useAuth();
   const [authView, setAuthView] = useState("login");
+
+  // Check URL specifically for the attendance mark flow
+  const searchParams = typeof window !== "undefined" ? new URLSearchParams(window.location.search) : null;
+  const attendanceMeetingId = searchParams?.get("attendance_meeting_id");
+  const attendanceToken = searchParams?.get("attendance_token");
 
   useEffect(() => {
     if (loading) document.title = "Concord";
@@ -693,6 +725,12 @@ export default function App() {
         <div style={{ color: "var(--primary)", fontSize: "1.5rem" }}>MCMS Loading...</div>
       </div>
     );
+  }
+
+  // Intercept attendance mark flow before enforcing strict login wall
+  // (AttendanceMarkPage handles its own logged-out UI)
+  if (attendanceMeetingId && attendanceToken) {
+    return <AttendanceMarkPage meetingId={attendanceMeetingId} token={attendanceToken} />;
   }
 
   if (!user) {

@@ -530,6 +530,7 @@ export default function MeetingCreation({
       duration,
       modality,
       agenda: agenda.filter((a) => a.title.trim() !== ""),
+      participants: participants.map((p) => p._id),
       timeSlots: filledSlots.map((s) => ({
         date: s.date.toISOString().split("T")[0],
         time: s.date.toTimeString().slice(0, 5),

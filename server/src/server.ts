@@ -7,6 +7,9 @@ import jwt from 'jsonwebtoken';
 import { Server } from 'socket.io';
 import nodemailer from 'nodemailer';
 import cron from 'node-cron';
+import { AccessToken } from 'livekit-server-sdk';
+import { createAdapter } from '@socket.io/redis-adapter';
+import { createClient } from 'redis';
 import WebSocket from 'ws'; // for sarvam transcription
 
 // for transcript aggregation
@@ -608,6 +611,22 @@ function createSarvamWS(meetingId: string, socketId: string, speakerName: string
 	return ws;
 }
 
+// ── Socket.io Cluster Adapter (Redis) ────────────────────────
+if (process.env.REDIS_URL) {
+	const pubClient = createClient({ url: process.env.REDIS_URL });
+	const subClient = pubClient.duplicate();
+	
+	pubClient.on('error', (err) => console.error('Redis Pub Client Error:', err));
+	subClient.on('error', (err) => console.error('Redis Sub Client Error:', err));
+
+	Promise.all([pubClient.connect(), subClient.connect()]).then(() => {
+		io.adapter(createAdapter(pubClient, subClient));
+		console.log('📡 Socket.io Redis adapter connected');
+	}).catch(err => {
+		console.error('Redis adapter error:', err.message);
+	});
+}
+
 // ── Socket.io event handlers ─────────────────────────────────
 io.on('connection', (socket: any) => {
 	connectedUsers.set(socket.userId, socket.id);
@@ -773,10 +792,24 @@ io.on('connection', (socket: any) => {
 		}
 	});
 
-	// end meeting
+	// end meeting — only the host may end the meeting for everyone
 	socket.on('end_meeting', async ({ meetingId }: any) => {
 		if (!meetingId) return;
 		try {
+			// Host authorisation check
+			if (usingMongoFlag && Meeting) {
+				const meetingDoc = await Meeting.findById(meetingId).select('hostId');
+				if (meetingDoc && meetingDoc.hostId && meetingDoc.hostId.toString() !== socket.userId.toString()) {
+					socket.emit('error', { message: 'Only the host can end the meeting.' });
+					return;
+				}
+			} else {
+				const memMtg = inMemoryMeetings.find((m: any) => String(m.id || m._id) === String(meetingId));
+				if (memMtg && memMtg.hostId && String(memMtg.hostId) !== String(socket.userId)) {
+					socket.emit('error', { message: 'Only the host can end the meeting.' });
+					return;
+				}
+			}
 			if (usingMongoFlag && Meeting) {
 				const meeting = await Meeting.findById(meetingId).populate('participants');
 				if (meeting && meeting.status !== 'completed') {
@@ -794,20 +827,39 @@ io.on('connection', (socket: any) => {
 
 							try {
 								const actions = await callAIExtractActions(fullText, minutesDoc ? minutesDoc.items : []);
-								const meetingUsers = meeting.participants || [];
+								const hostId = meeting.hostId;
+								let meetingUsers: any[] = [];
+								if (hostId) {
+									const host = await User.findById(hostId);
+									if (host) meetingUsers.push(host);
+								}
+								if (meeting.participants) meetingUsers.push(...meeting.participants);
 
 								for (const a of actions) {
 									let assigneeId = null;
 									if (a.assignee) {
-										const safeAssignee = a.assignee.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-										const matchedParticipant = meetingUsers.find((u: any) =>
-											u.name?.toLowerCase() === a.assignee.toLowerCase() ||
-											u.email?.toLowerCase() === a.assignee.toLowerCase()
-										);
+										const safeAssignee = a.assignee.trim().replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+										const extracted = a.assignee.trim().toLowerCase();
+										
+										const matchedParticipant = meetingUsers.find((u: any) => {
+											const userName = (u.name || '').toLowerCase();
+											const userEmail = (u.email || '').toLowerCase();
+											return userName === extracted ||
+												userEmail === extracted ||
+												userName.includes(extracted) ||
+												extracted.includes(userName);
+										});
+
 										if (matchedParticipant) {
 											assigneeId = matchedParticipant._id;
 										} else if (User) {
-											const globalUser = await User.findOne({ name: { $regex: new RegExp(`^${safeAssignee}$`, 'i') } });
+											const globalUser = await User.findOne({
+												$or: [
+													{ name: { $regex: new RegExp(`^${safeAssignee}$`, 'i') } },
+													{ name: { $regex: new RegExp(safeAssignee, 'i') } },
+													{ email: { $regex: new RegExp(`^${safeAssignee}$`, 'i') } }
+												]
+											});
 											if (globalUser) assigneeId = globalUser._id;
 										}
 									}
@@ -823,6 +875,20 @@ io.on('connection', (socket: any) => {
 										source: 'ai-extracted',
 										aiConfidence: a.confidence || null,
 									});
+								}
+								if (io) {
+									const dbItems = await ActionItem.find({ meetingId }).populate('assignee', 'name email').sort({ createdAt: 1 });
+									const processed = dbItems.map((item: any) => ({
+										id: (item._id || item.id).toString(),
+										title: item.title,
+										assignee: item.assigneeName || item.assignee?.name || 'Unassigned',
+										assigneeId: (item.assignee?._id || item.assignee)?.toString(),
+										category: item.category,
+										status: item.status,
+										deadline: item.deadline,
+										meetingId: meetingId.toString(),
+									}));
+									io.to(`meeting:${meetingId}`).emit('action_items_sync', { meetingId, items: processed });
 								}
 							} catch (e: any) {
 								console.error('AI action extraction failed:', e.message);
@@ -1008,7 +1074,14 @@ io.on('connection', (socket: any) => {
 		}
 	});
 
-	socket.on('join_meeting', ({ meetingId }: any) => { if (meetingId) socket.join(`meeting:${meetingId}`); });
+	socket.on('join_meeting', ({ meetingId, name, profileImage }: any) => {
+		if (meetingId) {
+			socket.join(`meeting:${meetingId}`);
+			// Persist metadata for transcription segments
+			socket.userName = name || (socket as any).user?.name || 'User';
+			socket.profileImage = profileImage || null;
+		}
+	});
 	socket.on('leave_meeting', ({ meetingId }: any) => { if (meetingId) socket.leave(`meeting:${meetingId}`); });
 
 	socket.on('disconnect', () => {
@@ -1101,6 +1174,60 @@ cron.schedule('0 * * * *', async () => {
 	}
 });
 
+// ── LiveKit Token Endpoint ──────────────────────────────────
+app.get('/api/meetings/:id/token', protect, async (req: any, res: any) => {
+	try {
+		const apiKey = process.env.LIVEKIT_API_KEY;
+		const apiSecret = process.env.LIVEKIT_API_SECRET;
+		if (!apiKey || !apiSecret) {
+			return res.status(500).json({ message: 'LiveKit credentials not configured on server' });
+		}
+
+		const meetingId = req.params.id;
+		const userId = req.user?.id || req.user?._id;
+		const userName = req.user?.name || 'User';
+
+		// Verify user is a participant of this meeting
+		let isParticipant = false;
+		if (usingMongoFlag && Meeting) {
+			const meeting = await Meeting.findById(meetingId);
+			if (meeting) {
+				const uid = String(userId);
+				const hostId = meeting.hostId ? String(meeting.hostId) : '';
+				const participants = Array.isArray(meeting.participants) ? meeting.participants : [];
+				const isHost = hostId === uid;
+				const isInvited = participants.some((p: any) => {
+					const pId = String(p?._id || p?.id || p || '');
+					console.log(`Checking participant: pId='${pId}', uid='${uid}' format: ${typeof p}`);
+					return pId && pId === uid;
+				});
+				isParticipant = isHost || isInvited;
+				console.log(`isParticipant result for uid=${uid}: Host? ${isHost}, Invited? ${isInvited}`);
+			}
+		} else {
+			const memMtg = inMemoryMeetings.find((m: any) => String(m.id || m._id) === String(meetingId));
+			if (memMtg) {
+				const uid = String(userId);
+				isParticipant = String(memMtg.hostId) === uid || (memMtg.participants || []).some((p: any) => String(p) === uid);
+			}
+		}
+
+		if (!isParticipant) {
+			return res.status(403).json({ message: 'You are not a participant of this meeting' });
+		}
+
+		const at = new AccessToken(apiKey, apiSecret, {
+			identity: userId,
+			name: userName,
+		});
+		at.addGrant({ roomJoin: true, room: meetingId });
+
+		res.json({ token: await at.toJwt() });
+	} catch (error: any) {
+		res.status(500).json({ message: 'Server error generating token', error: error.message });
+	}
+});
+
 // ── Brief on-demand endpoint ─────────────────────────────────
 app.get('/api/meetings/:id/brief', protect, async (req: any, res: any) => {
 	try {
@@ -1125,5 +1252,13 @@ app.get('/mcms/*path', (req: any, res: any) => {
 server.listen(PORT, () => {
 	console.log(`\n🚀 MCMS Backend running at http://localhost:${PORT}`);
 	console.log(`🤖 AI Service URL: ${process.env.AI_SERVICE_URL || 'http://localhost:8000'}`);
-	console.log(`📦 Storage: ${usingMongoFlag ? 'MongoDB (Persistent)' : 'In-Memory (Volatile)'}\n`);
+	setTimeout(() => {
+		console.log(`📦 Storage: ${usingMongoFlag ? 'MongoDB (Persistent)' : 'In-Memory (Volatile)'}`);
+		const rUrl = process.env.REDIS_URL;
+		if (rUrl) {
+			console.log(`📡 Socket signaling scaling via Redis Adapter (${rUrl})`);
+		} else {
+			console.log(`📡 WebRTC signaling uses in-memory rooms: run exactly ONE server instance (scale=1 on your host). Multiple processes cannot see each other’s sockets without a Socket.IO cluster adapter.`);
+		}
+	}, 1000);
 });
