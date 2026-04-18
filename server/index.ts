@@ -7,6 +7,9 @@ import jwt from 'jsonwebtoken';
 import { Server } from 'socket.io';
 import nodemailer from 'nodemailer';
 import cron from 'node-cron';
+import { AccessToken } from 'livekit-server-sdk';
+import { createAdapter } from '@socket.io/redis-adapter';
+import { createClient } from 'redis';
 import WebSocket from 'ws'; // for sarvam transcription
 
 // for transcript aggregation
@@ -31,35 +34,47 @@ let usingMongoFlag = false;
 let User: any = null, Meeting: any = null, Poll: any = null, Notification: any = null, RSVP: any = null;
 let Transcript: any = null, Agenda: any = null, Minutes: any = null, ActionItem: any = null, Attendance: any = null, MeetingSummary: any = null;
 
-try {
-	const mongoose = require('mongoose');
-	const mongoUri = process.env.MONGO_URI || 'mongodb://127.0.0.1:27017/mcms_db';
-	const builtUri = (process.env.MONGO_PASSWORD && mongoUri.includes('mongodb+srv://'))
-		? mongoUri.replace(/^mongodb\+srv:\/\/([^:]+):[^@]+@/, (_: string, user: string) =>
-			`mongodb+srv://${user}:${encodeURIComponent(process.env.MONGO_PASSWORD!)}@`)
-		: mongoUri;
-	mongoose.connect(builtUri, { serverSelectionTimeoutMS: 15000 })
-		.then(() => { console.log('MongoDB Connected'); usingMongoFlag = true; })
-		.catch((err: any) => {
-			console.log('MongoDB not available — using in-memory store:', err.message);
-			if (process.env.NODE_ENV === 'production') console.error('Atlas connection failed. Check: IP whitelist, password encoding, MONGO_URI format.');
-		});
-	User = require('./models/User');
-	Meeting = require('./models/Meeting');
-	Poll = require('./models/Poll');
-	Notification = require('./models/Notification');
-	RSVP = require('./models/RSVP');
-	Transcript = require('./models/Transcript');
-	Agenda = require('./models/Agenda');
-	Minutes = require('./models/Minutes');
-	ActionItem = require('./models/ActionItem');
-	Attendance = require('./models/Attendance');
-	MeetingSummary = require('./models/MeetingSummary');
-} catch (e) {
-	console.log('Mongoose not found — using in-memory store');
+async function startServer() {
+	try {
+		const mongoose = require('mongoose');
+		const mongoUri = process.env.MONGO_URI || 'mongodb://127.0.0.1:27017/mcms_db';
+		const builtUri = (process.env.MONGO_PASSWORD && mongoUri.includes('mongodb+srv://'))
+			? mongoUri.replace(/^mongodb\+srv:\/\/([^:]+):[^@]+@/, (_: string, user: string) =>
+				`mongodb+srv://${user}:${encodeURIComponent(process.env.MONGO_PASSWORD!)}@`)
+			: mongoUri;
+
+		console.log('Connecting to MongoDB...');
+		await mongoose.connect(builtUri, { serverSelectionTimeoutMS: 15000 });
+		console.log('MongoDB Connected');
+		usingMongoFlag = true;
+	} catch (err: any) {
+		console.log('MongoDB not available — using in-memory store:', err.message);
+		if (process.env.NODE_ENV === 'production') {
+			console.error('Atlas connection failed. Check: IP whitelist, password encoding, MONGO_URI format.');
+		}
+	}
+
+	try {
+		User = require('./models/User');
+		Meeting = require('./models/Meeting');
+		Poll = require('./models/Poll');
+		Notification = require('./models/Notification');
+		RSVP = require('./models/RSVP');
+		Transcript = require('./models/Transcript');
+		Agenda = require('./models/Agenda');
+		Minutes = require('./models/Minutes');
+		ActionItem = require('./models/ActionItem');
+		Attendance = require('./models/Attendance');
+		MeetingSummary = require('./models/MeetingSummary');
+	} catch (e) {
+		console.log('Error loading models:', (e as Error).message);
+	}
 }
 
-const usingMongo = () => usingMongoFlag;
+async function runApplication() {
+	await startServer();
+
+	const usingMongo = () => usingMongoFlag;
 
 // ── In-memory fallback store ─────────────────────────────────
 const inMemoryUsers: any[] = [];
@@ -424,8 +439,11 @@ async function processRealtimeActions(meetingId: string, agg: TranscriptAgg) {
 			let added = false;
 			let meetingUsers: any[] = [];
 			if (usingMongoFlag && Meeting) {
-				const meeting = await Meeting.findById(meetingId).populate('participants');
-				if (meeting && meeting.participants) meetingUsers = meeting.participants;
+				const meeting = await Meeting.findById(meetingId).populate('hostId participants');
+				if (meeting) {
+					if (meeting.hostId) meetingUsers.push(meeting.hostId);
+					if (meeting.participants) meetingUsers.push(...meeting.participants);
+				}
 			}
 			for (const a of actions) {
 				if (usingMongoFlag && ActionItem) {
@@ -438,7 +456,9 @@ async function processRealtimeActions(meetingId: string, agg: TranscriptAgg) {
 
 					let assigneeId = null;
 					if (a.assignee) {
-						const safeAssignee = a.assignee.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+						const safeAssignee = a.assignee.trim().replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+						const extracted = a.assignee.trim().toLowerCase();
+						
 						const matchedParticipant = meetingUsers.find((u: any) => {
 							const userName = (u.name || '').toLowerCase();
 							const userEmail = (u.email || '').toLowerCase();
@@ -448,13 +468,15 @@ async function processRealtimeActions(meetingId: string, agg: TranscriptAgg) {
 								userName.includes(extracted) ||
 								extracted.includes(userName);
 						});
+
 						if (matchedParticipant) {
 							assigneeId = matchedParticipant._id;
 						} else if (User) {
 							const globalUser = await User.findOne({
 								$or: [
 									{ name: { $regex: new RegExp(`^${safeAssignee}$`, 'i') } },
-									{ name: { $regex: new RegExp(safeAssignee, 'i') } }
+									{ name: { $regex: new RegExp(safeAssignee, 'i') } },
+									{ email: { $regex: new RegExp(`^${safeAssignee}$`, 'i') } }
 								]
 							});
 							if (globalUser) assigneeId = globalUser._id;
@@ -472,6 +494,30 @@ async function processRealtimeActions(meetingId: string, agg: TranscriptAgg) {
 						source: 'ai-extracted',
 						aiConfidence: a.confidence || null,
 					});
+
+					// Send notification if assigned to a user
+					if (assigneeId && Notification) {
+						try {
+							const notif = await Notification.create({
+								userId: assigneeId,
+								type: 'action_item_assigned',
+								meetingId,
+								message: `You've been assigned a new action item: "${a.title}"`,
+							});
+							if (io) {
+								io.to(`user:${assigneeId.toString()}`).emit('notification', {
+									_id: notif._id,
+									type: notif.type,
+									meetingId,
+									message: notif.message,
+									read: false,
+									createdAt: notif.createdAt,
+								});
+							}
+						} catch (notifErr) {
+							console.error('Failed to create notification for AI action item:', notifErr);
+						}
+					}
 					added = true;
 				} else {
 					const exists = inMemoryActionItems[meetingId]?.find((item: any) => item.title.toLowerCase() === a.title.toLowerCase());
@@ -565,8 +611,8 @@ function flushAggToClients(meetingId: string, agg: TranscriptAgg, session: any) 
 		});
 	}
 
-	// Trigger real-time action extraction
-	processRealtimeActions(meetingId, agg);
+	// Trigger real-time action extraction (Disabled per user request - manual only in live meet)
+	// processRealtimeActions(meetingId, agg);
 }
 
 // split transcript into paragraphs
@@ -745,6 +791,42 @@ function createSarvamWS(
 	return ws;
 }
 
+// ── Socket.io Cluster Adapter (Redis) ────────────────────────
+if (process.env.REDIS_URL) {
+	const pubClient = createClient({ url: process.env.REDIS_URL });
+	const subClient = pubClient.duplicate();
+	Promise.all([pubClient.connect(), subClient.connect()]).then(() => {
+		io.adapter(createAdapter(pubClient, subClient));
+		console.log('📡 Socket.io Redis adapter connected');
+	}).catch(err => {
+		console.error('❌ Redis adapter connection failed:', err);
+	});
+}
+
+// Global set of transcribing meetings (stored in Redis for cluster sync)
+// For simplicity in this implementation, we use a naming convention:
+// Redis key: "transcription:active:<meetingId>"
+async function isMeetingTranscribing(meetingId: string) {
+	if (process.env.REDIS_URL) {
+		const client = createClient({ url: process.env.REDIS_URL });
+		await client.connect();
+		const active = await client.get(`transcription:active:${meetingId}`);
+		await client.quit();
+		return active === 'true';
+	}
+	return transcriptionSessions.has(meetingId);
+}
+
+async function setTranscriptionActive(meetingId: string, active: boolean) {
+	if (process.env.REDIS_URL) {
+		const client = createClient({ url: process.env.REDIS_URL });
+		await client.connect();
+		if (active) await client.set(`transcription:active:${meetingId}`, 'true', { EX: 86400 }); // 24h safety expiry
+		else await client.del(`transcription:active:${meetingId}`);
+		await client.quit();
+	}
+}
+
 // ── Socket.io event handlers ─────────────────────────────────
 io.on('connection', (socket: any) => {
 	connectedUsers.set(socket.userId, socket.id);
@@ -769,6 +851,10 @@ io.on('connection', (socket: any) => {
 		}
 
 		room.set(socket.id, { userId: socket.userId, name: name || 'User', profileImage: profileImage || null });
+		
+		// Set properties for transcription name resolution
+		socket.userName = name || 'User';
+		socket.profileImage = profileImage || null;
 
 		// #region agent log
 		console.log('[MCMS-DEBUG-SERVER]', JSON.stringify({
@@ -860,71 +946,17 @@ io.on('connection', (socket: any) => {
 			socket.emit('error', { message: 'Only the host can start recording.' });
 			return;
 		}
-		const room = meetingRooms.get(meetingId);
-		if (!room) {
-			// Room state mismatch — client thinks it's in a room the server doesn't have.
-			socket.emit('transcription_error', { meetingId, message: 'You are not in the meeting room. Try rejoining.' });
-			return;
-		}
-
 		resumeClock(meetingRecordingClock, meetingId);
+
+		// Initialize local session for this instance
 		const speakers = new Map<string, any>();
-
-		// Track how many WS connections have opened / failed so we can send a
-		// definitive started or error event only after the first real open.
-		const total = room.size;
-		if (total === 0) {
-			socket.emit('transcription_error', { meetingId, message: 'No participants are in the room yet.' });
-			return;
-		}
-
-		let confirmedOpen = false;
-		let failCount = 0;
-
-		const onOneOpen = () => {
-			if (confirmedOpen) return; // fire once
-			confirmedOpen = true;
-			clearTimeout(openTimeout);
-			io.to(`meeting:${meetingId}`).emit('transcription_started', { meetingId });
-		};
-
-		const onOneFail = () => {
-			if (confirmedOpen) return; // a different WS already succeeded
-			failCount++;
-			if (failCount >= total) {
-				// Every connection failed — roll back
-				clearTimeout(openTimeout);
-				pauseClock(meetingRecordingClock, meetingId);
-				console.error(`All ${total} Sarvam WS connections failed for meeting ${meetingId}`);
-				socket.emit('transcription_error', {
-					meetingId,
-					message: 'Could not connect to the transcription service. Check your API key or network.',
-				});
-			}
-		};
-
-		for (const [sid, info] of room.entries()) {
-			const ws = createSarvamWS(meetingId, sid, info.name, info.profileImage, onOneOpen, onOneFail);
-			speakers.set(sid, {
-				userId: info.userId,
-				ws, name: info.name, image: info.profileImage, streamBuffer: '',
-			});
-		}
-
 		transcriptionSessions.set(meetingId, { active: true, speakers, aggregator: null, liveDraftId: null });
-
-		// Safety timeout: if no WS opens within 8 s, treat it as a full failure.
-		const openTimeout = setTimeout(() => {
-			if (!confirmedOpen) {
-				pauseClock(meetingRecordingClock, meetingId);
-				transcriptionSessions.delete(meetingId);
-				console.error(`Sarvam WS open-timeout for meeting ${meetingId}`);
-				socket.emit('transcription_error', {
-					meetingId,
-					message: 'Transcription service did not respond in time. Please try again.',
-				});
-			}
-		}, 8_000);
+		
+		// Set global state in Redis so other instances know to start Sarvam WS on audio_chunks
+		await setTranscriptionActive(meetingId, true);
+		
+		// Notify all participants across all instances to start sending audio_chunks
+		if (io) io.to(`meeting:${meetingId}`).emit('transcription_started', { meetingId });
 	});
 
 	socket.on('stop_transcription', async ({ meetingId }: any) => {
@@ -942,6 +974,7 @@ io.on('connection', (socket: any) => {
 			session.active = false;
 			session.speakers.clear();
 		}
+		await setTranscriptionActive(meetingId, false);
 		pauseClock(meetingRecordingClock, meetingId);
 		transcriptionSessions.delete(meetingId);
 		io.to(`meeting:${meetingId}`).emit('transcription_stopped', { meetingId });
@@ -950,8 +983,8 @@ io.on('connection', (socket: any) => {
 	/** Client-side VAD speaking time (no Sarvam); only accepted while socket is in the meeting room. */
 	socket.on('speaking_vad_report', async ({ meetingId, deltaMs }: any) => {
 		if (!meetingId || !socket.userId) return;
-		const room = meetingRooms.get(meetingId);
-		if (!room || !room.has(socket.id)) return;
+		// Since we use LiveKit, we can rely on the user being in the meeting if they have the meetingId.
+		// For extra security, we could verify participant status in DB, but VAD reporting is non-sensitive.
 		const raw = Number(deltaMs);
 		if (!Number.isFinite(raw) || raw < 400) return;
 		const cappedMs = Math.min(raw, 90_000);
@@ -977,27 +1010,40 @@ io.on('connection', (socket: any) => {
 		}
 	});
 
-	socket.on('audio_chunk', ({ meetingId, data }: any) => {
-		const session = transcriptionSessions.get(meetingId);
-		if (!session || !session.active) return;
-		let speaker = session.speakers.get(socket.id);
-		if (!speaker || !speaker.ws || speaker.ws.readyState === WebSocket.CLOSED || speaker.ws.readyState === WebSocket.CLOSING) {
-			const roomInfo = meetingRooms.get(meetingId)?.get(socket.id);
-			if (!roomInfo) return;
-			const ws = createSarvamWS(meetingId, socket.id, roomInfo.name, roomInfo.profileImage);
-			speaker = {
-				userId: roomInfo.userId,
-				ws,
-				name: roomInfo.name,
-				image: roomInfo.profileImage,
-				streamBuffer: speaker?.streamBuffer || '',
-			};
-			session.speakers.set(socket.id, speaker);
+	socket.on('audio_chunk', async ({ meetingId, data }: any) => {
+		if (!meetingId || !data) return;
+		
+		let session = transcriptionSessions.get(meetingId);
+		if (!session) {
+			const isGlobalActive = await isMeetingTranscribing(meetingId);
+			if (isGlobalActive) {
+				session = { active: true, speakers: new Map(), aggregator: null, liveDraftId: null };
+				transcriptionSessions.set(meetingId, session);
+			} else {
+				return;
+			}
 		}
-		if (!speaker.ws || speaker.ws.readyState !== WebSocket.OPEN) return;
-		try {
-			speaker.ws.send(JSON.stringify({ audio: { data, sample_rate: '16000', encoding: 'audio/wav' } }));
-		} catch { }
+
+		if (!session.active) return;
+
+		let sp = session.speakers.get(socket.id);
+		if (!sp || !sp.ws || sp.ws.readyState === WebSocket.CLOSED || sp.ws.readyState === WebSocket.CLOSING) {
+			// Cross-instance or reconnection chunk
+			// We need user name/image for Sarvam metadata. If not on socket, use placeholder
+			const spName = socket.userName || 'User';
+			const ws = createSarvamWS(meetingId, socket.id, spName, null);
+			sp = {
+				userId: socket.userId,
+				ws, name: spName, image: null, streamBuffer: sp?.streamBuffer || '',
+			};
+			session.speakers.set(socket.id, sp);
+		}
+
+		if (sp.ws && sp.ws.readyState === WebSocket.OPEN) {
+			try {
+				sp.ws.send(JSON.stringify({ audio: { data, sample_rate: '16000', encoding: 'audio/wav' } }));
+			} catch { }
+		}
 	});
 
 	// agenda sync
@@ -1100,20 +1146,39 @@ io.on('connection', (socket: any) => {
 
 							try {
 								const actions = await callAIExtractActions(fullText, minutesDoc ? minutesDoc.items : []);
-								const meetingUsers = meeting.participants || [];
+								const hostId = meeting.hostId;
+								let meetingUsers: any[] = [];
+								if (hostId) {
+									const host = await User.findById(hostId);
+									if (host) meetingUsers.push(host);
+								}
+								if (meeting.participants) meetingUsers.push(...meeting.participants);
 
 								for (const a of actions) {
 									let assigneeId = null;
 									if (a.assignee) {
-										const safeAssignee = a.assignee.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-										const matchedParticipant = meetingUsers.find((u: any) =>
-											u.name?.toLowerCase() === a.assignee.toLowerCase() ||
-											u.email?.toLowerCase() === a.assignee.toLowerCase()
-										);
+										const safeAssignee = a.assignee.trim().replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+										const extracted = a.assignee.trim().toLowerCase();
+										
+										const matchedParticipant = meetingUsers.find((u: any) => {
+											const userName = (u.name || '').toLowerCase();
+											const userEmail = (u.email || '').toLowerCase();
+											return userName === extracted ||
+												userEmail === extracted ||
+												userName.includes(extracted) ||
+												extracted.includes(userName);
+										});
+
 										if (matchedParticipant) {
 											assigneeId = matchedParticipant._id;
 										} else if (User) {
-											const globalUser = await User.findOne({ name: { $regex: new RegExp(`^${safeAssignee}$`, 'i') } });
+											const globalUser = await User.findOne({
+												$or: [
+													{ name: { $regex: new RegExp(`^${safeAssignee}$`, 'i') } },
+													{ name: { $regex: new RegExp(safeAssignee, 'i') } },
+													{ email: { $regex: new RegExp(`^${safeAssignee}$`, 'i') } }
+												]
+											});
 											if (globalUser) assigneeId = globalUser._id;
 										}
 									}
@@ -1328,7 +1393,14 @@ io.on('connection', (socket: any) => {
 		}
 	});
 
-	socket.on('join_meeting', ({ meetingId }: any) => { if (meetingId) socket.join(`meeting:${meetingId}`); });
+	socket.on('join_meeting', ({ meetingId, name, profileImage }: any) => {
+		if (meetingId) {
+			socket.join(`meeting:${meetingId}`);
+			// Persist metadata for transcription segments
+			socket.userName = name || (socket as any).user?.name || 'User';
+			socket.profileImage = profileImage || null;
+		}
+	});
 	socket.on('leave_meeting', ({ meetingId }: any) => { if (meetingId) socket.leave(`meeting:${meetingId}`); });
 
 	socket.on('disconnect', () => {
@@ -1421,6 +1493,58 @@ cron.schedule('0 * * * *', async () => {
 	}
 });
 
+// ── LiveKit Token Endpoint ──────────────────────────────────
+app.get('/api/meetings/:id/token', protect, async (req: any, res: any) => {
+	try {
+		const apiKey = process.env.LIVEKIT_API_KEY;
+		const apiSecret = process.env.LIVEKIT_API_SECRET;
+		if (!apiKey || !apiSecret) {
+			return res.status(500).json({ message: 'LiveKit credentials not configured on server' });
+		}
+
+		const meetingId = req.params.id;
+		const userId = req.user.id;
+		const userName = req.user.name || 'User';
+
+		// Verify user is a participant of this meeting
+		let isParticipant = false;
+		if (usingMongoFlag && Meeting) {
+			const meeting = await Meeting.findById(meetingId);
+			if (meeting) {
+				const uid = String(userId);
+				const hostId = meeting.hostId ? String(meeting.hostId) : '';
+				const participants = Array.isArray(meeting.participants) ? meeting.participants : [];
+				const isHost = hostId === uid;
+				const isInvited = participants.some((p: any) => {
+					const pId = String(p?._id || p?.id || p || '');
+					return pId && pId === uid;
+				});
+				isParticipant = isHost || isInvited;
+			}
+		} else {
+			const memMtg = inMemoryMeetings.find((m: any) => String(m.id || m._id) === String(meetingId));
+			if (memMtg) {
+				const uid = String(userId);
+				isParticipant = String(memMtg.hostId) === uid || (memMtg.participants || []).some((p: any) => String(p) === uid);
+			}
+		}
+
+		if (!isParticipant) {
+			return res.status(403).json({ message: 'You are not a participant of this meeting' });
+		}
+
+		const at = new AccessToken(apiKey, apiSecret, {
+			identity: userId,
+			name: userName,
+		});
+		at.addGrant({ roomJoin: true, room: meetingId });
+
+		res.json({ token: await at.toJwt() });
+	} catch (error: any) {
+		res.status(500).json({ message: 'Server error generating token', error: error.message });
+	}
+});
+
 // ── Brief on-demand endpoint ─────────────────────────────────
 app.get('/api/meetings/:id/brief', protect, async (req: any, res: any) => {
 	try {
@@ -1441,10 +1565,13 @@ app.get('/mcms/*path', (req: any, res: any) => {
 	res.sendFile(path.join(CLIENT_BUILD, 'index.html'));
 });
 
-// start server
-server.listen(PORT, () => {
-	console.log(`\n🚀 MCMS Backend running at http://localhost:${PORT}`);
-	console.log(`🤖 AI Service URL: ${process.env.AI_SERVICE_URL || 'http://localhost:8000'}`);
-	console.log(`📦 Storage: ${usingMongoFlag ? 'MongoDB (Persistent)' : 'In-Memory (Volatile)'}`);
-	console.log(`📡 WebRTC signaling uses in-memory rooms: run exactly ONE server instance (scale=1 on your host). Multiple processes cannot see each other’s sockets without a Socket.IO cluster adapter.\n`);
-});
+	// start server
+	server.listen(PORT, () => {
+		console.log(`\n🚀 MCMS Backend running at http://localhost:${PORT}`);
+		console.log(`🤖 AI Service URL: ${process.env.AI_SERVICE_URL || 'http://localhost:8000'}`);
+		console.log(`📦 Storage: ${usingMongoFlag ? 'MongoDB (Persistent)' : 'In-Memory (Volatile)'}`);
+		console.log(`📡 WebRTC signaling uses in-memory rooms: run exactly ONE server instance (scale=1 on your host). Multiple processes cannot see each other’s sockets without a Socket.IO cluster adapter.\n`);
+	});
+}
+
+runApplication();

@@ -235,7 +235,7 @@ export default function VideoArea({
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${JSON.parse(localStorage.getItem('user') || '{}').token}`
+          'Authorization': `Bearer ${JSON.parse(localStorage.getItem('mcms_userInfo') || '{}').token}`
         },
         body: JSON.stringify({ title, category: type }),
       });

@@ -41,11 +41,15 @@ function shouldAutoCompleteMeeting(meeting: any, now = new Date()) {
 }
 
 function isUserParticipant(meeting: any, userId: string): boolean {
-    const uid = String(userId);
-    const hostId = meeting?.hostId ? String(meeting.hostId) : null;
+    const uid = String(userId || '');
+    if (!uid) return false;
+    const hostId = meeting?.hostId ? String(meeting.hostId) : '';
     if (hostId && hostId === uid) return true;
     if (!Array.isArray(meeting?.participants)) return false;
-    return meeting.participants.some((p: any) => String(p?._id || p?.id || p) === uid);
+    return meeting.participants.some((p: any) => {
+        const pId = String(p?._id || p?.id || p || '');
+        return pId && pId === uid;
+    });
 }
 
 export = function ({ User, Meeting, Poll, Notification, Agenda, protect, usingMongo, emitToUser, sendRsvpEmail, generateICS, CLIENT_URL, inMemoryMeetings, inMemoryAgendas }: any) {
