@@ -9,7 +9,7 @@ import ResourcePin = require('../pin/pin.schema');
 import Transcript = require('../transcript/transcript.schema');
 import { sanitizeTextSearch, escapeRegex } from '../../utils/searchHelpers';
 
-export = function ({ Meeting, protect, usingMongo, callAISummarize, callAIMeetingSummary, callAIExtractActions, inMemoryMeetingSummaries, inMemoryMeetings, inMemoryAgendas, inMemoryTranscripts, inMemoryActionItems }: any) {
+export = function ({ User, Meeting, protect, usingMongo, callAISummarize, callAIMeetingSummary, callAIExtractActions, inMemoryMeetingSummaries, inMemoryMeetings, inMemoryAgendas, inMemoryTranscripts, inMemoryActionItems }: any) {
 
 	async function meetingIdsMatchingTextSearch(qRaw: string): Promise<mongoose.Types.ObjectId[]> {
 		const q = (qRaw || '').trim();
@@ -418,6 +418,11 @@ export = function ({ Meeting, protect, usingMongo, callAISummarize, callAIMeetin
 								);
 								if (matchedParticipant) {
 									assigneeId = matchedParticipant._id;
+								} else if (User) {
+									const globalUser = await User.findOne({
+										name: { $regex: new RegExp(`^${safeAssignee}$`, "i") }
+									});
+									if (globalUser) assigneeId = globalUser._id;
 								}
 							}
 
@@ -535,6 +540,91 @@ export = function ({ Meeting, protect, usingMongo, callAISummarize, callAIMeetin
 			);
 
 			return res.json({ summary: fallbackSummary });
+		} catch (error: any) {
+			res.status(500).json({ message: 'Server error', error: error.message });
+		}
+	});
+
+	router.post('/:meetingId/extract-actions', protect, async (req: any, res: any) => {
+		try {
+			if (!usingMongo()) return res.json({ actions: [] });
+
+			const [meeting, minutesDoc, transcripts, existingActions] = await Promise.all([
+				Meeting.findById(req.params.meetingId).lean(),
+				Minutes.findOne({ meetingId: req.params.meetingId }).lean(),
+				Transcript.find({ meetingId: req.params.meetingId }).sort({ startTime: 1, createdAt: 1 }).lean(),
+				ActionItem.find({ meetingId: req.params.meetingId }).lean(),
+			]);
+
+			if (!meeting || transcripts.length === 0) return res.json({ actions: [] });
+			if (!callAIExtractActions) return res.status(400).json({ message: 'AI Extraction not available' });
+
+			const transcriptText = transcripts.map((t: any) => `${t.speaker}: ${t.text}`).join('\n');
+			const minutesItemsForAi = ((minutesDoc as any)?.items || []).map((item: any) => ({
+				id: item.id,
+				title: item.title,
+				status: item.status,
+				notes: item.notes || '',
+				duration: item.duration,
+			}));
+			const extractedActions = await callAIExtractActions(transcriptText, minutesItemsForAi);
+			
+			// Save extracted actions
+			if (extractedActions && extractedActions.length > 0) {
+				let meetingUsers: any[] = (meeting as any).participants || [];
+				if ((meeting as any).participants && (meeting as any).participants.length > 0 && (meeting as any).participants[0].name === undefined) {
+					// Try to populate if it wasn't
+					const populatedMeeting = await Meeting.findById((meeting as any)._id).populate('participants', 'name email').lean();
+					if (populatedMeeting) meetingUsers = populatedMeeting.participants;
+				}
+				
+				for (const a of extractedActions) {
+					const safeTitle = a.title.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+					const exists = await ActionItem.findOne({
+						meetingId: req.params.meetingId,
+						title: { $regex: new RegExp(`^${safeTitle}$`, "i") },
+					});
+					if (exists) continue;
+
+					let assigneeId = null;
+					if (a.assignee) {
+						const safeAssignee = a.assignee.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+						const matchedParticipant = meetingUsers.find(
+							(u: any) =>
+								u.name?.toLowerCase() === a.assignee.toLowerCase() ||
+								u.email?.toLowerCase() === a.assignee.toLowerCase(),
+						);
+						if (matchedParticipant) {
+							assigneeId = matchedParticipant._id;
+						} else if (User) {
+							const globalUser = await User.findOne({
+								name: { $regex: new RegExp(`^${safeAssignee}$`, "i") }
+							});
+							if (globalUser) assigneeId = globalUser._id;
+						}
+					}
+
+					await ActionItem.create({
+						meetingId: req.params.meetingId,
+						title: a.title,
+						assigneeName: a.assignee || null,
+						assignee: assigneeId,
+						category: a.category || "Technical",
+						status: "pending",
+						deadline: a.deadline || null,
+						source: "ai-extracted",
+						aiConfidence: a.confidence || null,
+					});
+				}
+			}
+
+			const updatedActionItems = await ActionItem.find({ meetingId: req.params.meetingId }).populate('assignee', 'name email').sort({ createdAt: 1 }).lean();
+			return res.json({ actions: updatedActionItems.map((i: any) => ({
+				id: i._id, title: i.title,
+				assignee: i.assigneeName || i.assignee?.name || 'Unassigned',
+				category: i.category, status: i.status, deadline: i.deadline,
+				source: i.source,
+			})) });
 		} catch (error: any) {
 			res.status(500).json({ message: 'Server error', error: error.message });
 		}

@@ -319,6 +319,7 @@ export default function ArchiveView({ fetchWithAuth }: ArchiveViewProps) {
     const [loadingSummary, setLoadingSummary] = useState(false);
     const [finalSummary, setFinalSummary] = useState<ArchiveDetail['meetingSummary']>(null);
     const [loadingFinalSummary, setLoadingFinalSummary] = useState(false);
+    const [extractingActions, setExtractingActions] = useState(false);
     const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
     const search = useCallback(async (searchInput: string) => {
@@ -381,6 +382,20 @@ export default function ArchiveView({ fetchWithAuth }: ArchiveViewProps) {
             console.error('Failed to load final summary:', err);
         }
         setLoadingFinalSummary(false);
+    };
+
+    const extractActionItems = async (meetingId: string) => {
+        setExtractingActions(true);
+        try {
+            const res = await (fetchWithAuth || fetch)(`${API_BASE}/archive/${meetingId}/extract-actions`, { method: 'POST' });
+            if (res.ok) {
+                const data = await res.json();
+                setDetail((prev) => prev ? ({ ...prev, actionItems: data.actions || [] }) : prev);
+            }
+        } catch (err) {
+            console.error('Failed to extract action items:', err);
+        }
+        setExtractingActions(false);
     };
 
     const loadSummary = async (meetingId: string) => {
@@ -483,7 +498,7 @@ export default function ArchiveView({ fetchWithAuth }: ArchiveViewProps) {
                     </div>
                 )}
 
-                {detail.actionItems.length > 0 && (
+                {detail.actionItems.length > 0 ? (
                     <div style={{ marginBottom: '1.5rem' }}>
                         <h3 style={{ fontSize: '0.875rem', fontWeight: 600, marginBottom: '0.5rem' }}>
                             <Icon icon={FlashIcon} size={14} /> Action Items
@@ -505,7 +520,20 @@ export default function ArchiveView({ fetchWithAuth }: ArchiveViewProps) {
                             </div>
                         ))}
                     </div>
-                )}
+                ) : (Object.keys(detail.transcriptsByAgenda).length > 0 && (
+                    <div style={{ marginBottom: '1.5rem' }}>
+                        <h3 style={{ fontSize: '0.875rem', fontWeight: 600, marginBottom: '0.5rem' }}>
+                            <Icon icon={FlashIcon} size={14} /> Action Items
+                        </h3>
+                        <button
+                            className="btn btn-sm btn-primary"
+                            onClick={() => extractActionItems(selectedMeeting)}
+                            disabled={extractingActions}
+                        >
+                            {extractingActions ? 'Extracting...' : 'Extract Action Items from Transcript'}
+                        </button>
+                    </div>
+                ))}
 
                 {detail.pins.length > 0 && (
                     <div>
