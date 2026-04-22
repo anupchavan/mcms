@@ -168,6 +168,17 @@ function DashboardApp() {
   const [liveParticipants, setLiveParticipants] = useState<any[]>([]);
   const meetingLayoutRef = useRef<HTMLDivElement | null>(null);
 
+  const setMeetingQueryParam = useCallback((meetingId?: string | null) => {
+    if (typeof window === "undefined") return;
+    const url = new URL(window.location.href);
+    if (meetingId) {
+      url.searchParams.set("meeting", meetingId);
+    } else {
+      url.searchParams.delete("meeting");
+    }
+    window.history.replaceState({}, "", url.toString());
+  }, []);
+
   const triggerAddActionItem = useCallback(() => {
     setRightPanelOpen(true);
     setAddActionItemTrigger(t => t + 1);
@@ -211,14 +222,25 @@ function DashboardApp() {
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const meetingId = params.get('meeting');
-    if (meetingId && meetings.length > 0) {
-      const meeting = meetings.find(m => (m.id || m._id)?.toString() === meetingId.toString());
-      if (meeting) {
-        setSelectedMeeting(meeting);
-        setCurrentView('meeting');
-      }
+    if (!meetingId || meetings.length === 0) return;
+
+    const meeting = meetings.find(m => (m.id || m._id)?.toString() === meetingId.toString());
+    if (meeting) {
+      setSelectedMeeting(meeting);
+      setCurrentView('meeting');
     }
   }, [meetings]);
+
+  useEffect(() => {
+    if (!selectedMeeting) return;
+    const selectedMeetingId = (selectedMeeting.id || selectedMeeting._id)?.toString();
+    if (!selectedMeetingId) return;
+
+    const refreshedMeeting = meetings.find((meeting) => (meeting.id || meeting._id)?.toString() === selectedMeetingId);
+    if (refreshedMeeting && refreshedMeeting !== selectedMeeting) {
+      setSelectedMeeting(refreshedMeeting);
+    }
+  }, [meetings, selectedMeeting]);
 
   useEffect(() => {
     if (typeof document !== "undefined") document.documentElement.setAttribute("data-theme", theme);
@@ -353,7 +375,6 @@ function DashboardApp() {
       if (res.ok) {
         const data = await res.json();
         setMeetings(data);
-        if (data.length > 0) setSelectedMeeting(data[0]);
       }
     } catch (err) { console.error("Failed to fetch meetings:", err); }
   };
@@ -410,6 +431,7 @@ function DashboardApp() {
         const newMeeting = await res.json();
         setMeetings(prev => [newMeeting, ...prev]);
         setSelectedMeeting(newMeeting);
+        setMeetingQueryParam((newMeeting.id || newMeeting._id)?.toString());
         return newMeeting;
       }
     } catch (err) { console.error("Failed to create meeting:", err); }
@@ -421,6 +443,7 @@ function DashboardApp() {
       const mid = selectedMeeting.id || selectedMeeting._id;
       setMeetings(prev => prev.map(m => (String(m.id || m._id) === String(mid) ? { ...m, status: 'completed' } : m)));
       setSelectedMeeting(null);
+      setMeetingQueryParam(null);
       setCurrentView('dashboard');
       fetchMeetings();
     }
@@ -478,7 +501,7 @@ function DashboardApp() {
               </p>
               <div className="meeting-list">
                 {upcomingMeetings.map(meeting => (
-                  <div key={meeting.id} className="meeting-card glass-card" onClick={() => setSelectedMeeting(meeting)}>
+                  <div key={meeting.id} className="meeting-card glass-card" onClick={() => { setSelectedMeeting(meeting); setMeetingQueryParam((meeting.id || meeting._id)?.toString()); }}>
                     {meeting.status === "pending_poll" && meeting.pollId && (
                       <button className="btn btn-sm btn-primary" style={{ position: 'absolute', top: 'var(--lk-size-md)', right: 'var(--lk-size-md)' }} onClick={(e) => { e.stopPropagation(); setPollMeetingId(meeting.id); }}>Vote</button>
                     )}
@@ -605,7 +628,7 @@ function DashboardApp() {
                 <div
                   key={meeting.id}
                   className={`meeting-card glass-card ${selectedMeeting?.id === meeting.id ? "selected" : ""}`}
-                  onClick={() => { setSelectedMeeting(meeting); setCurrentView("meeting"); }}
+                  onClick={() => { setSelectedMeeting(meeting); setMeetingQueryParam((meeting.id || meeting._id)?.toString()); setCurrentView("meeting"); }}
                   style={selectedMeeting?.id === meeting.id ? { borderColor: "var(--primary-border)" } : {}}
                 >
                   {meeting.status === "pending_poll" && meeting.pollId && (
@@ -683,7 +706,7 @@ function DashboardApp() {
         onOpenPoll={(meetingId) => setPollMeetingId(meetingId)}
         searchInputRef={searchInputRef}
         onViewChange={setCurrentView}
-        onSearchResultSelect={(meeting) => { setSelectedMeeting(meeting); setCurrentView('meeting'); }}
+        onSearchResultSelect={(meeting) => { setSelectedMeeting(meeting); setMeetingQueryParam((meeting.id || meeting._id)?.toString()); setCurrentView('meeting'); }}
       />
 
       <div className="main-area">
