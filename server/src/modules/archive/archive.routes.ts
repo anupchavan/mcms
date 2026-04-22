@@ -9,7 +9,7 @@ import ResourcePin = require('../pin/pin.schema');
 import Transcript = require('../transcript/transcript.schema');
 import { sanitizeTextSearch, escapeRegex } from '../../utils/searchHelpers';
 
-export = function ({ Meeting, protect, usingMongo, callAISummarize, callAIMeetingSummary, inMemoryMeetingSummaries, inMemoryMeetings, inMemoryAgendas, inMemoryTranscripts, inMemoryActionItems }: any) {
+export = function ({ Meeting, protect, usingMongo, callAISummarize, callAIMeetingSummary, callAIExtractActions, inMemoryMeetingSummaries, inMemoryMeetings, inMemoryAgendas, inMemoryTranscripts, inMemoryActionItems }: any) {
 
 	async function meetingIdsMatchingTextSearch(qRaw: string): Promise<mongoose.Types.ObjectId[]> {
 		const q = (qRaw || '').trim();
@@ -351,7 +351,9 @@ export = function ({ Meeting, protect, usingMongo, callAISummarize, callAIMeetin
 				});
 			}
 
-			const [meeting, agenda, minutesDoc, transcripts, actionItems] = await Promise.all([
+			let actionItems;
+			let meeting, agenda, minutesDoc, transcripts;
+			[meeting, agenda, minutesDoc, transcripts, actionItems] = await Promise.all([
 				Meeting.findById(req.params.meetingId).lean(),
 				Agenda.findOne({ meetingId: req.params.meetingId }).lean(),
 				Minutes.findOne({ meetingId: req.params.meetingId }).lean(),
@@ -372,6 +374,72 @@ export = function ({ Meeting, protect, usingMongo, callAISummarize, callAIMeetin
 						model: 'empty-transcript',
 					},
 				});
+			}
+
+			let aiError = null;
+
+			// Post-meeting AI Action Item Extraction
+			if (callAIExtractActions && transcripts.length > 0) {
+				try {
+					const transcriptText = transcripts.map((t: any) => `${t.speaker}: ${t.text}`).join('\n');
+					const minutesItemsForAi = ((minutesDoc as any)?.items || []).map((item: any) => ({
+						id: item.id,
+						title: item.title,
+						status: item.status,
+						notes: item.notes || '',
+						duration: item.duration,
+					}));
+					const extractedActions = await callAIExtractActions(transcriptText, minutesItemsForAi);
+					
+					// Save extracted actions
+					if (extractedActions && extractedActions.length > 0) {
+						let meetingUsers: any[] = meeting.participants || [];
+						if (meeting.participants && meeting.participants.length > 0 && meeting.participants[0].name === undefined) {
+							// Try to populate if it wasn't
+							const populatedMeeting = await Meeting.findById(meeting._id).populate('participants', 'name email').lean();
+							if (populatedMeeting) meetingUsers = populatedMeeting.participants;
+						}
+						
+						for (const a of extractedActions) {
+							const safeTitle = a.title.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+							const exists = await ActionItem.findOne({
+								meetingId: req.params.meetingId,
+								title: { $regex: new RegExp(`^${safeTitle}$`, "i") },
+							});
+							if (exists) continue;
+
+							let assigneeId = null;
+							if (a.assignee) {
+								const safeAssignee = a.assignee.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+								const matchedParticipant = meetingUsers.find(
+									(u: any) =>
+										u.name?.toLowerCase() === a.assignee.toLowerCase() ||
+										u.email?.toLowerCase() === a.assignee.toLowerCase(),
+								);
+								if (matchedParticipant) {
+									assigneeId = matchedParticipant._id;
+								}
+							}
+
+							await ActionItem.create({
+								meetingId: req.params.meetingId,
+								title: a.title,
+								assigneeName: a.assignee || null,
+								assignee: assigneeId,
+								category: a.category || "Technical",
+								status: "pending",
+								deadline: a.deadline || null,
+								source: "ai-extracted",
+								aiConfidence: a.confidence || null,
+							});
+						}
+						// Refresh actionItems list after extraction
+						actionItems = await ActionItem.find({ meetingId: req.params.meetingId }).populate('assignee', 'name email').sort({ createdAt: 1 }).lean();
+					}
+				} catch(e: any) {
+					console.error('Post-meeting AI action extraction failed:', e.message);
+					aiError = e.message;
+				}
 			}
 
 			if (callAIMeetingSummary) {
@@ -420,6 +488,7 @@ export = function ({ Meeting, protect, usingMongo, callAISummarize, callAIMeetin
 					return res.json({ summary });
 				} catch (e: any) {
 					console.error('AI final summary failed, using fallback:', e.message);
+					aiError = e.message;
 				}
 			}
 
@@ -447,7 +516,7 @@ export = function ({ Meeting, protect, usingMongo, callAISummarize, callAIMeetin
 				pending_items: pendingItems,
 				decisions: [],
 				next_steps: pendingItems.slice(0, 5),
-				model: 'server-fallback',
+				model: `server-fallback${aiError ? ' [' + aiError.substring(0, 50) + ']' : ''}`,
 			};
 			await MeetingSummary.findOneAndUpdate(
 				{ meetingId: req.params.meetingId },

@@ -310,6 +310,7 @@ const deps = {
   inMemoryMeetingSummaries,
   MeetingSummary,
   callAISummarize,
+  callAIExtractActions,
   callAIMeetingSummary,
   io,
 };

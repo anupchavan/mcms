@@ -1,4 +1,5 @@
-const AI_SERVICE_URL = process.env.AI_SERVICE_URL || 'http://localhost:8000';
+const _rawUrl = process.env.AI_SERVICE_URL || 'http://localhost:8000';
+const AI_SERVICE_URL = _rawUrl.replace(/\/+$/, '');
 
 async function callAISummarize(transcriptSegments: any[], agendaItems: any[]) {
     try {
@@ -7,7 +8,10 @@ async function callAISummarize(transcriptSegments: any[], agendaItems: any[]) {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ segments: transcriptSegments, agenda_items: agendaItems }),
         });
-        if (!resp.ok) throw new Error(`AI service returned ${resp.status}`);
+        if (!resp.ok) {
+            const errText = await resp.text().catch(() => '');
+            throw new Error(`AI req failed ${resp.status}: ${errText}`);
+        }
         const data: any = await resp.json();
         return data.summaries || {};
     } catch (error: any) {
@@ -23,7 +27,10 @@ async function callAIExtractActions(transcriptText: string, minutesItems: any[] 
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ text: transcriptText, minutes_items: minutesItems }),
         });
-        if (!resp.ok) throw new Error(`AI service returned ${resp.status}`);
+        if (!resp.ok) {
+            const errText = await resp.text().catch(() => '');
+            throw new Error(`AI req failed ${resp.status}: ${errText}`);
+        }
         const data: any = await resp.json();
         return data.actions || [];
     } catch (error: any) {
@@ -45,7 +52,10 @@ async function callAIMeetingSummary(payload: {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(payload),
         });
-        if (!resp.ok) throw new Error(`AI service returned ${resp.status}`);
+        if (!resp.ok) {
+            const errText = await resp.text().catch(() => '');
+            throw new Error(`AI req failed ${resp.status}: ${errText}`);
+        }
         const data: any = await resp.json();
         return data.summary || {};
     } catch (error: any) {
