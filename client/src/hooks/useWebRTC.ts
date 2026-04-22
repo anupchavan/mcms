@@ -155,7 +155,10 @@ export default function useWebRTC(
 
     const leaveRoom = useCallback(() => {
         if (roomRef.current) {
-            roomRef.current.disconnect();
+            try {
+                roomRef.current.localParticipant.setScreenShareEnabled(false).catch(() => {});
+            } catch (e) {}
+            roomRef.current.disconnect(false);
             roomRef.current = null;
             setRoom(null);
             setIsJoined(false);
