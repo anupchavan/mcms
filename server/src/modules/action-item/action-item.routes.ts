@@ -2,7 +2,7 @@ import express from 'express';
 const router = express.Router();
 import ActionItem = require('./action-item.schema');
 
-export = function ({ protect, usingMongo, Notification, emitToUser, inMemoryActionItems, io, Meeting }: any) {
+export = function ({ protect, usingMongo, Notification, emitToUser, inMemoryActionItems, io, Meeting, inMemoryMeetings }: any) {
     const getUserId = (req: any) => String(req.user?.id || req.user?._id || '');
     const getHostId = (meeting: any) => String(meeting?.hostId?._id || meeting?.hostId || '');
     const getAssigneeId = (item: any) => String(item?.assignee?._id || item?.assignee || '');
@@ -31,6 +31,7 @@ export = function ({ protect, usingMongo, Notification, emitToUser, inMemoryActi
             meetingId: (item.meetingId?._id || item.meetingId)?.toString(),
             meetingTitle: item.meetingId?.title || null,
             meetingHostId: (item.meetingId?.hostId?._id || item.meetingId?.hostId)?.toString() || null,
+            assignedAt: item.createdAt || null,
         };
     };
 
@@ -60,6 +61,54 @@ export = function ({ protect, usingMongo, Notification, emitToUser, inMemoryActi
                 return res.json(items.map(processItem));
             }
             res.json([]);
+        } catch (error: any) {
+            res.status(500).json({ message: 'Server error', error: error.message });
+        }
+    });
+
+    router.get('/mine/overview', protect, async (req: any, res: any) => {
+        try {
+            const userId = getUserId(req);
+
+            if (usingMongo() && ActionItem && Meeting) {
+                const hostedMeetings = await Meeting.find({ hostId: userId }).select('_id');
+                const hostedMeetingIds = hostedMeetings.map((meeting: any) => meeting._id);
+
+                const [assignedToMe, assignedByMe] = await Promise.all([
+                    ActionItem.find({ assignee: userId })
+                        .populate('meetingId', 'title hostId')
+                        .populate('assignee', 'name email')
+                        .sort({ createdAt: -1 }),
+                    hostedMeetingIds.length > 0
+                        ? ActionItem.find({
+                            meetingId: { $in: hostedMeetingIds },
+                            assignee: { $nin: [null, userId] },
+                        })
+                            .populate('meetingId', 'title hostId')
+                            .populate('assignee', 'name email')
+                            .sort({ createdAt: -1 })
+                        : Promise.resolve([]),
+                ]);
+
+                return res.json({
+                    assignedToMe: assignedToMe.map(processItem),
+                    assignedByMe: assignedByMe.map(processItem),
+                });
+            }
+
+            const hostedMeetingIds = new Set(
+                (inMemoryMeetings || [])
+                    .filter((meeting: any) => String(meeting.hostId || '') === userId)
+                    .map((meeting: any) => String(meeting.id || meeting._id)),
+            );
+            const allItems = Object.entries(inMemoryActionItems || {}).flatMap(([meetingId, items]: [string, any]) =>
+                (items || []).map((item: any) => ({ ...item, meetingId })),
+            );
+
+            return res.json({
+                assignedToMe: allItems.filter((item: any) => String(item.assigneeId || '') === userId),
+                assignedByMe: allItems.filter((item: any) => hostedMeetingIds.has(String(item.meetingId || '')) && String(item.assigneeId || '') !== userId),
+            });
         } catch (error: any) {
             res.status(500).json({ message: 'Server error', error: error.message });
         }

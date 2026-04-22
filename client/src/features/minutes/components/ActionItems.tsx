@@ -46,6 +46,16 @@ function formatDeadlineDisplay(deadline: string | undefined): string {
     return deadline;
 }
 
+function formatAssignedDate(dateValue: string | undefined): string {
+    if (!dateValue) return '';
+    const date = new Date(dateValue);
+    if (Number.isNaN(date.getTime())) return dateValue;
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+}
+
 interface ActionItem {
     id?: string;
     _id?: string;
@@ -56,6 +66,7 @@ interface ActionItem {
     assigneeId?: string;    // The actual User ID (ObjectId)
     assigneeName?: string;  // Explicit display name field
     deadline?: string;
+    assignedAt?: string;
     source?: string;
     meetingTitle?: string;
     meetingHostId?: string;
@@ -63,6 +74,8 @@ interface ActionItem {
 
 interface ActionItemsProps {
     items: ActionItem[];
+    sectionTitle?: string;
+    emptyMessage?: string;
     meetingId?: string;
     meetingHostId?: string;
     fetchWithAuth?: (url: string, options?: RequestInit) => Promise<Response>;
@@ -72,7 +85,7 @@ interface ActionItemsProps {
     participants?: any[];
 }
 
-export default function ActionItems({ items, meetingId, meetingHostId, fetchWithAuth, onRefresh, addActionItemTrigger, onAddTriggered, participants }: ActionItemsProps) {
+export default function ActionItems({ items, sectionTitle = 'Action Items', emptyMessage = 'No action items found.', meetingId, meetingHostId, fetchWithAuth, onRefresh, addActionItemTrigger, onAddTriggered, participants }: ActionItemsProps) {
     const { user } = useAuth() || {};
     const currentUserId = String(user?.id || user?._id || '');
     const getItemHostId = (item: ActionItem) => String(item.meetingHostId || meetingHostId || '');
@@ -221,13 +234,16 @@ export default function ActionItems({ items, meetingId, meetingHostId, fetchWith
             <div className="section-header">
                 <div className="section-title-container">
                     <Icon icon={FlashIcon} size={14} />
-                    <span className="section-title">Action Items</span>
+                    <span className="section-title">{sectionTitle}</span>
                     <span className="chip chip-blue">{items.length}</span>
                 </div>
             </div>
 
             <div className="action-items-body">
                 <div className="action-items-list">
+                    {items.length === 0 && (
+                        <div className="action-items-empty-state">{emptyMessage}</div>
+                    )}
                     {items.map((item, index) => {
                         const status = statusConfig[item.status] || statusConfig.pending;
                         const isEditing = editingId === (item.id || item._id);
@@ -353,15 +369,24 @@ export default function ActionItems({ items, meetingId, meetingHostId, fetchWith
                                         {item.assignee}
                                     </span>
                                     {item.meetingTitle && (
-                                        <span className="ai-card-meta-item" style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '100px' }} title={item.meetingTitle}>
+                                        <span className="ai-card-meta-item" title={item.meetingTitle}>
                                             <Icon icon={Video01Icon} size={10} />
-                                            {item.meetingTitle}
+                                            <span className="ai-card-meta-label">Meeting:</span>
+                                            <span className="ai-card-meta-value">{item.meetingTitle}</span>
+                                        </span>
+                                    )}
+                                    {item.assignedAt && (
+                                        <span className="ai-card-meta-item">
+                                            <Icon icon={Clock01Icon} size={10} />
+                                            <span className="ai-card-meta-label">Assigned:</span>
+                                            <span className="ai-card-meta-value">{formatAssignedDate(item.assignedAt)}</span>
                                         </span>
                                     )}
                                     {item.deadline && (
-                                        <span className="ai-card-deadline">
+                                        <span className="ai-card-deadline ai-card-meta-item">
                                             <Icon icon={Clock01Icon} size={10} />
-                                            {formatDeadlineDisplay(item.deadline)}
+                                            <span className="ai-card-meta-label">Deadline:</span>
+                                            <span className="ai-card-meta-value">{formatDeadlineDisplay(item.deadline)}</span>
                                         </span>
                                     )}
                                 </div>

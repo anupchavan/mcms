@@ -1019,6 +1019,12 @@ input[type="date"].input-field {
   overflow-y: auto;
 }
 
+.action-items-empty-state {
+  color: var(--text-muted);
+  font-size: 0.8125rem;
+  padding: 0.5rem 0.25rem 0.75rem;
+}
+
 .action-item-deadline-block {
   margin-top: 0.35rem;
   display: flex;
@@ -1086,12 +1092,28 @@ input[type="date"].input-field {
   padding-left: 1.5rem;
 }
 
-.ai-card-assignee, .ai-card-deadline {
+.ai-card-assignee, .ai-card-deadline, .ai-card-meta-item {
   display: flex;
   align-items: center;
   gap: 0.25rem;
   font-size: 0.6875rem;
   color: var(--text-muted);
+}
+
+.ai-card-meta-item {
+  min-width: 0;
+}
+
+.ai-card-meta-label {
+  color: var(--text-secondary);
+}
+
+.ai-card-meta-value {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 11rem;
 }
 
 .ai-status-chip {

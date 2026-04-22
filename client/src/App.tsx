@@ -164,7 +164,11 @@ function DashboardApp() {
   const [rightPanelOpen, setRightPanelOpen] = useState(true);
   const [addActionItemTrigger, setAddActionItemTrigger] = useState(0);
   const [addAgendaItemTrigger, setAddAgendaItemTrigger] = useState(0);
-  const [myActionItems, setMyActionItems] = useState<any[]>([]);
+  const [myActionItems, setMyActionItems] = useState<{ assignedToMe: any[]; assignedByMe: any[] }>({
+    assignedToMe: [],
+    assignedByMe: [],
+  });
+  const [tasksTab, setTasksTab] = useState<'assignedToMe' | 'assignedByMe'>('assignedToMe');
   const [liveParticipants, setLiveParticipants] = useState<any[]>([]);
   const meetingLayoutRef = useRef<HTMLDivElement | null>(null);
 
@@ -412,8 +416,14 @@ function DashboardApp() {
 
   const fetchMyActionItems = async () => {
     try {
-      const res = await fetchWithAuth(`${API_BASE}/action-items/mine`);
-      if (res.ok) setMyActionItems(await res.json());
+      const res = await fetchWithAuth(`${API_BASE}/action-items/mine/overview`);
+      if (res.ok) {
+        const data = await res.json();
+        setMyActionItems({
+          assignedToMe: Array.isArray(data.assignedToMe) ? data.assignedToMe : [],
+          assignedByMe: Array.isArray(data.assignedByMe) ? data.assignedByMe : [],
+        });
+      }
     } catch (err) { console.error("Failed to fetch my action items:", err); }
   };
 
@@ -478,13 +488,34 @@ function DashboardApp() {
         );
 
       case "tasks":
+        const activeTaskItems = tasksTab === 'assignedToMe' ? myActionItems.assignedToMe : myActionItems.assignedByMe;
+        const activeTaskTitle = tasksTab === 'assignedToMe' ? 'Assigned To Me' : 'Assigned By Me';
+        const activeTaskEmptyMessage = tasksTab === 'assignedToMe'
+          ? 'No tasks are assigned to you right now.'
+          : 'You have not assigned any tasks to others yet.';
         return (
           <div style={{ flex: 1, overflow: "auto", padding: '1rem' }}>
             <div className="page-header">
               <h2 style={{ fontSize: 'var(--font-size-title2)', fontWeight: 700, marginBottom: '1.5rem' }}>My Tasks</h2>
             </div>
+            <div className="tabs" style={{ marginBottom: '1rem' }}>
+              <button
+                className={`tab ${tasksTab === 'assignedToMe' ? 'active' : ''}`}
+                onClick={() => setTasksTab('assignedToMe')}
+              >
+                Assigned To Me
+              </button>
+              <button
+                className={`tab ${tasksTab === 'assignedByMe' ? 'active' : ''}`}
+                onClick={() => setTasksTab('assignedByMe')}
+              >
+                Assigned By Me
+              </button>
+            </div>
             <ActionItems
-              items={myActionItems}
+              sectionTitle={activeTaskTitle}
+              emptyMessage={activeTaskEmptyMessage}
+              items={activeTaskItems}
               fetchWithAuth={fetchWithAuth}
               onRefresh={fetchMyActionItems}
             />
