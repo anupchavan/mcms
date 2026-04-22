@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import Icon from '../../../shared/components/Icon';
 import ShortcutTooltip from '../../../shared/components/ShortcutTooltip';
+import { useAuth } from '../../../stores/AuthContext';
 import {
     CheckmarkCircle01Icon, Clock01Icon, AlertCircleIcon,
     ArrowRight01Icon,
@@ -57,11 +58,13 @@ interface ActionItem {
     deadline?: string;
     source?: string;
     meetingTitle?: string;
+    meetingHostId?: string;
 }
 
 interface ActionItemsProps {
     items: ActionItem[];
     meetingId?: string;
+    meetingHostId?: string;
     fetchWithAuth?: (url: string, options?: RequestInit) => Promise<Response>;
     onRefresh?: () => void;
     addActionItemTrigger?: number;
@@ -69,7 +72,15 @@ interface ActionItemsProps {
     participants?: any[];
 }
 
-export default function ActionItems({ items, meetingId, fetchWithAuth, onRefresh, addActionItemTrigger, onAddTriggered, participants }: ActionItemsProps) {
+export default function ActionItems({ items, meetingId, meetingHostId, fetchWithAuth, onRefresh, addActionItemTrigger, onAddTriggered, participants }: ActionItemsProps) {
+    const { user } = useAuth() || {};
+    const currentUserId = String(user?.id || user?._id || '');
+    const getItemHostId = (item: ActionItem) => String(item.meetingHostId || meetingHostId || '');
+    const isHostForItem = (item: ActionItem) => Boolean(currentUserId) && getItemHostId(item) === currentUserId;
+    const isAssigneeForItem = (item: ActionItem) => Boolean(currentUserId) && String(item.assigneeId || '') === currentUserId;
+    const canEditStatus = (item: ActionItem) => isHostForItem(item) || isAssigneeForItem(item);
+    const canEditDetails = (item: ActionItem) => isHostForItem(item);
+    const canCreateItems = Boolean(meetingId) && Boolean(currentUserId) && String(meetingHostId || '') === currentUserId;
     const [adding, setAdding] = useState(false);
     const [newTitle, setNewTitle] = useState('');
     const [newCategory, setNewCategory] = useState('Technical');
@@ -106,11 +117,11 @@ export default function ActionItems({ items, meetingId, fetchWithAuth, onRefresh
         setEditData(prev => prev ? { ...prev, [field]: value } : null);
     };
     useEffect(() => {
-        if (addActionItemTrigger && addActionItemTrigger > 0) {
+        if (canCreateItems && addActionItemTrigger && addActionItemTrigger > 0) {
             setAdding(true);
             onAddTriggered?.();
         }
-    }, [addActionItemTrigger, onAddTriggered]);
+    }, [addActionItemTrigger, canCreateItems, onAddTriggered]);
 
     const resetFields = () => {
         setNewTitle('');
@@ -169,10 +180,24 @@ export default function ActionItems({ items, meetingId, fetchWithAuth, onRefresh
     const handleUpdate = async (itemId: string) => {
         if (!editData || !editData.title?.trim()) return;
         try {
+            const assigneeId = typeof editData.assigneeId === 'string' && editData.assigneeId.trim()
+                ? editData.assigneeId
+                : null;
+            const assigneeName = assigneeId
+                ? (editData.assigneeName || editData.assignee || null)
+                : null;
+            const payload = {
+                title: editData.title.trim(),
+                category: editData.category || 'Technical',
+                status: editData.status || 'pending',
+                deadline: editData.deadline || null,
+                assignee: assigneeId,
+                assigneeName,
+            };
             await (fetchWithAuth || fetch)(`${API_BASE}/action-items/${itemId}`, {
                 method: 'PUT',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(editData),
+                body: JSON.stringify(payload),
             });
             setEditingId(null);
             setEditData(null);
@@ -206,6 +231,8 @@ export default function ActionItems({ items, meetingId, fetchWithAuth, onRefresh
                     {items.map((item, index) => {
                         const status = statusConfig[item.status] || statusConfig.pending;
                         const isEditing = editingId === (item.id || item._id);
+                        const allowStatusEdit = canEditStatus(item);
+                        const allowDetailEdit = canEditDetails(item);
 
                         if (isEditing && editData) {
                             return (
@@ -226,9 +253,12 @@ export default function ActionItems({ items, meetingId, fetchWithAuth, onRefresh
                                                 value={editData.assigneeId || ''}
                                                 onChange={e => {
                                                     const p = participants.find(part => (part._id || part.id) === e.target.value);
-                                                    if (p) {
-                                                        setEditData(prev => prev ? { ...prev, assigneeId: p._id || p.id, assignee: p.name } : null);
-                                                    }
+                                                    setEditData(prev => prev ? {
+                                                        ...prev,
+                                                        assignee: p ? (p._id || p.id) : null,
+                                                        assigneeId: p ? (p._id || p.id) : '',
+                                                        assigneeName: p ? p.name : null,
+                                                    } : null);
                                                 }}
                                                 style={{ flex: 1 }}
                                             >
@@ -265,27 +295,16 @@ export default function ActionItems({ items, meetingId, fetchWithAuth, onRefresh
                                         </span>
                                     )}
                                     <div style={{ marginLeft: 'auto', display: 'flex', gap: '2px' }}>
-                                        <button
-                                            className="btn-icon btn-icon-sm"
-                                            style={{ fontSize: '0.5rem' }}
-                                            onClick={() => {
-                                                const statuses = STATUSES;
-                                                const currentIndex = statuses.indexOf(item.status);
-                                                const nextStatus = statuses[(currentIndex + 1) % statuses.length];
-                                                handleStatusChange(item.id || item._id!, nextStatus);
-                                            }}
-                                            title="Cycle status"
-                                        >
-                                            <Icon icon={Clock01Icon} size={10} />
-                                        </button>
-                                        <button
-                                            className="btn-icon btn-icon-sm"
-                                            onClick={() => startEditing(item)}
-                                            title="Edit item"
-                                        >
-                                            <Icon icon={PencilEdit02Icon} size={10} />
-                                        </button>
-                                        {meetingId && (
+                                        {allowDetailEdit && (
+                                            <button
+                                                className="btn-icon btn-icon-sm"
+                                                onClick={() => startEditing(item)}
+                                                title="Edit item"
+                                            >
+                                                <Icon icon={PencilEdit02Icon} size={10} />
+                                            </button>
+                                        )}
+                                        {meetingId && allowDetailEdit && (
                                             <button
                                                 className="btn-icon btn-icon-sm"
                                                 onClick={() => handleDelete(item.id || item._id)}
@@ -301,6 +320,34 @@ export default function ActionItems({ items, meetingId, fetchWithAuth, onRefresh
                                     <span className={`chip ${categoryChips[item.category] || 'chip-blue'}`}>
                                         {item.category}
                                     </span>
+                                    {allowStatusEdit ? (
+                                        <label className="ai-status-control" title="Update status">
+                                            <span className="ai-status-label">Status</span>
+                                            <select
+                                                className={`input-field ai-status-select st-${item.status}`}
+                                                value={item.status}
+                                                onChange={(e) => {
+                                                    const nextStatus = e.target.value;
+                                                    if (nextStatus === item.status) return;
+                                                    handleStatusChange(item.id || item._id!, nextStatus);
+                                                }}
+                                                aria-label={`Update status for ${item.title}`}
+                                            >
+                                                {STATUSES.map((statusKey) => {
+                                                    const option = statusConfig[statusKey] || statusConfig.pending;
+                                                    return (
+                                                        <option key={statusKey} value={statusKey}>
+                                                            {option.label}
+                                                        </option>
+                                                    );
+                                                })}
+                                            </select>
+                                        </label>
+                                    ) : (
+                                        <span className={`chip ai-status-chip st-${item.status}`}>
+                                            {status.label}
+                                        </span>
+                                    )}
                                     <span className="ai-card-assignee" title={item.assignee}>
                                         <Icon icon={ArrowRight01Icon} size={10} />
                                         {item.assignee}
@@ -318,11 +365,12 @@ export default function ActionItems({ items, meetingId, fetchWithAuth, onRefresh
                                         </span>
                                     )}
                                 </div>
+
                             </div>
                         );
                     })}
 
-                    {adding ? (
+                    {canCreateItems && adding ? (
                         <div className="glass-card inline-form-card" onKeyDown={(e: React.KeyboardEvent) => { if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); setAdding(false); resetFields(); } }}>
                             <input
                                 className="input-field"
@@ -396,7 +444,7 @@ export default function ActionItems({ items, meetingId, fetchWithAuth, onRefresh
                             </div>
                         </div>
                     ) : (
-                        meetingId && (
+                        canCreateItems && (
                             <ShortcutTooltip keys={['Shift', 'A']} position="top" fullWidth>
                                 <button
                                     className="btn btn-secondary"

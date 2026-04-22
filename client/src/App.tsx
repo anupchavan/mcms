@@ -568,6 +568,7 @@ function DashboardApp() {
                       <ActionItems
                         items={actionItems}
                         meetingId={selectedMeeting.id}
+                        meetingHostId={selectedMeeting.hostId}
                         fetchWithAuth={fetchWithAuth}
                         onRefresh={() => fetchActionItems(selectedMeeting.id)}
                         addActionItemTrigger={addActionItemTrigger}
