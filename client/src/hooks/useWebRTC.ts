@@ -15,7 +15,7 @@ import {
 } from 'livekit-client';
 
 const LIVEKIT_URL = import.meta.env.VITE_LIVEKIT_URL || 'ws://localhost:7880';
-const SERVER_BASE = (import.meta.env.VITE_API_URL || 'http://localhost:5001').replace(/\/api\/?$/, '');
+const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:5001/api';
 
 export interface PeerState {
     socketId: string; // for backward compatibility, will use identity
@@ -107,7 +107,7 @@ export default function useWebRTC(
             const userStr = localStorage.getItem('mcms_userInfo');
             const tokenHeader = userStr ? JSON.parse(userStr).token : '';
             
-            const res = await fetch(`${SERVER_BASE}/api/meetings/${meetingId}/token`, {
+            const res = await fetch(`${API_BASE}/meetings/${meetingId}/token`, {
                 headers: { 'Authorization': `Bearer ${tokenHeader}` }
             });
             

@@ -27,7 +27,9 @@ import useWebRTC from "../../../hooks/useWebRTC";
 import useTranscriptionCapture from "../../../hooks/useTranscriptionCapture";
 import { useSocket } from "../../../stores/SocketContext";
 
-const SERVER_BASE = (import.meta.env.VITE_API_URL || "http://localhost:5001").replace(/\/api$/, "");
+const _raw = import.meta.env.VITE_API_URL || "http://localhost:5001/api";
+const SERVER_BASE = _raw.replace(/(\/api\/?)+$/, "");
+const API_BASE = `${SERVER_BASE}/api`;
 
 interface VideoTileProps {
   tileId: string;
@@ -231,7 +233,7 @@ export default function VideoArea({
     if (!meetingId || !isHost) return;
     const title = activeNote.trim() || `Action item: ${type}`;
     try {
-      const res = await (fetch as any)(`${SERVER_BASE}/api/action-items/${meetingId}`, {
+      const res = await (fetch as any)(`${API_BASE}/action-items/${meetingId}`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -310,7 +312,7 @@ export default function VideoArea({
     toggleScreenShare,
   } = useWebRTC(socket, meetingId, currentUser);
 
-  useTranscriptionCapture(socket, meetingId || null, localStream, audioEnabled);
+  useTranscriptionCapture(socket, meetingId || null, localStream);
 
   useEffect(() => {
     const list = [];

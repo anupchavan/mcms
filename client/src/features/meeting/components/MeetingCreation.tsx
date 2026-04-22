@@ -59,8 +59,8 @@ interface MeetingCreationProps {
 }
 
 const _raw = import.meta.env.VITE_API_URL || "http://localhost:5001/api";
-const API_BASE = _raw.endsWith("/api") ? _raw : `${_raw}/api`;
-const SERVER_BASE = API_BASE.replace(/\/api$/, "");
+const SERVER_BASE = _raw.replace(/(\/api\/?)+$/, "");
+const API_BASE = `${SERVER_BASE}/api`;
 
 function formatSlotDisplay(date: Date): string {
   const now = new Date();

@@ -12,7 +12,7 @@ const SocketContext = createContext<SocketContextValue | null>(null);
 export const useSocket = () => useContext(SocketContext);
 
 const SOCKET_URL = import.meta.env.VITE_SOCKET_URL
-    || import.meta.env.VITE_API_URL?.replace(/\/api\/?$/, '')
+    || import.meta.env.VITE_API_URL?.replace(/(\/api\/?)+$/, '')
     || 'http://localhost:5001';
 
 interface SocketProviderProps {
