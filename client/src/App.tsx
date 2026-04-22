@@ -7,7 +7,7 @@ import VideoArea from "./features/meeting/components/VideoArea";
 import TranscriptFeed from "./features/transcript/components/TranscriptFeed";
 import MinutesPanel from "./features/minutes/components/MinutesPanel";
 import ActionItems from "./features/minutes/components/ActionItems";
-import MeetingCreation from "./features/meeting/components/MeetingCreation";
+import MeetingCreation from "./modules/meeting/microFrontends/createMeeting/components/MeetingCreation";
 import ProductivityDashboard from "./features/dashboard/components/ProductivityDashboard";
 import PollVoting from "./features/polls/components/PollVoting";
 import ProfileSettings from "./features/profile/components/ProfileSettings";
