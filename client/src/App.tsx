@@ -287,7 +287,7 @@ function DashboardApp() {
     const meetingId = (selectedMeeting.id || selectedMeeting._id)?.toString();
     if (!meetingId) return;
 
-    socket.emit('join_meeting', { meetingId });
+    socket.emit('join_meeting', { meetingId, name: user?.name, profileImage: user?.profileImage });
 
     const handleTranscriptUpdate = (segment: any) => {
       if (segment.meetingId !== meetingId) return;
