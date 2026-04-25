@@ -975,6 +975,12 @@ io.on("connection", (socket: any) => {
     }
   });
 
+  // chat broadcast
+  socket.on("send_chat_message", (msg: any) => {
+    if (!msg || !msg.meetingId) return;
+    io.to(`meeting:${msg.meetingId}`).emit("chat_message", msg);
+  });
+
   // end meeting — only the host may end the meeting for everyone
   socket.on("end_meeting", async ({ meetingId }: any) => {
     if (!meetingId) return;

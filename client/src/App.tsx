@@ -5,7 +5,7 @@ import Sidebar from "./layouts/Sidebar";
 import AgendaPanel from "./features/agenda/components/AgendaPanel";
 import VideoArea from "./features/meeting/components/VideoArea";
 import TranscriptFeed from "./features/transcript/components/TranscriptFeed";
-import MinutesPanel from "./features/minutes/components/MinutesPanel";
+import ChatPanel, { ChatMessage } from "./features/meeting/components/ChatPanel";
 import ActionItems from "./features/minutes/components/ActionItems";
 import MeetingCreation from "./modules/meeting/microFrontends/createMeeting/components/MeetingCreation";
 import ProductivityDashboard from "./features/dashboard/components/ProductivityDashboard";
@@ -155,7 +155,7 @@ function DashboardApp() {
 
   const [meetings, setMeetings] = useState<any[]>([]);
   const [agendaItems, setAgendaItems] = useState<any[]>([]);
-  const [minutesItems, setMinutesItems] = useState<any[]>([]);
+  const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
   const [transcripts, setTranscripts] = useState<any[]>([]);
   const [actionItems, setActionItems] = useState<any[]>([]);
   const [dashboardStats, setDashboardStats] = useState<any>(null);
@@ -301,8 +301,8 @@ function DashboardApp() {
 
   useEffect(() => {
     if (selectedMeeting) {
+      setChatMessages([]);
       fetchAgenda(selectedMeeting.id);
-      fetchMinutes(selectedMeeting.id);
       fetchTranscript(selectedMeeting.id);
       fetchActionItems(selectedMeeting.id);
     }
@@ -333,10 +333,9 @@ function DashboardApp() {
     const handleActionItemsSync = ({ meetingId: mid, items }: { meetingId: string; items: any[] }) => {
       if (mid?.toString() === meetingId) setActionItems(items);
     };
-    const handleMinutesSync = ({ meetingId: mid, items }: { meetingId: string; items: any[] }) => {
-      if (mid?.toString() === meetingId) {
-        const normalized = items.map((i) => ({ ...i, duration: typeof i.duration === "number" ? i.duration : 0 }));
-        setMinutesItems(normalized);
+    const handleChatMessage = (msg: any) => {
+      if (meetingId === msg.meetingId?.toString() && msg.senderId !== (user?.id || user?._id)?.toString()) {
+        setChatMessages((prev) => [...prev, msg]);
       }
     };
     const handleMeetingEndedSync = ({ meetingId: mid }: { meetingId: string }) => {
@@ -358,7 +357,7 @@ function DashboardApp() {
     socket.on('transcript_update', handleTranscriptUpdate);
     socket.on('agenda_sync', handleAgendaSync);
     socket.on('action_items_sync', handleActionItemsSync);
-    socket.on('minutes_sync', handleMinutesSync);
+    socket.on('chat_message', handleChatMessage);
     socket.on('meeting_ended', handleMeetingEndedSync);
     socket.on('notification', handleNotification);
 
@@ -367,7 +366,7 @@ function DashboardApp() {
       socket.off('transcript_update', handleTranscriptUpdate);
       socket.off('agenda_sync', handleAgendaSync);
       socket.off('action_items_sync', handleActionItemsSync);
-      socket.off('minutes_sync', handleMinutesSync);
+      socket.off('chat_message', handleChatMessage);
       socket.off('meeting_ended', handleMeetingEndedSync);
       socket.off('notification', handleNotification);
     };
@@ -395,16 +394,6 @@ function DashboardApp() {
       const res = await fetchWithAuth(`${API_BASE}/transcript/${meetingId}`);
       if (res.ok) setTranscripts(await res.json());
     } catch (err) { console.error("Failed to fetch transcript:", err); }
-  };
-
-  const fetchMinutes = async (meetingId: string) => {
-    try {
-      const res = await fetchWithAuth(`${API_BASE}/minutes/${meetingId}`);
-      if (res.ok) {
-        const data = await res.json();
-        setMinutesItems(Array.isArray(data) ? data.map((i: any) => ({ ...i, duration: typeof i.duration === "number" ? i.duration : 0 })) : []);
-      }
-    } catch (err) { console.error("Failed to fetch minutes:", err); }
   };
 
   const fetchActionItems = async (meetingId: string) => {
@@ -459,14 +448,20 @@ function DashboardApp() {
     }
   };
 
-  const handleMinutesChange = async (items: any[]) => {
-    const normalized = items.map((i) => ({ ...i, duration: typeof i.duration === "number" ? i.duration : 0 }));
-    setMinutesItems(normalized);
-    const mid = selectedMeeting?.id;
-    if (!mid) return;
-    try {
-      await fetchWithAuth(`${API_BASE}/minutes/${mid}`, { method: "POST", body: JSON.stringify({ items: normalized }) });
-    } catch (err) { console.error("Failed to save minutes:", err); }
+  const handleSendMessage = (text: string) => {
+    if (!socket || !selectedMeeting) return;
+    const msgId = Math.random().toString(36).substr(2, 9);
+    const msg: ChatMessage = {
+      id: msgId,
+      meetingId: (selectedMeeting.id || selectedMeeting._id)?.toString(),
+      senderId: `${user?.id || user?._id || "unknown"}`,
+      senderName: user?.name || "User",
+      senderImage: user?.profileImage || null,
+      text,
+      timestamp: Date.now()
+    };
+    socket.emit('send_chat_message', msg);
+    setChatMessages((prev) => [...prev, msg]);
   };
 
   const handleAgendaChange = async (items: any[]) => {
@@ -595,10 +590,8 @@ function DashboardApp() {
               onTriggerAddActionItem={triggerAddActionItem}
               onTriggerAddAgendaItem={triggerAddAgendaItem}
               agendaItems={agendaItems}
-              minutesItems={minutesItems}
               actionItems={actionItems}
               onAgendaChange={handleAgendaChange}
-              onMinutesChange={handleMinutesChange}
               onRefreshActionItems={() => fetchActionItems(selectedMeeting.id)}
               onParticipantsUpdate={setLiveParticipants}
             />
@@ -613,9 +606,10 @@ function DashboardApp() {
                   </div>
                   <div className="right-panel-bottom">
                     <div className="right-panel-half right-panel-half-minutes">
-                      <MinutesPanel
-                        minutesItems={minutesItems}
-                        onItemChange={handleMinutesChange}
+                      <ChatPanel
+                        messages={chatMessages}
+                        currentUserId={(user?.id || user?._id)?.toString() || ''}
+                        onSendMessage={handleSendMessage}
                       />
                     </div>
                     <div className="right-panel-half right-panel-half-actions">
