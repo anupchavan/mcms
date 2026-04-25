@@ -19,7 +19,8 @@ const categoryChips = {
 };
 
 const statusConfig = {
-    'completed': { icon: CheckmarkCircle01Icon, color: 'var(--accent-emerald)', label: 'Completed' },
+    'completed': { icon: Clock01Icon, color: 'var(--accent-amber)', label: 'Awaiting Verify' },
+    'verified': { icon: CheckmarkCircle01Icon, color: 'var(--accent-emerald)', label: 'Verified' },
     'in-progress': { icon: Clock01Icon, color: 'var(--accent-amber)', label: 'In Progress' },
     'pending': { icon: AlertCircleIcon, color: 'var(--text-muted)', label: 'Pending' },
     'draft': { icon: AlertCircleIcon, color: 'var(--text-tertiary)', label: 'Draft' },
@@ -27,7 +28,8 @@ const statusConfig = {
 };
 
 const CATEGORIES = ['Technical', 'Administrative', 'Decision', 'Follow-up'];
-const STATUSES = ['draft', 'pending', 'in-progress', 'completed', 'missing'];
+const HOST_STATUSES = ['draft', 'pending', 'in-progress', 'completed', 'verified', 'missing'];
+const ASSIGNEE_STATUSES = ['pending', 'in-progress', 'completed'];
 
 function deadlineToApi(dateStr: string, timeStr: string, includeTime: boolean): string | null {
     const d = dateStr?.trim();
@@ -56,6 +58,19 @@ function formatAssignedDate(dateValue: string | undefined): string {
     return `${year}-${month}-${day}`;
 }
 
+function formatDateTimeDisplay(dateValue: string | undefined): string {
+    if (!dateValue) return '';
+    const date = new Date(dateValue);
+    if (Number.isNaN(date.getTime())) return dateValue;
+    return date.toLocaleString([], {
+        year: 'numeric',
+        month: 'short',
+        day: '2-digit',
+        hour: '2-digit',
+        minute: '2-digit',
+    });
+}
+
 interface ActionItem {
     id?: string;
     _id?: string;
@@ -70,6 +85,9 @@ interface ActionItem {
     source?: string;
     meetingTitle?: string;
     meetingHostId?: string;
+    completionSubmittedAt?: string;
+    verifiedAt?: string;
+    hostFeedback?: string;
 }
 
 interface ActionItemsProps {
@@ -91,8 +109,9 @@ export default function ActionItems({ items, sectionTitle = 'Action Items', empt
     const getItemHostId = (item: ActionItem) => String(item.meetingHostId || meetingHostId || '');
     const isHostForItem = (item: ActionItem) => Boolean(currentUserId) && getItemHostId(item) === currentUserId;
     const isAssigneeForItem = (item: ActionItem) => Boolean(currentUserId) && String(item.assigneeId || '') === currentUserId;
-    const canEditStatus = (item: ActionItem) => isHostForItem(item) || isAssigneeForItem(item);
+    const canEditStatus = (item: ActionItem) => isHostForItem(item) || (isAssigneeForItem(item) && item.status !== 'verified');
     const canEditDetails = (item: ActionItem) => isHostForItem(item);
+    const getEditableStatuses = (item: ActionItem) => isHostForItem(item) ? HOST_STATUSES : ASSIGNEE_STATUSES;
     const canCreateItems = Boolean(meetingId) && Boolean(currentUserId) && String(meetingHostId || '') === currentUserId;
     const [adding, setAdding] = useState(false);
     const [newTitle, setNewTitle] = useState('');
@@ -177,13 +196,47 @@ export default function ActionItems({ items, sectionTitle = 'Action Items', empt
         }
     };
 
-    const handleStatusChange = async (itemId: string, newStatus: string) => {
+    const readErrorMessage = async (res: Response) => {
         try {
-            await (fetchWithAuth || fetch)(`${API_BASE}/action-items/${itemId}`, {
+            const data = await res.json();
+            return data?.message || 'Request failed';
+        } catch {
+            return 'Request failed';
+        }
+    };
+
+    const getHostFeedbackForRejection = (item: ActionItem, nextStatus: string) => {
+        if (!isHostForItem(item) || item.status !== 'completed' || nextStatus !== 'pending') return undefined;
+        const response = window.prompt(
+            `Add a message for ${item.assignee || 'the assignee'} before moving "${item.title}" back to pending:`,
+            item.hostFeedback || '',
+        );
+        if (response === null) return null;
+        const trimmed = response.trim();
+        if (!trimmed) {
+            window.alert('A host feedback message is required when sending a completed item back to pending.');
+            return null;
+        }
+        return trimmed;
+    };
+
+    const handleStatusChange = async (item: ActionItem, newStatus: string) => {
+        const itemId = item.id || item._id;
+        if (!itemId) return;
+        const hostFeedback = getHostFeedbackForRejection(item, newStatus);
+        if (hostFeedback === null) return;
+        try {
+            const payload: any = { status: newStatus };
+            if (typeof hostFeedback === 'string') payload.hostFeedback = hostFeedback;
+            const res = await (fetchWithAuth || fetch)(`${API_BASE}/action-items/${itemId}`, {
                 method: 'PUT',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ status: newStatus }),
+                body: JSON.stringify(payload),
             });
+            if (!res.ok) {
+                window.alert(await readErrorMessage(res));
+                return;
+            }
             onRefresh?.();
         } catch (err) {
             console.error('Failed to update status:', err);
@@ -192,6 +245,9 @@ export default function ActionItems({ items, sectionTitle = 'Action Items', empt
 
     const handleUpdate = async (itemId: string) => {
         if (!editData || !editData.title?.trim()) return;
+        const currentItem = items.find(item => String(item.id || item._id) === String(itemId));
+        const hostFeedback = currentItem ? getHostFeedbackForRejection(currentItem, editData.status || 'pending') : undefined;
+        if (hostFeedback === null) return;
         try {
             const assigneeId = typeof editData.assigneeId === 'string' && editData.assigneeId.trim()
                 ? editData.assigneeId
@@ -199,7 +255,7 @@ export default function ActionItems({ items, sectionTitle = 'Action Items', empt
             const assigneeName = assigneeId
                 ? (editData.assigneeName || editData.assignee || null)
                 : null;
-            const payload = {
+            const payload: any = {
                 title: editData.title.trim(),
                 category: editData.category || 'Technical',
                 status: editData.status || 'pending',
@@ -207,11 +263,16 @@ export default function ActionItems({ items, sectionTitle = 'Action Items', empt
                 assignee: assigneeId,
                 assigneeName,
             };
-            await (fetchWithAuth || fetch)(`${API_BASE}/action-items/${itemId}`, {
+            if (typeof hostFeedback === 'string') payload.hostFeedback = hostFeedback;
+            const res = await (fetchWithAuth || fetch)(`${API_BASE}/action-items/${itemId}`, {
                 method: 'PUT',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(payload),
             });
+            if (!res.ok) {
+                window.alert(await readErrorMessage(res));
+                return;
+            }
             setEditingId(null);
             setEditData(null);
             onRefresh?.();
@@ -259,7 +320,7 @@ export default function ActionItems({ items, sectionTitle = 'Action Items', empt
                                             {CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
                                         </select>
                                         <select className="input-field" value={editData.status || 'pending'} onChange={e => handleUpdateField('status', e.target.value)}>
-                                            {STATUSES.map(s => <option key={s} value={s}>{s}</option>)}
+                                            {HOST_STATUSES.map(s => <option key={s} value={s}>{statusConfig[s]?.label || s}</option>)}
                                         </select>
                                     </div>
                                     <div className="inline-form-row" style={{ marginTop: '4px', marginBottom: '4px' }}>
@@ -345,11 +406,11 @@ export default function ActionItems({ items, sectionTitle = 'Action Items', empt
                                                 onChange={(e) => {
                                                     const nextStatus = e.target.value;
                                                     if (nextStatus === item.status) return;
-                                                    handleStatusChange(item.id || item._id!, nextStatus);
+                                                    handleStatusChange(item, nextStatus);
                                                 }}
                                                 aria-label={`Update status for ${item.title}`}
                                             >
-                                                {STATUSES.map((statusKey) => {
+                                                {getEditableStatuses(item).map((statusKey) => {
                                                     const option = statusConfig[statusKey] || statusConfig.pending;
                                                     return (
                                                         <option key={statusKey} value={statusKey}>
@@ -382,6 +443,20 @@ export default function ActionItems({ items, sectionTitle = 'Action Items', empt
                                             <span className="ai-card-meta-value">{formatAssignedDate(item.assignedAt)}</span>
                                         </span>
                                     )}
+                                    {item.completionSubmittedAt && (
+                                        <span className="ai-card-meta-item">
+                                            <Icon icon={Clock01Icon} size={10} />
+                                            <span className="ai-card-meta-label">Submitted:</span>
+                                            <span className="ai-card-meta-value">{formatDateTimeDisplay(item.completionSubmittedAt)}</span>
+                                        </span>
+                                    )}
+                                    {item.verifiedAt && (
+                                        <span className="ai-card-meta-item">
+                                            <Icon icon={CheckmarkCircle01Icon} size={10} />
+                                            <span className="ai-card-meta-label">Verified:</span>
+                                            <span className="ai-card-meta-value">{formatDateTimeDisplay(item.verifiedAt)}</span>
+                                        </span>
+                                    )}
                                     {item.deadline && (
                                         <span className="ai-card-deadline ai-card-meta-item">
                                             <Icon icon={Clock01Icon} size={10} />
@@ -390,6 +465,12 @@ export default function ActionItems({ items, sectionTitle = 'Action Items', empt
                                         </span>
                                     )}
                                 </div>
+
+                                {item.hostFeedback && (
+                                    <div className="ai-card-feedback">
+                                        <strong>Host feedback:</strong> {item.hostFeedback}
+                                    </div>
+                                )}
 
                             </div>
                         );

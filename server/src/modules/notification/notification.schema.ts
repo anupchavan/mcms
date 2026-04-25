@@ -6,6 +6,8 @@ const notificationSchema = new mongoose.Schema({
         'poll_invite', 'meeting_confirmed', 'rsvp_update',
         'attendance_marked', 'action_item_assigned', 'brief_ready',
         'meeting_summary_ready', 'rubric_score',
+        'action_item_completion_submitted', 'action_item_verified',
+        'action_item_rejected',
     ] },
     meetingId: { type: mongoose.Schema.Types.ObjectId, ref: 'Meeting', required: true },
     message: { type: String, required: true },

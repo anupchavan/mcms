@@ -502,7 +502,7 @@ export = function ({ User, Meeting, protect, usingMongo, callAISummarize, callAI
 					.filter((item: any) => ['completed', 'done'].includes(String(item.status).toLowerCase()))
 					.map((item: any) => item.title)),
 				...((actionItems || [])
-					.filter((item: any) => String(item.status).toLowerCase() === 'completed')
+					.filter((item: any) => String(item.status).toLowerCase() === 'verified')
 					.map((item: any) => item.title)),
 			];
 			const pendingItems = [
@@ -510,7 +510,7 @@ export = function ({ User, Meeting, protect, usingMongo, callAISummarize, callAI
 					.filter((item: any) => !['completed', 'done'].includes(String(item.status).toLowerCase()))
 					.map((item: any) => item.title)),
 				...((actionItems || [])
-					.filter((item: any) => String(item.status).toLowerCase() !== 'completed')
+					.filter((item: any) => String(item.status).toLowerCase() !== 'verified')
 					.map((item: any) => item.title)),
 			];
 

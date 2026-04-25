@@ -6,7 +6,7 @@ async function generateBrief(meeting: any, callAISummarize: any) {
     const agendaItems = agenda ? (agenda as any).items : [];
 
     const pendingActions = await ActionItem.find({
-        status: { $in: ['pending', 'in-progress'] },
+        status: { $in: ['pending', 'in-progress', 'completed'] },
     }).sort({ createdAt: -1 }).limit(5).populate('assignee', 'name');
 
     const context = {

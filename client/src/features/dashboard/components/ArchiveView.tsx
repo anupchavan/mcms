@@ -506,7 +506,7 @@ export default function ArchiveView({ fetchWithAuth }: ArchiveViewProps) {
                         {detail.actionItems.map(item => (
                             <div key={item.id} className="glass-card" style={{ padding: '8px 12px', marginBottom: '6px' }}>
                                 <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.8125rem' }}>
-                                    <span className={`chip ${item.status === 'completed' ? 'chip-emerald' : 'chip-amber'}`} style={{ fontSize: '0.5625rem' }}>
+                                    <span className={`chip ${item.status === 'verified' ? 'chip-emerald' : 'chip-amber'}`} style={{ fontSize: '0.5625rem' }}>
                                         {item.status}
                                     </span>
                                     <span style={{ fontWeight: 500 }}>{item.title}</span>

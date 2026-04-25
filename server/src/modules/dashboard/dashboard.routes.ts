@@ -59,7 +59,7 @@ export = function ({ Meeting, User, protect, usingMongo }: any) {
 
             const actionItems = await ActionItem.find({ assignee: userId });
             const tasksTotal = actionItems.length;
-            const tasksCompleted = actionItems.filter((i: any) => i.status === 'completed').length;
+            const tasksCompleted = actionItems.filter((i: any) => i.status === 'verified').length;
 
             const dayMap: Record<number, string> = { 0: 'Sun', 1: 'Mon', 2: 'Tue', 3: 'Wed', 4: 'Thu', 5: 'Fri', 6: 'Sat' };
             const heatmap: Record<string, number> = { Mon: 0, Tue: 0, Wed: 0, Thu: 0, Fri: 0 };

@@ -13,9 +13,12 @@ const actionItemSchema = new mongoose.Schema({
     },
     status: {
         type: String,
-        enum: ['draft', 'pending', 'in-progress', 'completed', 'missing'],
+        enum: ['draft', 'pending', 'in-progress', 'completed', 'verified', 'missing'],
         default: 'pending',
     },
+    completionSubmittedAt: { type: Date, default: null },
+    verifiedAt: { type: Date, default: null },
+    hostFeedback: { type: String, default: null },
     deadline: { type: String, default: null },
     source: { type: String, enum: ['manual', 'ai-extracted'], default: 'manual' },
     aiConfidence: { type: Number, default: null },

@@ -3,14 +3,32 @@ const router = express.Router();
 import ActionItem = require('./action-item.schema');
 
 export = function ({ protect, usingMongo, Notification, emitToUser, inMemoryActionItems, io, Meeting, inMemoryMeetings }: any) {
+    const HOST_ALLOWED_STATUSES = ['draft', 'pending', 'in-progress', 'completed', 'verified', 'missing'];
+    const ASSIGNEE_ALLOWED_STATUSES = ['pending', 'in-progress', 'completed'];
     const getUserId = (req: any) => String(req.user?.id || req.user?._id || '');
     const getHostId = (meeting: any) => String(meeting?.hostId?._id || meeting?.hostId || '');
     const getAssigneeId = (item: any) => String(item?.assignee?._id || item?.assignee || '');
+    const normalizeFeedback = (value: any) => typeof value === 'string' ? value.trim() : '';
+
+    const createNotification = async (userId: string, type: string, meetingId: string, message: string) => {
+        if (!Notification || !userId) return;
+        try {
+            const notif = await Notification.create({ userId, type, meetingId, message });
+            emitToUser(userId, 'notification', {
+                _id: notif._id,
+                type: notif.type,
+                meetingId,
+                message: notif.message,
+                read: false,
+                createdAt: notif.createdAt,
+            });
+        } catch (e) { /* non-critical */ }
+    };
 
     const processItem = (i: any) => {
         const item = i.toObject ? i.toObject() : i;
         let status = item.status;
-        if (status !== 'completed' && item.deadline) {
+        if (!['completed', 'verified'].includes(status) && item.deadline) {
             const now = new Date();
             const deadline = new Date(item.deadline);
             if (deadline < now) {
@@ -32,6 +50,9 @@ export = function ({ protect, usingMongo, Notification, emitToUser, inMemoryActi
             meetingTitle: item.meetingId?.title || null,
             meetingHostId: (item.meetingId?.hostId?._id || item.meetingId?.hostId)?.toString() || null,
             assignedAt: item.createdAt || null,
+            completionSubmittedAt: item.completionSubmittedAt || null,
+            verifiedAt: item.verifiedAt || null,
+            hostFeedback: item.hostFeedback || null,
         };
     };
 
@@ -163,20 +184,12 @@ export = function ({ protect, usingMongo, Notification, emitToUser, inMemoryActi
                 aiConfidence: aiConfidence || null,
             });
 
-            if (assignee && Notification) {
-                try {
-                    const notif = await Notification.create({
-                        userId: assignee, type: 'action_item_assigned',
-                        meetingId: req.params.meetingId,
-                        message: `You've been assigned: "${title}"`,
-                    });
-                    emitToUser(assignee, 'notification', {
-                        _id: notif._id, type: notif.type,
-                        meetingId: req.params.meetingId, message: notif.message,
-                        read: false, createdAt: notif.createdAt,
-                    });
-                } catch (e) { /* non-critical */ }
-            }
+            if (assignee) await createNotification(
+                assignee,
+                'action_item_assigned',
+                req.params.meetingId,
+                `You've been assigned: "${title}"`,
+            );
 
             const populated = await ActionItem.findById(item._id).populate('meetingId', 'title hostId').populate('assignee', 'name email');
             res.status(201).json(processItem(populated));
@@ -200,7 +213,7 @@ export = function ({ protect, usingMongo, Notification, emitToUser, inMemoryActi
             const isAssignee = getAssigneeId(item) === userId;
             const requestedKeys = Object.keys(req.body).filter((key) => req.body[key] !== undefined);
             const statusOnlyKeys = ['status'];
-            const hostEditableKeys = ['title', 'assignee', 'assigneeName', 'category', 'deadline', 'status'];
+            const hostEditableKeys = ['title', 'assignee', 'assigneeName', 'category', 'deadline', 'status', 'hostFeedback'];
             const allowedKeys = isHost ? hostEditableKeys : (isAssignee ? statusOnlyKeys : []);
 
             if (allowedKeys.length === 0) {
@@ -224,9 +237,88 @@ export = function ({ protect, usingMongo, Notification, emitToUser, inMemoryActi
                 if (req.body[key] !== undefined) updates[key] = req.body[key];
             }
 
-            const updatedItem = await ActionItem.findByIdAndUpdate(req.params.id, updates, { new: true })
+            const currentStatus = String((item as any).status || '');
+            const nextStatus = req.body.status !== undefined ? String(req.body.status) : currentStatus;
+            const meetingId = (item as any).meetingId._id.toString();
+            const assigneeId = getAssigneeId(item);
+            const assigneeName = (item as any).assigneeName || (item as any).assignee?.name || 'The assignee';
+            const hostFeedback = normalizeFeedback(req.body.hostFeedback);
+
+            if (!isHost && currentStatus === 'verified') {
+                return res.status(403).json({ message: 'Verified action items can only be changed by the host' });
+            }
+
+            if (req.body.status !== undefined) {
+                const allowedStatuses = isHost ? HOST_ALLOWED_STATUSES : ASSIGNEE_ALLOWED_STATUSES;
+                if (!allowedStatuses.includes(nextStatus)) {
+                    return res.status(400).json({ message: 'Invalid action item status' });
+                }
+                if (nextStatus !== 'verified') {
+                    updates.verifiedAt = null;
+                }
+            }
+
+            if (isHost && req.body.status !== undefined) {
+                if (nextStatus === 'verified' && currentStatus !== 'completed') {
+                    return res.status(400).json({ message: 'Only completed action items can be marked as verified' });
+                }
+
+                if (currentStatus === 'completed' && nextStatus === 'pending') {
+                    if (!hostFeedback) {
+                        return res.status(400).json({ message: 'A feedback message is required when sending an item back to pending' });
+                    }
+                    updates.hostFeedback = hostFeedback;
+                    updates.verifiedAt = null;
+                } else if (nextStatus === 'verified') {
+                    updates.verifiedAt = new Date();
+                    updates.hostFeedback = null;
+                } else if (req.body.hostFeedback !== undefined) {
+                    updates.hostFeedback = hostFeedback || null;
+                }
+            }
+
+            if (!isHost && req.body.status !== undefined && nextStatus === 'completed') {
+                updates.completionSubmittedAt = new Date();
+                updates.verifiedAt = null;
+                updates.hostFeedback = null;
+            }
+
+            await ActionItem.findByIdAndUpdate(req.params.id, updates, { new: true });
+            const updatedItem = await ActionItem.findById(req.params.id)
                 .populate('meetingId', 'title hostId')
                 .populate('assignee', 'name email');
+
+            if (!updatedItem) return res.status(404).json({ message: 'Action item not found' });
+
+            if (!isHost && req.body.status !== undefined && nextStatus === 'completed') {
+                const hostId = getHostId((updatedItem as any).meetingId);
+                if (hostId && hostId !== userId) {
+                    await createNotification(
+                        hostId,
+                        'action_item_completion_submitted',
+                        meetingId,
+                        `${assigneeName} marked "${(updatedItem as any).title}" as completed. Please verify it.`,
+                    );
+                }
+            }
+
+            if (isHost && req.body.status !== undefined) {
+                if (nextStatus === 'verified' && assigneeId) {
+                    await createNotification(
+                        assigneeId,
+                        'action_item_verified',
+                        meetingId,
+                        `Your action item "${(updatedItem as any).title}" was verified by the host.`,
+                    );
+                } else if (currentStatus === 'completed' && nextStatus === 'pending' && assigneeId) {
+                    await createNotification(
+                        assigneeId,
+                        'action_item_rejected',
+                        meetingId,
+                        `Host feedback on "${(updatedItem as any).title}": ${updates.hostFeedback}`,
+                    );
+                }
+            }
 
             res.json(processItem(updatedItem));
             broadcastSync((updatedItem as any).meetingId._id.toString());
