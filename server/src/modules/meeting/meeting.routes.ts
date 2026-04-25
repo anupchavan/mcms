@@ -44,9 +44,16 @@ export = function ({ User, Meeting, Poll, Notification, Agenda, protect, usingMo
 
     router.get('/', protect, async (req: any, res: any) => {
         try {
+            const userId = req.user.id;
             if (usingMongo() && Meeting) {
                 const base = (CLIENT_URL || 'http://localhost:5173').replace(/\/$/, '');
-                const dbMeetings = await Meeting.find({}).sort({ createdAt: -1 }).populate('participants', 'name email');
+                // Only return meetings where the user is the host or a participant
+                const dbMeetings = await Meeting.find({
+                    $or: [
+                        { hostId: userId },
+                        { participants: userId },
+                    ],
+                }).sort({ createdAt: -1 }).populate('participants', 'name email');
                 const expiredMeetings = dbMeetings.filter((meeting: any) => shouldAutoCompleteMeeting(meeting));
                 if (expiredMeetings.length > 0) {
                     await Promise.all(expiredMeetings.map(async (meeting: any) => {
@@ -71,11 +78,16 @@ export = function ({ User, Meeting, Poll, Notification, Agenda, protect, usingMo
                 }));
                 return res.json(formatted);
             }
-            inMemoryMeetings.forEach((meeting: any) => {
+            // In-memory fallback: filter by hostId or participant id
+            const visibleMeetings = inMemoryMeetings.filter((meeting: any) => {
                 if (shouldAutoCompleteMeeting(meeting)) meeting.status = 'completed';
+                const isHost = String(meeting.hostId) === String(userId);
+                const isParticipant = Array.isArray(meeting.participants) &&
+                    meeting.participants.some((p: any) => String(p._id || p) === String(userId));
+                return isHost || isParticipant;
             });
-            console.log(`[API] Returning ${inMemoryMeetings.length} in-memory meetings.`);
-            res.json(inMemoryMeetings);
+            console.log(`[API] Returning ${visibleMeetings.length} in-memory meetings for user ${userId}.`);
+            res.json(visibleMeetings);
         } catch (error: any) {
             res.status(500).json({ message: 'Server error', error: error.message });
         }
