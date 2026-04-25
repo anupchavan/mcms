@@ -1,4 +1,5 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { createPortal } from 'react-dom';
 import Icon from '../../../shared/components/Icon';
 import ShortcutTooltip from '../../../shared/components/ShortcutTooltip';
 import { useAuth } from '../../../stores/AuthContext';
@@ -206,30 +207,62 @@ export default function ActionItems({ items, sectionTitle = 'Action Items', empt
         }
     };
 
-    const getHostFeedback = (item: ActionItem, nextStatus: string): string | null | undefined => {
+    // ── Custom feedback modal state ──────────────────────────────────────────
+    const feedbackTextareaRef = useRef<HTMLTextAreaElement | null>(null);
+    const [feedbackModal, setFeedbackModal] = useState<{
+        title: string;
+        subtitle: string;
+        placeholder: string;
+        required: boolean;
+        defaultValue: string;
+        resolve: (value: string | null) => void;
+    } | null>(null);
+
+    const openFeedbackPrompt = useCallback((
+        title: string,
+        subtitle: string,
+        placeholder: string,
+        opts: { defaultValue?: string; required?: boolean } = {},
+    ): Promise<string | null> => {
+        return new Promise((resolve) => {
+            setFeedbackModal({
+                title, subtitle, placeholder,
+                required: opts.required ?? false,
+                defaultValue: opts.defaultValue ?? '',
+                resolve,
+            });
+        });
+    }, []);
+
+    const closeFeedbackModal = useCallback((value: string | null) => {
+        setFeedbackModal(prev => { prev?.resolve(value); return null; });
+    }, []);
+
+    const getHostFeedback = async (item: ActionItem, nextStatus: string): Promise<string | null | undefined> => {
         if (!isHostForItem(item)) return undefined;
         // Rejection: host sends completed item back to pending — note is required
         if (item.status === 'completed' && nextStatus === 'pending') {
-            const response = window.prompt(
-                `Add a note for ${item.assignee || 'the assignee'} before sending "${item.title}" back to pending (required):`,
-                item.hostFeedback || '',
+            const response = await openFeedbackPrompt(
+                'Send Back to Pending',
+                `Provide a required note for ${item.assignee || 'the assignee'} explaining what needs to be fixed.`,
+                'Explain what needs to be corrected...',
+                { defaultValue: item.hostFeedback || '', required: true },
             );
-            if (response === null) return null; // cancelled
+            if (response === null) return null;
             const trimmed = response.trim();
-            if (!trimmed) {
-                window.alert('A feedback note is required when sending a completed item back to pending.');
-                return null;
-            }
+            if (!trimmed) return null;
             return trimmed;
         }
         // Verification: host can optionally add a note for the assignee
         if (item.status === 'completed' && nextStatus === 'verified') {
-            const response = window.prompt(
-                `Add an optional note for ${item.assignee || 'the assignee'} along with the verification of "${item.title}" (leave blank to skip):`,
-                '',
+            const response = await openFeedbackPrompt(
+                'Verify Action Item',
+                `Optionally leave a note for ${item.assignee || 'the assignee'} along with your verification. Leave blank to skip.`,
+                'Great work! Add any optional remarks...',
+                { required: false },
             );
-            if (response === null) return null; // cancelled — abort the action
-            return response.trim() || undefined; // empty string → send no note
+            if (response === null) return null;
+            return response.trim() || undefined;
         }
         return undefined;
     };
@@ -237,7 +270,7 @@ export default function ActionItems({ items, sectionTitle = 'Action Items', empt
     const handleStatusChange = async (item: ActionItem, newStatus: string) => {
         const itemId = item.id || item._id;
         if (!itemId) return;
-        const hostFeedback = getHostFeedback(item, newStatus);
+        const hostFeedback = await getHostFeedback(item, newStatus);
         if (hostFeedback === null) return;
         try {
             const payload: any = { status: newStatus };
@@ -260,7 +293,7 @@ export default function ActionItems({ items, sectionTitle = 'Action Items', empt
     const handleUpdate = async (itemId: string) => {
         if (!editData || !editData.title?.trim()) return;
         const currentItem = items.find(item => String(item.id || item._id) === String(itemId));
-        const hostFeedback = currentItem ? getHostFeedback(currentItem, editData.status || 'pending') : undefined;
+        const hostFeedback = currentItem ? await getHostFeedback(currentItem, editData.status || 'pending') : undefined;
         if (hostFeedback === null) return;
         try {
             const assigneeId = typeof editData.assigneeId === 'string' && editData.assigneeId.trim()
@@ -305,17 +338,15 @@ export default function ActionItems({ items, sectionTitle = 'Action Items', empt
     };
 
     const handleSendFeedback = async (item: ActionItem) => {
-        const assigneeName = item.assignee || 'the assignee';
-        const note = window.prompt(
-            `Send a note to ${assigneeName} about "${item.title}":`,
-            item.hostFeedback || '',
+        const note = await openFeedbackPrompt(
+            'Send Note to Assignee',
+            `Send a message to ${item.assignee || 'the assignee'} about "${item.title}".`,
+            'Type your note here...',
+            { defaultValue: item.hostFeedback || '', required: true },
         );
-        if (note === null) return;           // cancelled
+        if (note === null) return;
         const trimmed = note.trim();
-        if (!trimmed) {
-            window.alert('Please enter a note to send.');
-            return;
-        }
+        if (!trimmed) return;
         const itemId = item.id || item._id;
         if (!itemId) return;
         try {
@@ -335,6 +366,7 @@ export default function ActionItems({ items, sectionTitle = 'Action Items', empt
     };
 
     return (
+        <>
         <div className="action-items-section">
             <div className="section-header">
                 <div className="section-title-container">
@@ -618,5 +650,193 @@ export default function ActionItems({ items, sectionTitle = 'Action Items', empt
                 </div>
             </div>
         </div>
+
+        {/* ── Custom feedback modal ────────────────────────────────────── */}
+        {feedbackModal && createPortal(
+            <div
+                className="fb-modal-overlay"
+                onClick={() => closeFeedbackModal(null)}
+                onKeyDown={(e) => { if (e.key === 'Escape') closeFeedbackModal(null); }}
+                tabIndex={-1}
+            >
+                <div
+                    className="fb-modal-card"
+                    onClick={(e) => e.stopPropagation()}
+                >
+                    {/* Header */}
+                    <div className="fb-modal-header">
+                        <div className="fb-modal-icon-wrap">
+                            <Icon icon={MessageAdd01Icon} size={18} />
+                        </div>
+                        <div className="fb-modal-titles">
+                            <div className="fb-modal-title">{feedbackModal.title}</div>
+                            <div className="fb-modal-subtitle">{feedbackModal.subtitle}</div>
+                        </div>
+                    </div>
+
+                    {/* Textarea */}
+                    <div className="fb-modal-body">
+                        <textarea
+                            ref={feedbackTextareaRef}
+                            className="fb-modal-textarea"
+                            placeholder={feedbackModal.placeholder}
+                            defaultValue={feedbackModal.defaultValue}
+                            rows={4}
+                            autoFocus
+                            onKeyDown={(e) => {
+                                if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
+                                    const val = feedbackTextareaRef.current?.value?.trim() || '';
+                                    if (!feedbackModal.required || val) closeFeedbackModal(val || '');
+                                }
+                            }}
+                        />
+                        {feedbackModal.required && (
+                            <div className="fb-modal-hint">* A note is required for this action</div>
+                        )}
+                        {!feedbackModal.required && (
+                            <div className="fb-modal-hint fb-modal-hint-optional">Optional — leave blank to skip · Ctrl+Enter to send</div>
+                        )}
+                    </div>
+
+                    {/* Actions */}
+                    <div className="fb-modal-actions">
+                        <button
+                            className="btn btn-secondary"
+                            type="button"
+                            onClick={() => closeFeedbackModal(null)}
+                        >
+                            Cancel
+                        </button>
+                        <button
+                            className="btn btn-primary"
+                            type="button"
+                            onClick={() => {
+                                const val = feedbackTextareaRef.current?.value?.trim() || '';
+                                if (feedbackModal.required && !val) {
+                                    feedbackTextareaRef.current?.focus();
+                                    feedbackTextareaRef.current?.classList.add('fb-shake');
+                                    setTimeout(() => feedbackTextareaRef.current?.classList.remove('fb-shake'), 500);
+                                    return;
+                                }
+                                closeFeedbackModal(val || '');
+                            }}
+                        >
+                            <Icon icon={MessageAdd01Icon} size={14} />
+                            Send Note
+                        </button>
+                    </div>
+                </div>
+
+                <style>{`
+                    .fb-modal-overlay {
+                        position: fixed; inset: 0; z-index: 9000;
+                        background: rgba(0,0,0,0.55);
+                        backdrop-filter: blur(6px);
+                        display: flex; align-items: center; justify-content: center;
+                        animation: fbOverlayIn 0.2s ease;
+                    }
+                    @keyframes fbOverlayIn {
+                        from { opacity: 0; }
+                        to   { opacity: 1; }
+                    }
+                    .fb-modal-card {
+                        width: min(480px, calc(100vw - 2rem));
+                        background: var(--bg-secondary);
+                        border: 1px solid var(--border);
+                        border-radius: 16px;
+                        box-shadow: 0 24px 64px rgba(0,0,0,0.4), 0 0 0 1px rgba(255,255,255,0.04);
+                        animation: fbCardIn 0.25s cubic-bezier(0.34,1.56,0.64,1);
+                        overflow: hidden;
+                    }
+                    @keyframes fbCardIn {
+                        from { opacity: 0; transform: scale(0.92) translateY(12px); }
+                        to   { opacity: 1; transform: scale(1) translateY(0); }
+                    }
+                    .fb-modal-header {
+                        display: flex;
+                        align-items: flex-start;
+                        gap: 0.875rem;
+                        padding: 1.25rem 1.375rem 1rem;
+                        border-bottom: 1px solid var(--border);
+                    }
+                    .fb-modal-icon-wrap {
+                        width: 36px; height: 36px; flex-shrink: 0;
+                        border-radius: 10px;
+                        background: var(--primary-muted);
+                        border: 1px solid var(--primary-border);
+                        color: var(--primary);
+                        display: flex; align-items: center; justify-content: center;
+                    }
+                    .fb-modal-titles { flex: 1; min-width: 0; }
+                    .fb-modal-title {
+                        font-size: 0.9375rem;
+                        font-weight: 600;
+                        color: var(--text-primary);
+                        letter-spacing: -0.016em;
+                        line-height: 1.3;
+                    }
+                    .fb-modal-subtitle {
+                        font-size: 0.75rem;
+                        color: var(--text-muted);
+                        margin-top: 3px;
+                        line-height: 1.45;
+                    }
+                    .fb-modal-body {
+                        padding: 1rem 1.375rem;
+                    }
+                    .fb-modal-textarea {
+                        width: 100%;
+                        min-height: 110px;
+                        background: var(--bg-elevated);
+                        border: 1.5px solid var(--border);
+                        border-radius: 10px;
+                        color: var(--text-primary);
+                        font-size: 0.875rem;
+                        font-family: inherit;
+                        line-height: 1.6;
+                        padding: 0.625rem 0.75rem;
+                        resize: vertical;
+                        outline: none;
+                        transition: border-color 0.18s ease, box-shadow 0.18s ease;
+                        box-sizing: border-box;
+                    }
+                    .fb-modal-textarea:focus {
+                        border-color: var(--primary);
+                        box-shadow: 0 0 0 3px var(--primary-muted);
+                    }
+                    .fb-modal-textarea.fb-shake {
+                        animation: fbShake 0.4s ease;
+                        border-color: var(--accent-rose);
+                        box-shadow: 0 0 0 3px rgba(255,80,80,0.15);
+                    }
+                    @keyframes fbShake {
+                        0%,100% { transform: translateX(0); }
+                        20%     { transform: translateX(-6px); }
+                        60%     { transform: translateX(5px); }
+                        80%     { transform: translateX(-3px); }
+                    }
+                    .fb-modal-hint {
+                        font-size: 0.6875rem;
+                        color: var(--accent-rose);
+                        margin-top: 6px;
+                        font-weight: 500;
+                    }
+                    .fb-modal-hint-optional {
+                        color: var(--text-muted);
+                        font-weight: 400;
+                    }
+                    .fb-modal-actions {
+                        display: flex;
+                        gap: 0.5rem;
+                        justify-content: flex-end;
+                        padding: 0.875rem 1.375rem;
+                        border-top: 1px solid var(--border);
+                        background: var(--bg-elevated);
+                    }
+                `}</style>
+            </div>,
+            document.body,
+        )}
+        </>
     );
 }
