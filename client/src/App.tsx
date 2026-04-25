@@ -349,7 +349,7 @@ function DashboardApp() {
       }
     };
     const handleNotification = (notif: any) => {
-      if (['action_item_assigned', 'action_item_completion_submitted', 'action_item_verified', 'action_item_rejected'].includes(notif.type)) {
+      if (['action_item_assigned', 'action_item_completion_submitted', 'action_item_verified', 'action_item_rejected', 'action_item_feedback'].includes(notif.type)) {
         fetchMyActionItems();
       }
     };

@@ -271,7 +271,8 @@ export = function ({ protect, usingMongo, Notification, emitToUser, inMemoryActi
                     updates.verifiedAt = null;
                 } else if (nextStatus === 'verified') {
                     updates.verifiedAt = new Date();
-                    updates.hostFeedback = null;
+                    // Preserve optional verification note from host (if provided)
+                    updates.hostFeedback = hostFeedback || null;
                 } else if (req.body.hostFeedback !== undefined) {
                     updates.hostFeedback = hostFeedback || null;
                 }
@@ -304,11 +305,12 @@ export = function ({ protect, usingMongo, Notification, emitToUser, inMemoryActi
 
             if (isHost && req.body.status !== undefined) {
                 if (nextStatus === 'verified' && assigneeId) {
+                    const verifyNote = updates.hostFeedback ? ` Note: ${updates.hostFeedback}` : '';
                     await createNotification(
                         assigneeId,
                         'action_item_verified',
                         meetingId,
-                        `Your action item "${(updatedItem as any).title}" was verified by the host.`,
+                        `Your action item "${(updatedItem as any).title}" was verified by the host.${verifyNote}`,
                     );
                 } else if (currentStatus === 'completed' && nextStatus === 'pending' && assigneeId) {
                     await createNotification(
@@ -318,6 +320,26 @@ export = function ({ protect, usingMongo, Notification, emitToUser, inMemoryActi
                         `Host feedback on "${(updatedItem as any).title}": ${updates.hostFeedback}`,
                     );
                 }
+            }
+
+            // Standalone feedback: host sent hostFeedback without a status-triggered notification
+            const feedbackNotificationAlreadySent =
+                (nextStatus === 'verified') ||
+                (currentStatus === 'completed' && nextStatus === 'pending');
+            if (
+                isHost &&
+                updates.hostFeedback &&
+                req.body.hostFeedback !== undefined &&
+                req.body.status === undefined &&   // pure feedback-only update
+                assigneeId &&
+                !feedbackNotificationAlreadySent
+            ) {
+                await createNotification(
+                    assigneeId,
+                    'action_item_feedback',
+                    meetingId,
+                    `Host note on "${(updatedItem as any).title}": ${updates.hostFeedback}`,
+                );
             }
 
             res.json(processItem(updatedItem));

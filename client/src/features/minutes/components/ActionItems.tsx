@@ -6,8 +6,9 @@ import {
     CheckmarkCircle01Icon, Clock01Icon, AlertCircleIcon,
     ArrowRight01Icon,
     FlashIcon, Add01Icon, Delete02Icon, SparklesIcon, PencilEdit02Icon,
-    Video01Icon,
+    Video01Icon, MessageAdd01Icon,
 } from '@hugeicons/core-free-icons';
+
 
 const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:5001/api';
 
@@ -205,25 +206,38 @@ export default function ActionItems({ items, sectionTitle = 'Action Items', empt
         }
     };
 
-    const getHostFeedbackForRejection = (item: ActionItem, nextStatus: string) => {
-        if (!isHostForItem(item) || item.status !== 'completed' || nextStatus !== 'pending') return undefined;
-        const response = window.prompt(
-            `Add a message for ${item.assignee || 'the assignee'} before moving "${item.title}" back to pending:`,
-            item.hostFeedback || '',
-        );
-        if (response === null) return null;
-        const trimmed = response.trim();
-        if (!trimmed) {
-            window.alert('A host feedback message is required when sending a completed item back to pending.');
-            return null;
+    const getHostFeedback = (item: ActionItem, nextStatus: string): string | null | undefined => {
+        if (!isHostForItem(item)) return undefined;
+        // Rejection: host sends completed item back to pending — note is required
+        if (item.status === 'completed' && nextStatus === 'pending') {
+            const response = window.prompt(
+                `Add a note for ${item.assignee || 'the assignee'} before sending "${item.title}" back to pending (required):`,
+                item.hostFeedback || '',
+            );
+            if (response === null) return null; // cancelled
+            const trimmed = response.trim();
+            if (!trimmed) {
+                window.alert('A feedback note is required when sending a completed item back to pending.');
+                return null;
+            }
+            return trimmed;
         }
-        return trimmed;
+        // Verification: host can optionally add a note for the assignee
+        if (item.status === 'completed' && nextStatus === 'verified') {
+            const response = window.prompt(
+                `Add an optional note for ${item.assignee || 'the assignee'} along with the verification of "${item.title}" (leave blank to skip):`,
+                '',
+            );
+            if (response === null) return null; // cancelled — abort the action
+            return response.trim() || undefined; // empty string → send no note
+        }
+        return undefined;
     };
 
     const handleStatusChange = async (item: ActionItem, newStatus: string) => {
         const itemId = item.id || item._id;
         if (!itemId) return;
-        const hostFeedback = getHostFeedbackForRejection(item, newStatus);
+        const hostFeedback = getHostFeedback(item, newStatus);
         if (hostFeedback === null) return;
         try {
             const payload: any = { status: newStatus };
@@ -246,7 +260,7 @@ export default function ActionItems({ items, sectionTitle = 'Action Items', empt
     const handleUpdate = async (itemId: string) => {
         if (!editData || !editData.title?.trim()) return;
         const currentItem = items.find(item => String(item.id || item._id) === String(itemId));
-        const hostFeedback = currentItem ? getHostFeedbackForRejection(currentItem, editData.status || 'pending') : undefined;
+        const hostFeedback = currentItem ? getHostFeedback(currentItem, editData.status || 'pending') : undefined;
         if (hostFeedback === null) return;
         try {
             const assigneeId = typeof editData.assigneeId === 'string' && editData.assigneeId.trim()
@@ -287,6 +301,36 @@ export default function ActionItems({ items, sectionTitle = 'Action Items', empt
             onRefresh?.();
         } catch (err) {
             console.error('Failed to delete:', err);
+        }
+    };
+
+    const handleSendFeedback = async (item: ActionItem) => {
+        const assigneeName = item.assignee || 'the assignee';
+        const note = window.prompt(
+            `Send a note to ${assigneeName} about "${item.title}":`,
+            item.hostFeedback || '',
+        );
+        if (note === null) return;           // cancelled
+        const trimmed = note.trim();
+        if (!trimmed) {
+            window.alert('Please enter a note to send.');
+            return;
+        }
+        const itemId = item.id || item._id;
+        if (!itemId) return;
+        try {
+            const res = await (fetchWithAuth || fetch)(`${API_BASE}/action-items/${itemId}`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ hostFeedback: trimmed }),
+            });
+            if (!res.ok) {
+                window.alert(await readErrorMessage(res));
+                return;
+            }
+            onRefresh?.();
+        } catch (err) {
+            console.error('Failed to send feedback:', err);
         }
     };
 
@@ -372,6 +416,15 @@ export default function ActionItems({ items, sectionTitle = 'Action Items', empt
                                         </span>
                                     )}
                                     <div style={{ marginLeft: 'auto', display: 'flex', gap: '2px' }}>
+                                        {allowDetailEdit && item.assigneeId && (
+                                            <button
+                                                className="btn-icon btn-icon-sm"
+                                                onClick={() => handleSendFeedback(item)}
+                                                title="Send note to assignee"
+                                            >
+                                                <Icon icon={MessageAdd01Icon} size={10} />
+                                            </button>
+                                        )}
                                         {allowDetailEdit && (
                                             <button
                                                 className="btn-icon btn-icon-sm"
