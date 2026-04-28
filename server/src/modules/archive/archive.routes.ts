@@ -8,6 +8,7 @@ import Minutes = require('../minutes/minutes.schema');
 import ResourcePin = require('../pin/pin.schema');
 import Transcript = require('../transcript/transcript.schema');
 import { sanitizeTextSearch, escapeRegex } from '../../utils/searchHelpers';
+import { getCache, setCache } from '../../utils/cache';
 
 export = function ({ User, Meeting, protect, usingMongo, callAISummarize, callAIMeetingSummary, callAIExtractActions, inMemoryMeetingSummaries, inMemoryMeetings, inMemoryAgendas, inMemoryTranscripts, inMemoryActionItems }: any) {
 
@@ -104,6 +105,20 @@ export = function ({ User, Meeting, protect, usingMongo, callAISummarize, callAI
 
 	router.get('/', protect, async (req: any, res: any) => {
 		try {
+			const { q, agendaTitle, dateFrom, dateTo, limit } = req.query;
+
+			// Check cache for top 5 recent archives
+			const isTop5Request = limit === '5' && !q && !agendaTitle && !dateFrom && !dateTo;
+			const cacheKey = 'archive:top5';
+
+			if (isTop5Request) {
+				const cachedData = await getCache(cacheKey);
+				if (cachedData) {
+					console.log('Serving Top 5 from Cache');
+					return res.json(JSON.parse(cachedData));
+				}
+			}
+
 			if (!usingMongo() || !Meeting) {
 				// In-memory fallback
 				const { q, dateFrom, dateTo } = req.query;
@@ -138,7 +153,6 @@ export = function ({ User, Meeting, protect, usingMongo, callAISummarize, callAI
 				})));
 			}
 
-			const { q, agendaTitle, dateFrom, dateTo } = req.query;
 			const meetingFilter: any = { status: 'completed' };
 
 			if (dateFrom || dateTo) {
@@ -183,7 +197,7 @@ export = function ({ User, Meeting, protect, usingMongo, callAISummarize, callAI
 			const meetings = await Meeting.find(meetingFilter)
 				.sort({ createdAt: -1 })
 				.populate('participants', 'name email')
-				.limit(50);
+				.limit(isTop5Request ? 5 : 50);
 
 			const results = [];
 			for (const m of meetings) {
@@ -218,6 +232,10 @@ export = function ({ User, Meeting, protect, usingMongo, callAISummarize, callAI
 					})),
 					matchedAgendaItems: agendaItems.map((i: any) => ({ id: i.id, title: i.title })),
 				});
+			}
+
+			if (isTop5Request) {
+				await setCache(cacheKey, JSON.stringify(results), 300); // 5 minutes TTL
 			}
 
 			res.json(results);

@@ -320,9 +320,10 @@ export default function ArchiveView({ fetchWithAuth }: ArchiveViewProps) {
     const [finalSummary, setFinalSummary] = useState<ArchiveDetail['meetingSummary']>(null);
     const [loadingFinalSummary, setLoadingFinalSummary] = useState(false);
     const [extractingActions, setExtractingActions] = useState(false);
+    const [viewAll, setViewAll] = useState(false);
     const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-    const search = useCallback(async (searchInput: string) => {
+    const search = useCallback(async (searchInput: string, fetchAll: boolean) => {
         const { textQuery, dateFrom, dateTo } = parseArchiveSearchInput(searchInput);
         setLoading(true);
         try {
@@ -330,6 +331,10 @@ export default function ArchiveView({ fetchWithAuth }: ArchiveViewProps) {
             if (textQuery.trim()) params.set('q', textQuery.trim());
             if (dateFrom) params.set('dateFrom', dateFrom);
             if (dateTo) params.set('dateTo', dateTo);
+
+            if (!textQuery.trim() && !dateFrom && !dateTo && !fetchAll) {
+                params.set('limit', '5');
+            }
 
             const res = await (fetchWithAuth || fetch)(`${API_BASE}/archive?${params.toString()}`);
             if (res.ok) setResults(await res.json());
@@ -341,9 +346,13 @@ export default function ArchiveView({ fetchWithAuth }: ArchiveViewProps) {
 
     useEffect(() => {
         if (debounceRef.current) clearTimeout(debounceRef.current);
-        debounceRef.current = setTimeout(() => search(query), SEARCH_DEBOUNCE_MS);
+        // Reset viewAll to false when the user types a new search query
+        const isSearchEmpty = parseArchiveSearchInput(query).textQuery.trim() === '' && !parseArchiveSearchInput(query).dateFrom;
+        if (!isSearchEmpty && viewAll) setViewAll(false);
+
+        debounceRef.current = setTimeout(() => search(query, viewAll), SEARCH_DEBOUNCE_MS);
         return () => { if (debounceRef.current) clearTimeout(debounceRef.current); };
-    }, [query, search]);
+    }, [query, viewAll, search]);
 
     const loadDetail = async (meetingId: string) => {
         setSelectedMeeting(meetingId);
@@ -611,6 +620,14 @@ export default function ArchiveView({ fetchWithAuth }: ArchiveViewProps) {
                     ))}
                     {results.length === 0 && !loading && (
                         <p style={{ color: 'var(--text-muted)', fontSize: '0.875rem' }}>No completed meetings found.</p>
+                    )}
+                    
+                    {!loading && !query.trim() && !viewAll && results.length > 0 && (
+                        <div style={{ textAlign: 'center', marginTop: '1.5rem', marginBottom: '1rem' }}>
+                            <button className="btn btn-secondary" onClick={() => setViewAll(true)}>
+                                Load Full History
+                            </button>
+                        </div>
                     )}
                 </div>
             )}

@@ -750,8 +750,10 @@ function createSarvamWS(
 }
 
 // ── Socket.io Cluster Adapter (Redis) ────────────────────────
+export let pubClient: ReturnType<typeof createClient> | null = null;
+
 if (process.env.REDIS_URL) {
-  const pubClient = createClient({ url: process.env.REDIS_URL });
+  pubClient = createClient({ url: process.env.REDIS_URL });
   const subClient = pubClient.duplicate();
 
   pubClient.on("error", (err) => console.error("Redis Pub Client Error:", err));
@@ -759,7 +761,7 @@ if (process.env.REDIS_URL) {
 
   Promise.all([pubClient.connect(), subClient.connect()])
     .then(() => {
-      io.adapter(createAdapter(pubClient, subClient));
+      io.adapter(createAdapter(pubClient!, subClient));
       console.log("📡 Socket.io Redis adapter connected");
     })
     .catch((err) => {
