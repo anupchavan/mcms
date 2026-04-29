@@ -642,6 +642,7 @@ export = function ({ User, Meeting, protect, usingMongo, callAISummarize, callAI
 				assignee: i.assigneeName || i.assignee?.name || 'Unassigned',
 				category: i.category, status: i.status, deadline: i.deadline,
 				source: i.source,
+				agendaItemId: i.agendaItemId || null,
 			})) });
 		} catch (error: any) {
 			res.status(500).json({ message: 'Server error', error: error.message });
@@ -661,6 +662,7 @@ export = function ({ User, Meeting, protect, usingMongo, callAISummarize, callAI
 					assignee: i.assignee || 'Unassigned',
 					category: i.category, status: i.status, deadline: i.deadline,
 					source: i.source,
+					agendaItemId: i.agendaItemId || null,
 				}));
 				const summary = inMemoryMeetingSummaries[req.params.meetingId] || null;
 
@@ -745,6 +747,7 @@ export = function ({ User, Meeting, protect, usingMongo, callAISummarize, callAI
 					assignee: i.assigneeName || i.assignee?.name || 'Unassigned',
 					category: i.category, status: i.status, deadline: i.deadline,
 					source: i.source,
+					agendaItemId: i.agendaItemId || null,
 				})),
 				pins: pins.map((p: any) => ({
 					id: p._id, type: p.type, url: p.url, content: p.content,

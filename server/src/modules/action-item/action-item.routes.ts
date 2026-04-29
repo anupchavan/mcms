@@ -2,13 +2,47 @@ import express from 'express';
 const router = express.Router();
 import ActionItem = require('./action-item.schema');
 
-export = function ({ protect, usingMongo, Notification, emitToUser, inMemoryActionItems, io, Meeting, inMemoryMeetings }: any) {
+export = function ({ protect, usingMongo, Notification, emitToUser, inMemoryActionItems, io, Meeting, inMemoryMeetings, Agenda, inMemoryAgendas }: any) {
     const HOST_ALLOWED_STATUSES = ['draft', 'pending', 'in-progress', 'completed', 'verified', 'missing'];
     const ASSIGNEE_ALLOWED_STATUSES = ['pending', 'in-progress', 'completed'];
     const getUserId = (req: any) => String(req.user?.id || req.user?._id || '');
     const getHostId = (meeting: any) => String(meeting?.hostId?._id || meeting?.hostId || '');
     const getAssigneeId = (item: any) => String(item?.assignee?._id || item?.assignee || '');
     const normalizeFeedback = (value: any) => typeof value === 'string' ? value.trim() : '';
+    const getAgendaItemsForMeeting = async (meetingId: string) => {
+        if (usingMongo() && Agenda) {
+            const agendaDoc = await Agenda.findOne({ meetingId }).select('items activeItemId');
+            return {
+                items: (agendaDoc as any)?.items || [],
+                activeItemId: (agendaDoc as any)?.activeItemId || null,
+            };
+        }
+
+        const items = inMemoryAgendas?.[meetingId] || [];
+        const activeItem = items.find((agendaItem: any) => ['active', 'in-progress'].includes(String(agendaItem?.status || '').toLowerCase()));
+        return {
+            items,
+            activeItemId: activeItem?.id || null,
+        };
+    };
+
+    const resolveAgendaItemId = async (meetingId: string, requestedAgendaItemId: any, opts: { defaultToActive?: boolean } = {}) => {
+        const normalizedRequested = typeof requestedAgendaItemId === 'string' ? requestedAgendaItemId.trim() : '';
+        const defaultToActive = opts.defaultToActive !== false;
+        const { items, activeItemId } = await getAgendaItemsForMeeting(meetingId);
+        const validAgendaIds = new Set((items || []).map((agendaItem: any) => String(agendaItem.id)));
+
+        if (normalizedRequested) {
+            if (!validAgendaIds.has(normalizedRequested)) {
+                throw new Error('Invalid agenda item selected');
+            }
+            return normalizedRequested;
+        }
+
+        if (!defaultToActive) return null;
+        if (activeItemId && validAgendaIds.has(String(activeItemId))) return String(activeItemId);
+        return null;
+    };
 
     const createNotification = async (userId: string, type: string, meetingId: string, message: string) => {
         if (!Notification || !userId) return;
@@ -155,10 +189,16 @@ export = function ({ protect, usingMongo, Notification, emitToUser, inMemoryActi
             const { title, assignee, assigneeName, category, status, deadline, agendaItemId, source, aiConfidence } = req.body;
 
             if (!usingMongo()) {
+                let resolvedAgendaItemId = null;
+                try {
+                    resolvedAgendaItemId = await resolveAgendaItemId(req.params.meetingId, agendaItemId);
+                } catch (error: any) {
+                    return res.status(400).json({ message: error.message || 'Invalid agenda item selected' });
+                }
                 const item = {
                     id: `ai-${Date.now()}`, title, assignee: assigneeName || 'Unassigned',
                     category: category || 'Technical', status: status || 'pending',
-                    deadline, agendaItemId: agendaItemId || null,
+                    deadline, agendaItemId: resolvedAgendaItemId,
                 };
                 if (!inMemoryActionItems[req.params.meetingId]) inMemoryActionItems[req.params.meetingId] = [];
                 inMemoryActionItems[req.params.meetingId].push(item);
@@ -172,6 +212,13 @@ export = function ({ protect, usingMongo, Notification, emitToUser, inMemoryActi
                 return res.status(403).json({ message: 'Only the meeting host can create action items' });
             }
 
+            let resolvedAgendaItemId = null;
+            try {
+                resolvedAgendaItemId = await resolveAgendaItemId(req.params.meetingId, agendaItemId);
+            } catch (error: any) {
+                return res.status(400).json({ message: error.message || 'Invalid agenda item selected' });
+            }
+
             const item = await ActionItem.create({
                 meetingId: req.params.meetingId,
                 title, assignee: assignee || null,
@@ -179,7 +226,7 @@ export = function ({ protect, usingMongo, Notification, emitToUser, inMemoryActi
                 category: category || 'Technical',
                 status: status || 'pending',
                 deadline: deadline || null,
-                agendaItemId: agendaItemId || null,
+                agendaItemId: resolvedAgendaItemId,
                 source: source || 'manual',
                 aiConfidence: aiConfidence || null,
             });
@@ -213,7 +260,7 @@ export = function ({ protect, usingMongo, Notification, emitToUser, inMemoryActi
             const isAssignee = getAssigneeId(item) === userId;
             const requestedKeys = Object.keys(req.body).filter((key) => req.body[key] !== undefined);
             const statusOnlyKeys = ['status'];
-            const hostEditableKeys = ['title', 'assignee', 'assigneeName', 'category', 'deadline', 'status', 'hostFeedback'];
+            const hostEditableKeys = ['title', 'assignee', 'assigneeName', 'category', 'deadline', 'status', 'hostFeedback', 'agendaItemId'];
             const allowedKeys = isHost ? hostEditableKeys : (isAssignee ? statusOnlyKeys : []);
 
             if (allowedKeys.length === 0) {
@@ -243,6 +290,14 @@ export = function ({ protect, usingMongo, Notification, emitToUser, inMemoryActi
             const assigneeId = getAssigneeId(item);
             const assigneeName = (item as any).assigneeName || (item as any).assignee?.name || 'The assignee';
             const hostFeedback = normalizeFeedback(req.body.hostFeedback);
+
+            if (isHost && req.body.agendaItemId !== undefined) {
+                try {
+                    updates.agendaItemId = await resolveAgendaItemId(meetingId, req.body.agendaItemId, { defaultToActive: false });
+                } catch (error: any) {
+                    return res.status(400).json({ message: error.message || 'Invalid agenda item selected' });
+                }
+            }
 
             if (!isHost && currentStatus === 'verified') {
                 return res.status(403).json({ message: 'Verified action items can only be changed by the host' });

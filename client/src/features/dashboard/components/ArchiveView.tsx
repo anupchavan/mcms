@@ -89,7 +89,7 @@ interface ArchiveDetail {
     agendaItems: Array<{ id: string; title: string; duration: number }>;
     transcriptsByAgenda: Record<string, Array<{ id: string; speaker: string; timestamp: string; text: string }>>;
     transcriptFlat?: TranscriptSegment[];
-    actionItems: Array<{ id: string; title: string; status: string; assignee?: string; source?: string }>;
+    actionItems: Array<{ id: string; title: string; status: string; assignee?: string; source?: string; agendaItemId?: string | null }>;
     pins: Array<{ id: string; type: string; url?: string; label?: string; transcriptTimestamp?: string }>;
     meetingSummary?: {
         overview: string;
@@ -101,6 +101,22 @@ interface ArchiveDetail {
         model?: string;
         generatedAt?: string;
     } | null;
+}
+
+function groupActionItemsByAgenda(detail: ArchiveDetail) {
+    const groups = detail.agendaItems.map((agendaItem) => ({
+        key: agendaItem.id,
+        title: agendaItem.title,
+        items: detail.actionItems.filter((item) => item.agendaItemId === agendaItem.id),
+    })).filter((group) => group.items.length > 0);
+
+    const agendaIds = new Set(detail.agendaItems.map((item) => item.id));
+    const unlinkedItems = detail.actionItems.filter((item) => !item.agendaItemId || !agendaIds.has(String(item.agendaItemId)));
+    if (unlinkedItems.length > 0) {
+        groups.push({ key: '_unlinked', title: 'General / Unlinked', items: unlinkedItems });
+    }
+
+    return groups;
 }
 
 interface ArchiveViewProps {
@@ -512,20 +528,28 @@ export default function ArchiveView({ fetchWithAuth }: ArchiveViewProps) {
                         <h3 style={{ fontSize: '0.875rem', fontWeight: 600, marginBottom: '0.5rem' }}>
                             <Icon icon={FlashIcon} size={14} /> Action Items
                         </h3>
-                        {detail.actionItems.map(item => (
-                            <div key={item.id} className="glass-card" style={{ padding: '8px 12px', marginBottom: '6px' }}>
-                                <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.8125rem' }}>
-                                    <span className={`chip ${item.status === 'verified' ? 'chip-emerald' : 'chip-amber'}`} style={{ fontSize: '0.5625rem' }}>
-                                        {item.status}
-                                    </span>
-                                    <span style={{ fontWeight: 500 }}>{item.title}</span>
-                                    <span style={{ color: 'var(--text-muted)', marginLeft: 'auto', fontSize: '0.75rem' }}>
-                                        {item.assignee}
-                                    </span>
-                                    {item.source === 'ai-extracted' && (
-                                        <span className="chip chip-purple" style={{ fontSize: '0.5rem' }}>AI</span>
-                                    )}
+                        {groupActionItemsByAgenda(detail).map((group) => (
+                            <div key={group.key} style={{ marginBottom: '0.9rem' }}>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '0.45rem', marginBottom: '0.4rem' }}>
+                                    <span style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-secondary)' }}>{group.title}</span>
+                                    <span className="chip chip-blue" style={{ fontSize: '0.5625rem' }}>{group.items.length}</span>
                                 </div>
+                                {group.items.map(item => (
+                                    <div key={item.id} className="glass-card" style={{ padding: '8px 12px', marginBottom: '6px' }}>
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.8125rem' }}>
+                                            <span className={`chip ${item.status === 'verified' ? 'chip-emerald' : 'chip-amber'}`} style={{ fontSize: '0.5625rem' }}>
+                                                {item.status}
+                                            </span>
+                                            <span style={{ fontWeight: 500 }}>{item.title}</span>
+                                            <span style={{ color: 'var(--text-muted)', marginLeft: 'auto', fontSize: '0.75rem' }}>
+                                                {item.assignee}
+                                            </span>
+                                            {item.source === 'ai-extracted' && (
+                                                <span className="chip chip-purple" style={{ fontSize: '0.5rem' }}>AI</span>
+                                            )}
+                                        </div>
+                                    </div>
+                                ))}
                             </div>
                         ))}
                     </div>

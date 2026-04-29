@@ -232,6 +232,7 @@ export default function VideoArea({
   const handleAddActionItem = async (type: string) => {
     if (!meetingId || !isHost) return;
     const title = activeNote.trim() || `Action item: ${type}`;
+    const activeAgendaItem = agendaItems.find((item) => ['active', 'in-progress'].includes(String(item.status || '').toLowerCase()));
     try {
       const res = await (fetch as any)(`${API_BASE}/action-items/${meetingId}`, {
         method: 'POST',
@@ -239,7 +240,7 @@ export default function VideoArea({
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${JSON.parse(localStorage.getItem('mcms_userInfo') || '{}').token}`
         },
-        body: JSON.stringify({ title, category: type }),
+        body: JSON.stringify({ title, category: type, agendaItemId: activeAgendaItem?.id || null }),
       });
       if (res.ok) {
         onRefreshActionItems?.();

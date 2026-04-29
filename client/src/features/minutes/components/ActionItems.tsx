@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import Icon from '../../../shared/components/Icon';
 import ShortcutTooltip from '../../../shared/components/ShortcutTooltip';
@@ -90,6 +90,14 @@ interface ActionItem {
     completionSubmittedAt?: string;
     verifiedAt?: string;
     hostFeedback?: string;
+    agendaItemId?: string | null;
+}
+
+interface AgendaItemLink {
+    id: string;
+    title: string;
+    duration?: number;
+    status?: string;
 }
 
 interface ActionItemsProps {
@@ -103,9 +111,16 @@ interface ActionItemsProps {
     addActionItemTrigger?: number;
     onAddTriggered?: () => void;
     participants?: any[];
+    agendaItems?: AgendaItemLink[];
 }
 
-export default function ActionItems({ items, sectionTitle = 'Action Items', emptyMessage = 'No action items found.', meetingId, meetingHostId, fetchWithAuth, onRefresh, addActionItemTrigger, onAddTriggered, participants }: ActionItemsProps) {
+function getPreferredAgendaItemId(agendaItems: AgendaItemLink[]): string {
+    if (!agendaItems.length) return '';
+    const activeItem = agendaItems.find((item) => ['active', 'in-progress'].includes(String(item.status || '').toLowerCase()));
+    return activeItem?.id || agendaItems[0].id || '';
+}
+
+export default function ActionItems({ items, sectionTitle = 'Action Items', emptyMessage = 'No action items found.', meetingId, meetingHostId, fetchWithAuth, onRefresh, addActionItemTrigger, onAddTriggered, participants, agendaItems = [] }: ActionItemsProps) {
     const { user } = useAuth() || {};
     const currentUserId = String(user?.id || user?._id || '');
     const getItemHostId = (item: ActionItem) => String(item.meetingHostId || meetingHostId || '');
@@ -115,6 +130,10 @@ export default function ActionItems({ items, sectionTitle = 'Action Items', empt
     const canEditDetails = (item: ActionItem) => isHostForItem(item);
     const getEditableStatuses = (item: ActionItem) => isHostForItem(item) ? HOST_STATUSES : ASSIGNEE_STATUSES;
     const canCreateItems = Boolean(meetingId) && Boolean(currentUserId) && String(meetingHostId || '') === currentUserId;
+    const agendaLookup = useMemo(() => {
+        const entries = agendaItems.map((item) => [item.id, item.title]);
+        return new Map(entries);
+    }, [agendaItems]);
     const [adding, setAdding] = useState(false);
     const [newTitle, setNewTitle] = useState('');
     const [newCategory, setNewCategory] = useState('Technical');
@@ -122,6 +141,7 @@ export default function ActionItems({ items, sectionTitle = 'Action Items', empt
     const [newDeadlineTime, setNewDeadlineTime] = useState('');
     const [newDeadlineIncludeTime, setNewDeadlineIncludeTime] = useState(false);
     const [newAssignee, setNewAssignee] = useState<{ id: string; name: string } | null>(null);
+    const [newAgendaItemId, setNewAgendaItemId] = useState('');
     const [editingId, setEditingId] = useState<string | null>(null);
 
     useEffect(() => {
@@ -134,12 +154,37 @@ export default function ActionItems({ items, sectionTitle = 'Action Items', empt
             setNewAssignee(null);
         }
     }, [participants]);
+    useEffect(() => {
+        const hasSelectedAgenda = newAgendaItemId && agendaItems.some((item) => item.id === newAgendaItemId);
+        if (!hasSelectedAgenda) {
+            setNewAgendaItemId(getPreferredAgendaItemId(agendaItems));
+        }
+    }, [agendaItems, newAgendaItemId]);
     const [editData, setEditData] = useState<Partial<ActionItem> | null>(null);
+
+    const groupedSections = useMemo(() => {
+        if (!agendaItems.length) {
+            return [{ key: '_all', title: null, items }];
+        }
+
+        const groups = agendaItems.map((agendaItem) => ({
+            key: agendaItem.id,
+            title: agendaItem.title,
+            items: items.filter((item) => item.agendaItemId === agendaItem.id),
+        })).filter((group) => group.items.length > 0);
+
+        const unlinkedItems = items.filter((item) => !item.agendaItemId || !agendaLookup.has(String(item.agendaItemId)));
+        if (unlinkedItems.length > 0) {
+            groups.push({ key: '_unlinked', title: 'General / Unlinked', items: unlinkedItems });
+        }
+
+        return groups.length > 0 ? groups : [{ key: '_all', title: null, items }];
+    }, [agendaItems, agendaLookup, items]);
 
     const startEditing = (item: ActionItem) => {
         setEditingId(item.id || item._id || null);
         // Ensure assignee is correctly setup for the update request
-        setEditData({ ...item });
+        setEditData({ ...item, agendaItemId: item.agendaItemId || '' });
     };
 
     const cancelEditing = () => {
@@ -162,6 +207,7 @@ export default function ActionItems({ items, sectionTitle = 'Action Items', empt
         setNewDeadlineDate('');
         setNewDeadlineTime('');
         setNewDeadlineIncludeTime(false);
+        setNewAgendaItemId(getPreferredAgendaItemId(agendaItems));
         if (participants && participants.length > 0) {
             // Re-select first participant if possible
             setNewAssignee({ id: participants[0]._id || participants[0].id, name: participants[0].name });
@@ -176,7 +222,8 @@ export default function ActionItems({ items, sectionTitle = 'Action Items', empt
             const body: any = { 
                 title: newTitle.trim(), 
                 category: newCategory, 
-                deadline: deadline || null 
+                deadline: deadline || null,
+                agendaItemId: newAgendaItemId || null,
             };
             if (newAssignee) {
                 body.assignee = newAssignee.id;
@@ -309,6 +356,7 @@ export default function ActionItems({ items, sectionTitle = 'Action Items', empt
                 deadline: editData.deadline || null,
                 assignee: assigneeId,
                 assigneeName,
+                agendaItemId: editData.agendaItemId || null,
             };
             if (typeof hostFeedback === 'string') payload.hostFeedback = hostFeedback;
             const res = await (fetchWithAuth || fetch)(`${API_BASE}/action-items/${itemId}`, {
@@ -381,185 +429,214 @@ export default function ActionItems({ items, sectionTitle = 'Action Items', empt
                     {items.length === 0 && (
                         <div className="action-items-empty-state">{emptyMessage}</div>
                     )}
-                    {items.map((item, index) => {
-                        const status = statusConfig[item.status] || statusConfig.pending;
-                        const isEditing = editingId === (item.id || item._id);
-                        const allowStatusEdit = canEditStatus(item);
-                        const allowDetailEdit = canEditDetails(item);
-
-                        if (isEditing && editData) {
-                            return (
-                                <div key={item.id || item._id || index} className="action-item-card glass-card animate-in" style={{ animationDelay: `${index * 0.06}s` }}>
-                                    <input className="input-field" value={editData.title || ''} onChange={e => handleUpdateField('title', e.target.value)} style={{ marginBottom: '4px' }} placeholder="Title" />
-                                    <div className="inline-form-row">
-                                        <select className="input-field" value={editData.category || 'Technical'} onChange={e => handleUpdateField('category', e.target.value)}>
-                                            {CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
-                                        </select>
-                                        <select className="input-field" value={editData.status || 'pending'} onChange={e => handleUpdateField('status', e.target.value)}>
-                                            {HOST_STATUSES.map(s => <option key={s} value={s}>{statusConfig[s]?.label || s}</option>)}
-                                        </select>
-                                    </div>
-                                    <div className="inline-form-row" style={{ marginTop: '4px', marginBottom: '4px' }}>
-                                        {participants && participants.length > 0 ? (
-                                            <select
-                                                className="input-field"
-                                                value={editData.assigneeId || ''}
-                                                onChange={e => {
-                                                    const p = participants.find(part => (part._id || part.id) === e.target.value);
-                                                    setEditData(prev => prev ? {
-                                                        ...prev,
-                                                        assignee: p ? (p._id || p.id) : null,
-                                                        assigneeId: p ? (p._id || p.id) : '',
-                                                        assigneeName: p ? p.name : null,
-                                                    } : null);
-                                                }}
-                                                style={{ flex: 1 }}
-                                            >
-                                                <option value="">Unassigned</option>
-                                                {participants.map(p => (
-                                                    <option key={p._id || p.id} value={p._id || p.id}>{p.name}</option>
-                                                ))}
-                                            </select>
-                                        ) : (
-                                            <input className="input-field" placeholder="Assignee" value={editData.assignee || ''} onChange={e => handleUpdateField('assignee', e.target.value)} style={{ flex: 1 }} />
-                                        )}
-                                    </div>
-                                    <input className="input-field" placeholder="Deadline (YYYY-MM-DD)" value={editData.deadline || ''} onChange={e => handleUpdateField('deadline', e.target.value)} style={{ marginBottom: '4px' }} />
-                                    <div className="inline-form-row">
-                                        <button className="btn btn-sm btn-primary" onClick={() => handleUpdate(item.id || item._id!)}>Save</button>
-                                        <button className="btn btn-sm btn-secondary" onClick={cancelEditing}>Cancel</button>
-                                    </div>
+                    {groupedSections.map((group) => (
+                        <div key={group.key} style={{ marginBottom: '0.85rem' }}>
+                            {group.title && (
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '0.45rem', margin: '0 0.75rem 0.5rem', color: 'var(--text-secondary)' }}>
+                                    <span style={{ fontSize: '0.75rem', fontWeight: 600 }}>{group.title}</span>
+                                    <span className="chip chip-blue" style={{ fontSize: '0.5625rem' }}>{group.items.length}</span>
                                 </div>
-                            );
-                        }
+                            )}
+                            {group.items.map((item, index) => {
+                                const status = statusConfig[item.status] || statusConfig.pending;
+                                const isEditing = editingId === (item.id || item._id);
+                                const allowStatusEdit = canEditStatus(item);
+                                const allowDetailEdit = canEditDetails(item);
+                                const agendaLabel = item.agendaItemId ? agendaLookup.get(String(item.agendaItemId)) : null;
 
-                        return (
-                            <div
-                                key={item.id || item._id || index}
-                                className="action-item-card glass-card animate-in"
-                                style={{ animationDelay: `${index * 0.06}s` }}
-                            >
-                                <div className="ai-card-top">
-                                    <Icon icon={status.icon} size={16} style={{ color: status.color, flexShrink: 0 }} />
-                                    <span className="ai-card-title">{item.title}</span>
-                                    {item.source === 'ai-extracted' && (
-                                        <span className="chip chip-purple" style={{ fontSize: '0.5625rem', padding: '1px 5px' }}>
-                                            <Icon icon={SparklesIcon} size={8} /> AI
-                                        </span>
-                                    )}
-                                    <div style={{ marginLeft: 'auto', display: 'flex', gap: '2px' }}>
-                                        {allowDetailEdit && item.assigneeId && (
-                                            <button
-                                                className="btn-icon btn-icon-sm"
-                                                onClick={() => handleSendFeedback(item)}
-                                                title="Send note to assignee"
-                                            >
-                                                <Icon icon={MessageAdd01Icon} size={10} />
-                                            </button>
+                                if (isEditing && editData) {
+                                    return (
+                                        <div key={item.id || item._id || index} className="action-item-card glass-card animate-in" style={{ animationDelay: `${index * 0.06}s` }}>
+                                            <input className="input-field" value={editData.title || ''} onChange={e => handleUpdateField('title', e.target.value)} style={{ marginBottom: '4px' }} placeholder="Title" />
+                                            <div className="inline-form-row">
+                                                <select className="input-field" value={editData.category || 'Technical'} onChange={e => handleUpdateField('category', e.target.value)}>
+                                                    {CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
+                                                </select>
+                                                <select className="input-field" value={editData.status || 'pending'} onChange={e => handleUpdateField('status', e.target.value)}>
+                                                    {HOST_STATUSES.map(s => <option key={s} value={s}>{statusConfig[s]?.label || s}</option>)}
+                                                </select>
+                                            </div>
+                                            <div className="inline-form-row" style={{ marginTop: '4px', marginBottom: '4px' }}>
+                                                {participants && participants.length > 0 ? (
+                                                    <select
+                                                        className="input-field"
+                                                        value={editData.assigneeId || ''}
+                                                        onChange={e => {
+                                                            const p = participants.find(part => (part._id || part.id) === e.target.value);
+                                                            setEditData(prev => prev ? {
+                                                                ...prev,
+                                                                assignee: p ? (p._id || p.id) : null,
+                                                                assigneeId: p ? (p._id || p.id) : '',
+                                                                assigneeName: p ? p.name : null,
+                                                            } : null);
+                                                        }}
+                                                        style={{ flex: 1 }}
+                                                    >
+                                                        <option value="">Unassigned</option>
+                                                        {participants.map(p => (
+                                                            <option key={p._id || p.id} value={p._id || p.id}>{p.name}</option>
+                                                        ))}
+                                                    </select>
+                                                ) : (
+                                                    <input className="input-field" placeholder="Assignee" value={editData.assignee || ''} onChange={e => handleUpdateField('assignee', e.target.value)} style={{ flex: 1 }} />
+                                                )}
+                                            </div>
+                                            {agendaItems.length > 0 && (
+                                                <select
+                                                    className="input-field"
+                                                    value={String(editData.agendaItemId || '')}
+                                                    onChange={e => handleUpdateField('agendaItemId', e.target.value)}
+                                                    style={{ marginBottom: '4px' }}
+                                                >
+                                                    <option value="">General / Unlinked</option>
+                                                    {agendaItems.map((agendaItem) => (
+                                                        <option key={agendaItem.id} value={agendaItem.id}>{agendaItem.title}</option>
+                                                    ))}
+                                                </select>
+                                            )}
+                                            <input className="input-field" placeholder="Deadline (YYYY-MM-DD)" value={editData.deadline || ''} onChange={e => handleUpdateField('deadline', e.target.value)} style={{ marginBottom: '4px' }} />
+                                            <div className="inline-form-row">
+                                                <button className="btn btn-sm btn-primary" onClick={() => handleUpdate(item.id || item._id!)}>Save</button>
+                                                <button className="btn btn-sm btn-secondary" onClick={cancelEditing}>Cancel</button>
+                                            </div>
+                                        </div>
+                                    );
+                                }
+
+                                return (
+                                    <div
+                                        key={item.id || item._id || index}
+                                        className="action-item-card glass-card animate-in"
+                                        style={{ animationDelay: `${index * 0.06}s` }}
+                                    >
+                                        <div className="ai-card-top">
+                                            <Icon icon={status.icon} size={16} style={{ color: status.color, flexShrink: 0 }} />
+                                            <span className="ai-card-title">{item.title}</span>
+                                            {item.source === 'ai-extracted' && (
+                                                <span className="chip chip-purple" style={{ fontSize: '0.5625rem', padding: '1px 5px' }}>
+                                                    <Icon icon={SparklesIcon} size={8} /> AI
+                                                </span>
+                                            )}
+                                            <div style={{ marginLeft: 'auto', display: 'flex', gap: '2px' }}>
+                                                {allowDetailEdit && item.assigneeId && (
+                                                    <button
+                                                        className="btn-icon btn-icon-sm"
+                                                        onClick={() => handleSendFeedback(item)}
+                                                        title="Send note to assignee"
+                                                    >
+                                                        <Icon icon={MessageAdd01Icon} size={10} />
+                                                    </button>
+                                                )}
+                                                {allowDetailEdit && (
+                                                    <button
+                                                        className="btn-icon btn-icon-sm"
+                                                        onClick={() => startEditing(item)}
+                                                        title="Edit item"
+                                                    >
+                                                        <Icon icon={PencilEdit02Icon} size={10} />
+                                                    </button>
+                                                )}
+                                                {meetingId && allowDetailEdit && (
+                                                    <button
+                                                        className="btn-icon btn-icon-sm"
+                                                        onClick={() => handleDelete(item.id || item._id)}
+                                                        title="Delete"
+                                                    >
+                                                        <Icon icon={Delete02Icon} size={10} />
+                                                    </button>
+                                                )}
+                                            </div>
+                                        </div>
+
+                                        <div className="ai-card-meta">
+                                            <span className={`chip ${categoryChips[item.category] || 'chip-blue'}`}>
+                                                {item.category}
+                                            </span>
+                                            {agendaLabel && (
+                                                <span className="chip chip-cyan" title={agendaLabel}>
+                                                    {agendaLabel}
+                                                </span>
+                                            )}
+                                            {allowStatusEdit ? (
+                                                <label className="ai-status-control" title="Update status">
+                                                    <span className="ai-status-label">Status</span>
+                                                    <select
+                                                        className={`input-field ai-status-select st-${item.status}`}
+                                                        value={item.status}
+                                                        onChange={(e) => {
+                                                            const nextStatus = e.target.value;
+                                                            if (nextStatus === item.status) return;
+                                                            handleStatusChange(item, nextStatus);
+                                                        }}
+                                                        aria-label={`Update status for ${item.title}`}
+                                                    >
+                                                        {getEditableStatuses(item).map((statusKey) => {
+                                                            const option = statusConfig[statusKey] || statusConfig.pending;
+                                                            return (
+                                                                <option key={statusKey} value={statusKey}>
+                                                                    {option.label}
+                                                                </option>
+                                                            );
+                                                        })}
+                                                    </select>
+                                                </label>
+                                            ) : (
+                                                <span className={`chip ai-status-chip st-${item.status}`}>
+                                                    {status.label}
+                                                </span>
+                                            )}
+                                            <span className="ai-card-assignee" title={item.assignee}>
+                                                <Icon icon={ArrowRight01Icon} size={10} />
+                                                {item.assignee}
+                                            </span>
+                                            {item.meetingTitle && (
+                                                <span className="ai-card-meta-item" title={item.meetingTitle}>
+                                                    <Icon icon={Video01Icon} size={10} />
+                                                    <span className="ai-card-meta-label">Meeting:</span>
+                                                    <span className="ai-card-meta-value">{item.meetingTitle}</span>
+                                                </span>
+                                            )}
+                                            {item.assignedAt && (
+                                                <span className="ai-card-meta-item">
+                                                    <Icon icon={Clock01Icon} size={10} />
+                                                    <span className="ai-card-meta-label">Assigned:</span>
+                                                    <span className="ai-card-meta-value">{formatAssignedDate(item.assignedAt)}</span>
+                                                </span>
+                                            )}
+                                            {item.completionSubmittedAt && (
+                                                <span className="ai-card-meta-item">
+                                                    <Icon icon={Clock01Icon} size={10} />
+                                                    <span className="ai-card-meta-label">Submitted:</span>
+                                                    <span className="ai-card-meta-value">{formatDateTimeDisplay(item.completionSubmittedAt)}</span>
+                                                </span>
+                                            )}
+                                            {item.verifiedAt && (
+                                                <span className="ai-card-meta-item">
+                                                    <Icon icon={CheckmarkCircle01Icon} size={10} />
+                                                    <span className="ai-card-meta-label">Verified:</span>
+                                                    <span className="ai-card-meta-value">{formatDateTimeDisplay(item.verifiedAt)}</span>
+                                                </span>
+                                            )}
+                                            {item.deadline && (
+                                                <span className="ai-card-deadline ai-card-meta-item">
+                                                    <Icon icon={Clock01Icon} size={10} />
+                                                    <span className="ai-card-meta-label">Deadline:</span>
+                                                    <span className="ai-card-meta-value">{formatDeadlineDisplay(item.deadline)}</span>
+                                                </span>
+                                            )}
+                                        </div>
+
+                                        {item.hostFeedback && (
+                                            <div className="ai-card-feedback">
+                                                <strong>Host feedback:</strong> {item.hostFeedback}
+                                            </div>
                                         )}
-                                        {allowDetailEdit && (
-                                            <button
-                                                className="btn-icon btn-icon-sm"
-                                                onClick={() => startEditing(item)}
-                                                title="Edit item"
-                                            >
-                                                <Icon icon={PencilEdit02Icon} size={10} />
-                                            </button>
-                                        )}
-                                        {meetingId && allowDetailEdit && (
-                                            <button
-                                                className="btn-icon btn-icon-sm"
-                                                onClick={() => handleDelete(item.id || item._id)}
-                                                title="Delete"
-                                            >
-                                                <Icon icon={Delete02Icon} size={10} />
-                                            </button>
-                                        )}
+
                                     </div>
-                                </div>
-
-                                <div className="ai-card-meta">
-                                    <span className={`chip ${categoryChips[item.category] || 'chip-blue'}`}>
-                                        {item.category}
-                                    </span>
-                                    {allowStatusEdit ? (
-                                        <label className="ai-status-control" title="Update status">
-                                            <span className="ai-status-label">Status</span>
-                                            <select
-                                                className={`input-field ai-status-select st-${item.status}`}
-                                                value={item.status}
-                                                onChange={(e) => {
-                                                    const nextStatus = e.target.value;
-                                                    if (nextStatus === item.status) return;
-                                                    handleStatusChange(item, nextStatus);
-                                                }}
-                                                aria-label={`Update status for ${item.title}`}
-                                            >
-                                                {getEditableStatuses(item).map((statusKey) => {
-                                                    const option = statusConfig[statusKey] || statusConfig.pending;
-                                                    return (
-                                                        <option key={statusKey} value={statusKey}>
-                                                            {option.label}
-                                                        </option>
-                                                    );
-                                                })}
-                                            </select>
-                                        </label>
-                                    ) : (
-                                        <span className={`chip ai-status-chip st-${item.status}`}>
-                                            {status.label}
-                                        </span>
-                                    )}
-                                    <span className="ai-card-assignee" title={item.assignee}>
-                                        <Icon icon={ArrowRight01Icon} size={10} />
-                                        {item.assignee}
-                                    </span>
-                                    {item.meetingTitle && (
-                                        <span className="ai-card-meta-item" title={item.meetingTitle}>
-                                            <Icon icon={Video01Icon} size={10} />
-                                            <span className="ai-card-meta-label">Meeting:</span>
-                                            <span className="ai-card-meta-value">{item.meetingTitle}</span>
-                                        </span>
-                                    )}
-                                    {item.assignedAt && (
-                                        <span className="ai-card-meta-item">
-                                            <Icon icon={Clock01Icon} size={10} />
-                                            <span className="ai-card-meta-label">Assigned:</span>
-                                            <span className="ai-card-meta-value">{formatAssignedDate(item.assignedAt)}</span>
-                                        </span>
-                                    )}
-                                    {item.completionSubmittedAt && (
-                                        <span className="ai-card-meta-item">
-                                            <Icon icon={Clock01Icon} size={10} />
-                                            <span className="ai-card-meta-label">Submitted:</span>
-                                            <span className="ai-card-meta-value">{formatDateTimeDisplay(item.completionSubmittedAt)}</span>
-                                        </span>
-                                    )}
-                                    {item.verifiedAt && (
-                                        <span className="ai-card-meta-item">
-                                            <Icon icon={CheckmarkCircle01Icon} size={10} />
-                                            <span className="ai-card-meta-label">Verified:</span>
-                                            <span className="ai-card-meta-value">{formatDateTimeDisplay(item.verifiedAt)}</span>
-                                        </span>
-                                    )}
-                                    {item.deadline && (
-                                        <span className="ai-card-deadline ai-card-meta-item">
-                                            <Icon icon={Clock01Icon} size={10} />
-                                            <span className="ai-card-meta-label">Deadline:</span>
-                                            <span className="ai-card-meta-value">{formatDeadlineDisplay(item.deadline)}</span>
-                                        </span>
-                                    )}
-                                </div>
-
-                                {item.hostFeedback && (
-                                    <div className="ai-card-feedback">
-                                        <strong>Host feedback:</strong> {item.hostFeedback}
-                                    </div>
-                                )}
-
-                            </div>
-                        );
-                    })}
+                                );
+                            })}
+                        </div>
+                    ))}
 
                     {canCreateItems && adding ? (
                         <div className="glass-card inline-form-card" onKeyDown={(e: React.KeyboardEvent) => { if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); setAdding(false); resetFields(); } }}>
@@ -600,6 +677,19 @@ export default function ActionItems({ items, sectionTitle = 'Action Items', empt
                                     </select>
                                 )}
                             </div>
+                            {agendaItems.length > 0 && (
+                                <select
+                                    className="input-field"
+                                    value={newAgendaItemId}
+                                    onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setNewAgendaItemId(e.target.value)}
+                                    style={{ marginBottom: '0.25rem' }}
+                                >
+                                    <option value="">General / Unlinked</option>
+                                    {agendaItems.map((agendaItem) => (
+                                        <option key={agendaItem.id} value={agendaItem.id}>{agendaItem.title}</option>
+                                    ))}
+                                </select>
+                            )}
                             <div className="action-item-deadline-block">
                                 <span className="action-item-deadline-label">Deadline</span>
                                 <div className="action-item-deadline-row">
