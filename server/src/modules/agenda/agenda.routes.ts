@@ -2,7 +2,34 @@ import express from 'express';
 const router = express.Router();
 import Agenda = require('./agenda.schema');
 
-export = function ({ protect, usingMongo, inMemoryAgendas, io, Agenda: DbAgenda }: any) {
+export = function ({ protect, usingMongo, inMemoryAgendas, io, Agenda: DbAgenda, Meeting, inMemoryMeetings }: any) {
+    const getMeetingHostId = async (meetingId: string) => {
+        if (usingMongo() && Meeting) {
+            const meeting = await Meeting.findById(meetingId).select('hostId');
+            if (!meeting) return null;
+            return String((meeting as any).hostId?._id || (meeting as any).hostId || '');
+        }
+
+        const meeting = (inMemoryMeetings || []).find(
+            (item: any) => String(item.id || item._id) === String(meetingId),
+        );
+        if (!meeting) return null;
+        return String(meeting.hostId?._id || meeting.hostId || '');
+    };
+
+    const ensureMeetingHost = async (req: any, res: any) => {
+        const hostId = await getMeetingHostId(req.params.meetingId);
+        if (!hostId) {
+            res.status(404).json({ message: 'Meeting not found' });
+            return false;
+        }
+        if (hostId !== String(req.user.id)) {
+            res.status(403).json({ message: 'Only the meeting host can update the agenda' });
+            return false;
+        }
+        return true;
+    };
+
     const broadcastSync = async (meetingId: string) => {
         if (!io) return;
         const mId = meetingId.toString();
@@ -30,6 +57,8 @@ export = function ({ protect, usingMongo, inMemoryAgendas, io, Agenda: DbAgenda 
 
     router.post('/:meetingId', protect, async (req: any, res: any) => {
         try {
+            if (!(await ensureMeetingHost(req, res))) return;
+
             if (!usingMongo()) {
                 const { items } = req.body;
                 inMemoryAgendas[req.params.meetingId] = items || [];
@@ -52,6 +81,8 @@ export = function ({ protect, usingMongo, inMemoryAgendas, io, Agenda: DbAgenda 
 
     router.post('/:meetingId/items', protect, async (req: any, res: any) => {
         try {
+            if (!(await ensureMeetingHost(req, res))) return;
+
             const { title, duration } = req.body;
             const newItem: any = {
                 id: `ag-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
@@ -86,6 +117,8 @@ export = function ({ protect, usingMongo, inMemoryAgendas, io, Agenda: DbAgenda 
 
     router.put('/:meetingId/items/:itemId', protect, async (req: any, res: any) => {
         try {
+            if (!(await ensureMeetingHost(req, res))) return;
+
             const { status, notes, title, duration } = req.body;
 
             if (!usingMongo()) {

@@ -310,10 +310,12 @@ function DashboardApp() {
         if (dateFrom && mDateStr < dateFrom) matchesDate = false;
         if (dateTo && mDateStr > dateTo) matchesDate = false;
       }
-      
+    
       return matchesText && matchesDate;
     });
   }, [upcomingMeetings, scheduleSearchQuery]);
+
+  const isSelectedMeetingHost = String(selectedMeeting?.hostId || '') === String(user?.id || user?._id || '');
 
   useEffect(() => {
     const labels: Record<string, string> = {
@@ -496,6 +498,9 @@ function DashboardApp() {
   };
 
   const handleAgendaChange = async (items: any[]) => {
+    const currentUserId = String(user?.id || user?._id || '');
+    const meetingHostId = String(selectedMeeting?.hostId || '');
+    if (!selectedMeeting || !currentUserId || meetingHostId !== currentUserId) return;
     setAgendaItems(items);
     const mid = selectedMeeting?.id;
     if (!mid) return;
@@ -596,6 +601,7 @@ function DashboardApp() {
               <div className="meeting-side-panel meeting-side-panel-left open">
                 <AgendaPanel
                   agendaItems={agendaItems}
+                  isHost={isSelectedMeetingHost}
                   onItemChange={handleAgendaChange}
                 />
                 <RubricSidebar
@@ -612,7 +618,7 @@ function DashboardApp() {
               participants={selectedMeeting?.participants || []}
               modality={selectedMeeting?.modality}
               currentUser={user}
-              isHost={selectedMeeting?.hostId === (user?.id || user?._id)}
+              isHost={isSelectedMeetingHost}
               fullscreenRef={meetingLayoutRef}
               agendaPanelOpen={agendaPanelOpen}
               rightPanelOpen={rightPanelOpen}

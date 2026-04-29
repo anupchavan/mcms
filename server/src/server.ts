@@ -123,6 +123,22 @@ const io = new Server(server, {
 });
 const connectedUsers = new Map<string, string>();
 
+async function isMeetingHostUser(meetingId: string, userId: string) {
+  if (!meetingId || !userId) return false;
+
+  if (usingMongoFlag && Meeting) {
+    const meeting = await Meeting.findById(meetingId).select("hostId");
+    if (!meeting) return false;
+    return String((meeting as any).hostId?._id || (meeting as any).hostId || "") === String(userId);
+  }
+
+  const meeting = inMemoryMeetings.find(
+    (item: any) => String(item.id || item._id) === String(meetingId),
+  );
+  if (!meeting) return false;
+  return String(meeting.hostId?._id || meeting.hostId || "") === String(userId);
+}
+
 io.use((socket: any, next: any) => {
   const token = socket.handshake.auth?.token;
   if (!token) return next(new Error("Authentication required"));
@@ -912,6 +928,15 @@ io.on("connection", (socket: any) => {
   socket.on("agenda_action", async ({ meetingId, action, itemId }: any) => {
     if (!meetingId || !action || !itemId) return;
     try {
+      const isHost = await isMeetingHostUser(String(meetingId), String(socket.userId || ""));
+      if (!isHost) {
+        socket.emit("agenda_error", {
+          meetingId,
+          message: "Only the host can update the agenda",
+        });
+        return;
+      }
+
       if (usingMongoFlag && Agenda) {
         const agenda = await Agenda.findOne({ meetingId });
         if (!agenda) return;

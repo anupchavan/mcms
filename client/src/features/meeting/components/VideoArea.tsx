@@ -349,7 +349,7 @@ export default function VideoArea({
     { key: 'm', handler: () => hasJoined && toggleAudio(), allowInInput: false },
     { key: 'r', handler: () => isHost && hasJoined && hostControlsRef.current?.toggleRecording(), allowInInput: false },
     { key: 'c', handler: () => hasJoined && toggleVideo(), allowInInput: false },
-    { key: 'a', handler: () => onTriggerAddAgendaItem?.(), allowInInput: false },
+    { key: 'a', handler: () => isHost && onTriggerAddAgendaItem?.(), allowInInput: false },
     { key: 'a', shift: true, handler: () => isHost && onTriggerAddActionItem?.(), allowInInput: false },
     { key: 'Enter', handler: () => !hasJoined && canJoin && handleJoin(), allowInInput: false },
     { key: 'l', mod: true, shift: true, handler: () => hasJoined && handleLeave(), allowInInput: false },

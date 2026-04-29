@@ -16,10 +16,11 @@ interface AgendaItem {
 
 interface AgendaPanelProps {
   agendaItems: AgendaItem[];
+  isHost?: boolean;
   onItemChange?: (items: AgendaItem[]) => void;
 }
 
-const AgendaPanel: FC<AgendaPanelProps> = ({ agendaItems = [], onItemChange }) => {
+const AgendaPanel: FC<AgendaPanelProps> = ({ agendaItems = [], isHost = false, onItemChange }) => {
   const [isAdding, setIsAdding] = useState(false);
   const [newTitle, setNewTitle] = useState('');
   const [newDuration, setNewDuration] = useState('15');
@@ -27,6 +28,7 @@ const AgendaPanel: FC<AgendaPanelProps> = ({ agendaItems = [], onItemChange }) =
   const items = Array.isArray(agendaItems) ? agendaItems : [];
 
   const handleAdd = () => {
+    if (!isHost) return;
     if (!newTitle.trim()) return;
     const newItem: AgendaItem = {
       id: Math.random().toString(36).substr(2, 9),
@@ -43,13 +45,17 @@ const AgendaPanel: FC<AgendaPanelProps> = ({ agendaItems = [], onItemChange }) =
     <div className="agenda-panel panel">
       <div className="section-header">
         <span className="section-title">📋 Agenda</span>
-        <button
-          className={`btn-icon ${isAdding ? 'active' : ''}`}
-          id="btn-add-agenda"
-          onClick={() => setIsAdding(!isAdding)}
-        >
-          <Icon icon={isAdding ? Cancel01Icon : Add01Icon} size={16} />
-        </button>
+        {isHost ? (
+          <button
+            className={`btn-icon ${isAdding ? 'active' : ''}`}
+            id="btn-add-agenda"
+            onClick={() => setIsAdding(!isAdding)}
+          >
+            <Icon icon={isAdding ? Cancel01Icon : Add01Icon} size={16} />
+          </button>
+        ) : (
+          <span className="chip chip-amber" style={{ fontSize: '0.625rem' }}>Host only</span>
+        )}
       </div>
 
       {isAdding && (
@@ -128,11 +134,13 @@ const AgendaPanel: FC<AgendaPanelProps> = ({ agendaItems = [], onItemChange }) =
               transition: 'background-color 0.2s, border-color 0.2s'
             }}
             onClick={() => {
+              if (!isHost) return;
               const newStatus = item.status === 'pending' ? 'active' : item.status === 'active' ? 'completed' : 'pending';
               const updatedItems = items.map(i => i.id === item.id ? { ...i, status: newStatus as any } : i);
               onItemChange?.(updatedItems);
             }}
-            title="Click to change status (Pending -> Active -> Completed)"
+            title={isHost ? "Click to change status (Pending -> Active -> Completed)" : "Only the host can update agenda items"}
+            aria-disabled={!isHost}
             >
               <Icon icon={Clock01Icon} size={16} />
               <div style={{ flex: 1 }}>
