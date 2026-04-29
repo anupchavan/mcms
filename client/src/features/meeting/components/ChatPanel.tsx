@@ -16,6 +16,8 @@ interface ChatPanelProps {
   messages: ChatMessage[];
   currentUserId: string;
   onSendMessage: (text: string) => void;
+  isHost?: boolean;
+  onClose?: () => void;
 }
 
 // Helper to make URLs clickable
@@ -38,7 +40,7 @@ const LinkifyContent = ({ text }: { text: string }) => {
   );
 };
 
-const ChatPanel: FC<ChatPanelProps> = ({ messages = [], currentUserId, onSendMessage }) => {
+const ChatPanel: FC<ChatPanelProps> = ({ messages = [], currentUserId, onSendMessage, isHost = false, onClose }) => {
   const [inputText, setInputText] = useState('');
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
@@ -64,11 +66,16 @@ const ChatPanel: FC<ChatPanelProps> = ({ messages = [], currentUserId, onSendMes
   };
 
   return (
-    <div className="agenda-panel panel chat-panel-root" style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
-      <div className="section-header" style={{ flexShrink: 0 }}>
+    <div className="agenda-panel panel chat-panel-root" style={{ display: 'flex', flexDirection: 'column', height: '100%', borderRadius: 'inherit' }}>
+      <div className="section-header" style={{ flexShrink: 0, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <span className="section-title">
           <Icon icon={Message01Icon} size={16} style={{ marginRight: '0.4rem' }} /> Meeting Chat
         </span>
+        {onClose && (
+            <button onClick={onClose} className="btn-icon" style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: 'var(--text-muted)' }}>
+                <span style={{ fontSize: '1.2rem', lineHeight: 1 }}>&times;</span>
+            </button>
+        )}
       </div>
 
       <div className="chat-messages-container" style={{ flex: 1, overflowY: 'auto', padding: '1rem', display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>

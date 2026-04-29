@@ -3,7 +3,7 @@ import Icon from "../../../shared/components/Icon";
 import {
     Mic01Icon, MicOff01Icon, Video01Icon, VideoOffIcon,
     ComputerScreenShareIcon, QrCodeIcon, UserGroupIcon,
-    RecordIcon, Cancel01Icon, StopIcon, Link01Icon,
+    RecordIcon, Cancel01Icon, StopIcon, Link01Icon, Message01Icon
 } from '@hugeicons/core-free-icons';
 import QROverlay from './QROverlay';
 import ShortcutTooltip from "../../../shared/components/ShortcutTooltip";
@@ -25,6 +25,8 @@ export interface HostControlsProps {
     onMeetingEnded?: () => void;
     /** When true the current user is the meeting host and may end the meeting for all */
     isHost?: boolean;
+    chatOpen?: boolean;
+    onToggleChat?: () => void;
 }
 
 export interface HostControlsRef {
@@ -38,6 +40,7 @@ const HostControls = forwardRef<HostControlsRef, HostControlsProps>(function Hos
     audioEnabled, videoEnabled, screenSharing,
     onToggleAudio, onToggleVideo, onToggleScreenShare,
     onLeave, hasJoined, onMeetingEnded, isHost = false,
+    chatOpen = false, onToggleChat
 }, ref) {
     const { socket } = useSocket();
     const [recording, setRecording] = useState(false);
@@ -200,6 +203,13 @@ const HostControls = forwardRef<HostControlsRef, HostControlsProps>(function Hos
                         <button className="control-btn" onClick={() => setShowQR(true)}>
                             <Icon icon={QrCodeIcon} size={16} />
                             <span>Attendance</span>
+                        </button>
+                    </ShortcutTooltip>
+
+                    <ShortcutTooltip label="Chat" position="top">
+                        <button className={`control-btn ${chatOpen ? 'active' : ''}`} onClick={onToggleChat}>
+                            <Icon icon={Message01Icon} size={16} />
+                            <span>Chat</span>
                         </button>
                     </ShortcutTooltip>
 

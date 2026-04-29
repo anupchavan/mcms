@@ -71,6 +71,8 @@ interface VideoAreaProps {
   isHost?: boolean;
   /** Whether the meeting can be joined right now */
   canJoin?: boolean;
+  chatOpen?: boolean;
+  onToggleChat?: () => void;
 }
 
 function VideoTile({
@@ -209,6 +211,8 @@ export default function VideoArea({
   onParticipantsUpdate,
   isHost = false,
   canJoin = true,
+  chatOpen = false,
+  onToggleChat,
 }: VideoAreaProps) {
   const { socket, connected } = useSocket();
   const [elapsedTime, setElapsedTime] = useState(0);
@@ -699,6 +703,8 @@ export default function VideoArea({
         hasJoined={hasJoined}
         onMeetingEnded={onMeetingEnded}
         isHost={isHost}
+        chatOpen={chatOpen}
+        onToggleChat={onToggleChat}
       />
 
       <style>{`

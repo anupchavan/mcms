@@ -195,6 +195,8 @@ function DashboardApp() {
 
   const toggleAgendaPanel = useCallback(() => setAgendaPanelOpen(prev => !prev), []);
   const toggleRightPanel = useCallback(() => setRightPanelOpen(prev => !prev), []);
+  const [chatOpen, setChatOpen] = useState(false);
+  const toggleChat = useCallback(() => setChatOpen(prev => !prev), []);
   const toggleFullscreen = useCallback(() => {
     const target = meetingLayoutRef.current;
     if (!target) return;
@@ -632,7 +634,20 @@ function DashboardApp() {
               onAgendaChange={handleAgendaChange}
               onRefreshActionItems={() => fetchActionItems(selectedMeeting.id)}
               onParticipantsUpdate={setLiveParticipants}
+              chatOpen={chatOpen}
+              onToggleChat={toggleChat}
             />
+            {chatOpen && (
+              <div style={{ position: 'absolute', bottom: '80px', right: rightPanelOpen ? '340px' : '20px', width: '320px', height: '450px', zIndex: 100, backgroundColor: 'var(--bg-primary)', borderRadius: '12px', boxShadow: '0 8px 24px rgba(0,0,0,0.2)', border: '1px solid var(--border)' }}>
+                <ChatPanel
+                  messages={chatMessages}
+                  currentUserId={(user?.id || user?._id)?.toString() || ''}
+                  onSendMessage={handleSendMessage}
+                  isHost={isSelectedMeetingHost}
+                  onClose={toggleChat}
+                />
+              </div>
+            )}
             {rightPanelOpen && (
               <div className="meeting-side-panel meeting-side-panel-right open">
                 <div className="right-panel-content">
@@ -642,15 +657,8 @@ function DashboardApp() {
                       onClosePanel={toggleRightPanel}
                     />
                   </div>
-                  <div className="right-panel-bottom">
-                    <div className="right-panel-half right-panel-half-minutes">
-                      <ChatPanel
-                        messages={chatMessages}
-                        currentUserId={(user?.id || user?._id)?.toString() || ''}
-                        onSendMessage={handleSendMessage}
-                      />
-                    </div>
-                    <div className="right-panel-half right-panel-half-actions">
+                  <div className="right-panel-bottom" style={{ height: '50%' }}>
+                    <div className="right-panel-half right-panel-half-actions" style={{ height: '100%', borderTop: 'none' }}>
                       <ActionItems
                         items={actionItems}
                         meetingId={selectedMeeting.id}
