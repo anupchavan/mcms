@@ -12,6 +12,7 @@ import { useSocket } from "../../../stores/SocketContext";
 export interface HostControlsProps {
     meetingId?: string;
     meetingTitle?: string;
+    meetingUrl?: string;
     modality?: string;
     audioEnabled: boolean;
     videoEnabled: boolean;
@@ -33,7 +34,7 @@ export interface HostControlsRef {
 }
 
 const HostControls = forwardRef<HostControlsRef, HostControlsProps>(function HostControls({
-    meetingId, meetingTitle, modality,
+    meetingId, meetingTitle, meetingUrl, modality,
     audioEnabled, videoEnabled, screenSharing,
     onToggleAudio, onToggleVideo, onToggleScreenShare,
     onLeave, hasJoined, onMeetingEnded, isHost = false,
@@ -123,7 +124,12 @@ const HostControls = forwardRef<HostControlsRef, HostControlsProps>(function Hos
 
     const handleCopyLink = useCallback(() => {
         if (!meetingId) return;
-        const link = `${window.location.origin}/meeting/${meetingId}`;
+        let link = meetingUrl || '';
+        if (!link) {
+            const isPersonal = meetingId.startsWith('personal-');
+            const param = isPersonal ? `personalRoom=${meetingId.replace('personal-', '')}` : `meeting=${meetingId}`;
+            link = `${window.location.origin}/?${param}`;
+        }
         navigator.clipboard.writeText(link).then(() => {
             setCopied(true);
             setTimeout(() => setCopied(false), 2000);

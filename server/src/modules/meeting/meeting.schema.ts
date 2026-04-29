@@ -17,6 +17,8 @@ interface IMeeting extends Document {
 	status: 'pending_poll' | 'scheduled' | 'in-progress' | 'completed' | 'cancelled';
 	jitsiUrl?: string;
 	jitsiRoomName?: string;
+	isPersonalRoom?: boolean;
+	personalRoomId?: string;
 	createdAt: Date;
 	updatedAt: Date;
 }
@@ -37,6 +39,8 @@ const meetingSchema = new mongoose.Schema({
 	status: { type: String, default: 'pending_poll', enum: ['pending_poll', 'scheduled', 'in-progress', 'completed', 'cancelled'] },
 	jitsiUrl: { type: String },
 	jitsiRoomName: { type: String },
+	isPersonalRoom: { type: Boolean, default: false },
+	personalRoomId: { type: String, default: null },
 }, {
 	timestamps: true
 });

@@ -48,6 +48,7 @@ interface VideoTileProps {
 interface VideoAreaProps {
   meetingId?: string;
   meetingTitle?: string;
+  meetingUrl?: string;
   participants?: Array<{ _id?: string; id?: string; name?: string; profileImage?: string | null }>;
   modality?: string;
   currentUser?: { _id?: string; id?: string; name?: string; profileImage?: string | null } | null;
@@ -187,6 +188,7 @@ function VideoTile({
 export default function VideoArea({
   meetingId,
   meetingTitle,
+  meetingUrl,
   participants,
   modality,
   currentUser,
@@ -685,6 +687,7 @@ export default function VideoArea({
         ref={hostControlsRef}
         meetingId={meetingId}
         meetingTitle={meetingTitle}
+        meetingUrl={meetingUrl}
         modality={modality}
         audioEnabled={audioEnabled}
         videoEnabled={videoEnabled}

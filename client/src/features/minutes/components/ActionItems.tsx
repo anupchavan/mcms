@@ -131,8 +131,8 @@ export default function ActionItems({ items, sectionTitle = 'Action Items', empt
     const getEditableStatuses = (item: ActionItem) => isHostForItem(item) ? HOST_STATUSES : ASSIGNEE_STATUSES;
     const canCreateItems = Boolean(meetingId) && Boolean(currentUserId) && String(meetingHostId || '') === currentUserId;
     const agendaLookup = useMemo(() => {
-        const entries = agendaItems.map((item) => [item.id, item.title]);
-        return new Map(entries);
+        const entries: [string, string][] = agendaItems.map((item) => [item.id, item.title]);
+        return new Map<string, string>(entries);
     }, [agendaItems]);
     const [adding, setAdding] = useState(false);
     const [newTitle, setNewTitle] = useState('');

@@ -30,11 +30,12 @@ interface DashboardStats {
 interface ProductivityDashboardProps {
     stats: DashboardStats | null;
     userName?: string;
+    personalRoomId?: string;
 }
 
 const TABS = ['overview', 'attendance', 'engagement'];
 
-export default function ProductivityDashboard({ stats, userName }: ProductivityDashboardProps) {
+export default function ProductivityDashboard({ stats, userName, personalRoomId }: ProductivityDashboardProps) {
     const [activeTab, setActiveTab] = useState('overview');
 
     const handleTab = useCallback((e: KeyboardEvent) => {
@@ -87,6 +88,41 @@ export default function ProductivityDashboard({ stats, userName }: ProductivityD
 
             {activeTab === 'overview' && (
                 <div className="dashboard-grid">
+                    {personalRoomId && (
+                        <div className="stat-card glass-card" style={{ gridColumn: 'span 2', background: 'linear-gradient(145deg, rgba(var(--primary-rgb), 0.1) 0%, rgba(255,255,255,0.03) 100%)', borderColor: 'var(--primary-muted)' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                                <div>
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.25rem' }}>
+                                        <Icon icon={UserGroupIcon} size={20} style={{ color: 'var(--primary)' }} />
+                                        <h3 style={{ fontSize: '1rem', fontWeight: 600, color: 'var(--text-primary)' }}>Your Personal Room</h3>
+                                    </div>
+                                    <p style={{ fontSize: '0.8125rem', color: 'var(--text-secondary)' }}>An always-on meeting space. Share this link for instant meetings.</p>
+                                </div>
+                                <div style={{ display: 'flex', gap: '0.5rem' }}>
+                                    <button 
+                                        className="btn btn-secondary btn-sm"
+                                        onClick={() => {
+                                            const link = `${window.location.origin}/?personalRoom=${personalRoomId}`;
+                                            navigator.clipboard.writeText(link);
+                                            const btn = document.getElementById('copy-personal-room');
+                                            if (btn) {
+                                                const original = btn.innerText;
+                                                btn.innerText = 'Copied!';
+                                                setTimeout(() => btn.innerText = original, 2000);
+                                            }
+                                        }}
+                                        id="copy-personal-room"
+                                    >
+                                        Copy Link
+                                    </button>
+                                    <a href={`/?personalRoom=${personalRoomId}`} className="btn btn-primary btn-sm">
+                                        Join Now
+                                    </a>
+                                </div>
+                            </div>
+                        </div>
+                    )}
+                    
                     <div className="stat-card glass-card">
                         <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                             <Icon icon={Calendar02Icon} size={18} style={{ color: 'var(--primary)' }} />

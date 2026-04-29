@@ -11,20 +11,22 @@ export = function ({ User, protect, generateToken, usingMongo, inMemoryUsers }: 
                 return res.status(400).json({ message: 'Please provide name, email, and password' });
             }
 
+            const personalRoomId = `${name.toLowerCase().replace(/[^a-z0-9]/g, '')}-${Math.random().toString(36).slice(2, 6)}`;
+
             if (usingMongo() && User) {
                 let existing = await User.findOne({ email });
                 if (existing) return res.status(400).json({ message: 'User already exists' });
-                const user = await User.create({ name, email, password });
-                return res.status(201).json({ _id: user._id, name: user.name, email: user.email, profileImage: user.profileImage, token: generateToken(user._id) });
+                const user = await User.create({ name, email, password, personalRoomId });
+                return res.status(201).json({ _id: user._id, name: user.name, email: user.email, profileImage: user.profileImage, personalRoomId: user.personalRoomId, token: generateToken(user._id) });
             } else {
                 const existing = inMemoryUsers.find((u: any) => u.email === email.toLowerCase());
                 if (existing) return res.status(400).json({ message: 'User already exists' });
                 const salt = await bcrypt.genSalt(10);
                 const hashedPassword = await bcrypt.hash(password, salt);
                 const userId = `user_${Date.now()}`;
-                const user = { _id: userId, name, email: email.toLowerCase(), password: hashedPassword };
+                const user = { _id: userId, name, email: email.toLowerCase(), password: hashedPassword, personalRoomId };
                 inMemoryUsers.push(user);
-                return res.status(201).json({ _id: user._id, name: user.name, email: user.email, profileImage: null, token: generateToken(user._id) });
+                return res.status(201).json({ _id: user._id, name: user.name, email: user.email, profileImage: null, personalRoomId, token: generateToken(user._id) });
             }
         } catch (error: any) {
             console.error('Register error:', error);
@@ -44,13 +46,24 @@ export = function ({ User, protect, generateToken, usingMongo, inMemoryUsers }: 
                 if (!user) return res.status(401).json({ message: 'Invalid email or password' });
                 const isMatch = await user.matchPassword(password);
                 if (!isMatch) return res.status(401).json({ message: 'Invalid email or password' });
-                return res.json({ _id: user._id, name: user.name, email: user.email, profileImage: user.profileImage, token: generateToken(user._id) });
+                
+                if (!user.personalRoomId) {
+                    user.personalRoomId = `${user.name.toLowerCase().replace(/[^a-z0-9]/g, '')}-${Math.random().toString(36).slice(2, 6)}`;
+                    await user.save();
+                }
+                
+                return res.json({ _id: user._id, name: user.name, email: user.email, profileImage: user.profileImage, personalRoomId: user.personalRoomId, token: generateToken(user._id) });
             } else {
                 const user = inMemoryUsers.find((u: any) => u.email === email.toLowerCase());
                 if (!user) return res.status(401).json({ message: 'Invalid email or password' });
                 const isMatch = await bcrypt.compare(password, user.password);
                 if (!isMatch) return res.status(401).json({ message: 'Invalid email or password' });
-                return res.json({ _id: user._id, name: user.name, email: user.email, profileImage: user.profileImage || null, token: generateToken(user._id) });
+                
+                if (!user.personalRoomId) {
+                    user.personalRoomId = `${user.name.toLowerCase().replace(/[^a-z0-9]/g, '')}-${Math.random().toString(36).slice(2, 6)}`;
+                }
+                
+                return res.json({ _id: user._id, name: user.name, email: user.email, profileImage: user.profileImage || null, personalRoomId: user.personalRoomId, token: generateToken(user._id) });
             }
         } catch (error: any) {
             console.error('Login error:', error);
@@ -65,7 +78,7 @@ export = function ({ User, protect, generateToken, usingMongo, inMemoryUsers }: 
                 return res.json(user);
             }
             const user = inMemoryUsers.find((u: any) => u._id === req.user.id);
-            res.json(user ? { _id: user._id, name: user.name, email: user.email, profileImage: user.profileImage || null } : null);
+            res.json(user ? { _id: user._id, name: user.name, email: user.email, profileImage: user.profileImage || null, personalRoomId: user.personalRoomId } : null);
         } catch (error) {
             res.status(500).json({ message: 'Server error' });
         }

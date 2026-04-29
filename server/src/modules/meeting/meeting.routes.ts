@@ -40,7 +40,7 @@ function shouldAutoCompleteMeeting(meeting: any, now = new Date()) {
     return now.getTime() >= meetingEndWithBuffer;
 }
 
-export = function ({ User, Meeting, Poll, Notification, Agenda, protect, usingMongo, emitToUser, sendRsvpEmail, generateICS, CLIENT_URL, inMemoryMeetings, inMemoryAgendas }: any) {
+export = function ({ User, Meeting, Poll, Notification, Agenda, protect, usingMongo, emitToUser, sendRsvpEmail, generateICS, CLIENT_URL, inMemoryMeetings, inMemoryAgendas, inMemoryUsers }: any) {
 
     router.get('/', protect, async (req: any, res: any) => {
         try {
@@ -49,6 +49,7 @@ export = function ({ User, Meeting, Poll, Notification, Agenda, protect, usingMo
                 const base = (CLIENT_URL || 'http://localhost:5173').replace(/\/$/, '');
                 // Only return meetings where the user is the host or a participant
                 const dbMeetings = await Meeting.find({
+                    isPersonalRoom: { $ne: true },
                     $or: [
                         { hostId: userId },
                         { participants: userId },
@@ -88,6 +89,49 @@ export = function ({ User, Meeting, Poll, Notification, Agenda, protect, usingMo
             });
             console.log(`[API] Returning ${visibleMeetings.length} in-memory meetings for user ${userId}.`);
             res.json(visibleMeetings);
+        } catch (error: any) {
+            res.status(500).json({ message: 'Server error', error: error.message });
+        }
+    });
+
+    router.get('/:id', protect, async (req: any, res: any) => {
+        try {
+            const { id } = req.params;
+            const userId = req.user.id;
+
+            if (usingMongo() && Meeting) {
+                let meeting = await Meeting.findById(id).populate('participants', 'name email');
+                if (!meeting) return res.status(404).json({ message: 'Meeting not found' });
+
+                const isHost = String(meeting.hostId) === String(userId);
+                const isParticipant = meeting.participants.some((p: any) => String(p._id || p) === String(userId));
+
+                if (!isHost && !isParticipant) {
+                    meeting.participants.push(userId);
+                    await meeting.save();
+                    meeting = await Meeting.findById(id).populate('participants', 'name email');
+                }
+
+                const base = (CLIENT_URL || 'http://localhost:5173').replace(/\/$/, '');
+                const meetingUrl = meeting.modality !== 'Offline' ? `${base}?meeting=${meeting._id}` : (meeting.meetingUrl || null);
+                
+                return res.json({
+                    ...meeting.toObject(),
+                    id: meeting._id,
+                    meetingUrl
+                });
+            }
+
+            const meeting = inMemoryMeetings.find((m: any) => String(m.id || m._id) === String(id));
+            if (!meeting) return res.status(404).json({ message: 'Meeting not found' });
+            
+            const isHost = String(meeting.hostId) === String(userId);
+            const isParticipant = (meeting.participants || []).some((p: any) => String(p._id || p) === String(userId));
+            if (!isHost && !isParticipant) {
+                meeting.participants = [...(meeting.participants || []), userId];
+            }
+
+            res.json(meeting);
         } catch (error: any) {
             res.status(500).json({ message: 'Server error', error: error.message });
         }
@@ -249,6 +293,80 @@ export = function ({ User, Meeting, Poll, Notification, Agenda, protect, usingMo
             res.setHeader('Content-Disposition', `attachment; filename="${meeting.title.replace(/[^a-zA-Z0-9]/g, '_')}.ics"`);
             res.send(icsBuffer);
         } catch (error: any) {
+            res.status(500).json({ message: 'Server error', error: error.message });
+        }
+    });
+
+    router.get('/personal-room/:roomId', protect, async (req: any, res: any) => {
+        try {
+            const { roomId } = req.params;
+            let hostDoc = null;
+
+            if (usingMongo() && User) {
+                hostDoc = await User.findOne({ personalRoomId: roomId });
+            } else {
+                hostDoc = inMemoryUsers?.find((u: any) => u.personalRoomId === roomId);
+            }
+
+            if (!hostDoc) {
+                return res.status(404).json({ message: 'Personal room not found' });
+            }
+
+            const base = (CLIENT_URL || 'http://localhost:5173').replace(/\/$/, '');
+            const meetingUrl = `${base}?personalRoom=${roomId}`;
+
+            if (usingMongo() && Meeting) {
+                let virtualMeeting = await Meeting.findOne({ isPersonalRoom: true, personalRoomId: roomId });
+                if (!virtualMeeting) {
+                    virtualMeeting = await Meeting.create({
+                        title: `${hostDoc.name}'s Personal Room`,
+                        modality: 'Online',
+                        date: new Date().toISOString().split('T')[0],
+                        time: new Date().toISOString().split('T')[1].slice(0, 5),
+                        durationMinutes: 60,
+                        host: hostDoc.name,
+                        hostId: hostDoc._id,
+                        participants: [],
+                        status: 'in-progress',
+                        meetingUrl,
+                        isPersonalRoom: true,
+                        personalRoomId: roomId
+                    });
+                } else if (virtualMeeting.status !== 'in-progress') {
+                    virtualMeeting.status = 'in-progress';
+                    await virtualMeeting.save();
+                }
+                const returnedObj = virtualMeeting.toObject();
+                returnedObj.id = returnedObj._id.toString();
+                return res.json(returnedObj);
+            }
+
+            const meetingId = `personal-${roomId}`;
+            const virtualMeeting = {
+                id: meetingId,
+                _id: meetingId,
+                title: `${hostDoc.name}'s Personal Room`,
+                modality: 'Online',
+                date: new Date().toISOString().split('T')[0],
+                time: new Date().toISOString().split('T')[1].slice(0, 5),
+                durationMinutes: 60,
+                host: hostDoc.name,
+                hostId: hostDoc._id,
+                participants: [],
+                status: 'in-progress',
+                meetingUrl,
+                isPersonalRoom: true,
+                personalRoomId: roomId
+            };
+            
+            const exists = inMemoryMeetings.find((m: any) => m.id === meetingId);
+            if (!exists) {
+                inMemoryMeetings.push(virtualMeeting);
+            }
+
+            res.json(virtualMeeting);
+        } catch (error: any) {
+            console.error('Personal room error:', error);
             res.status(500).json({ message: 'Server error', error: error.message });
         }
     });

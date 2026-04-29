@@ -20,6 +20,11 @@ const userSchema = new mongoose.Schema({
         type: String,
         default: null,
     },
+    personalRoomId: {
+        type: String,
+        unique: true,
+        sparse: true,
+    },
     createdAt: {
         type: Date,
         default: Date.now,

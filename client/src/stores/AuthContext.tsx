@@ -10,6 +10,7 @@ export interface User {
     id?: string;
     _id?: string;
     profileImage?: string;
+    personalRoomId?: string;
     [key: string]: unknown;
 }
 
@@ -42,11 +43,28 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
     const [loading, setLoading] = useState(true);
 
     useEffect(() => {
-        const userInfo = localStorage.getItem('mcms_userInfo');
-        if (userInfo) {
-            setUser(JSON.parse(userInfo));
-        }
-        setLoading(false);
+        const loadUser = async () => {
+            const userInfo = localStorage.getItem('mcms_userInfo');
+            if (userInfo) {
+                const parsed = JSON.parse(userInfo);
+                setUser(parsed);
+                try {
+                    const res = await fetch(`${API_BASE}/auth/me`, {
+                        headers: { 'Authorization': `Bearer ${parsed.token}` }
+                    });
+                    if (res.ok) {
+                        const freshData = await res.json();
+                        const updated = { ...parsed, ...freshData };
+                        localStorage.setItem('mcms_userInfo', JSON.stringify(updated));
+                        setUser(updated);
+                    }
+                } catch (e) {
+                    console.error("Failed to refresh user data", e);
+                }
+            }
+            setLoading(false);
+        };
+        loadUser();
     }, []);
 
     const login = async (email: string, password: string): Promise<AuthResult> => {

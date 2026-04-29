@@ -1550,16 +1550,14 @@ app.get("/api/meetings/:id/token", protect, async (req: any, res: any) => {
           ? meeting.participants
           : [];
         const isHost = hostId === uid;
+        const isPersonal = meeting.isPersonalRoom === true;
         const isInvited = participants.some((p: any) => {
           const pId = String(p?._id || p?.id || p || "");
-          console.log(
-            `Checking participant: pId='${pId}', uid='${uid}' format: ${typeof p}`,
-          );
           return pId && pId === uid;
         });
-        isParticipant = isHost || isInvited;
+        isParticipant = isHost || isInvited || isPersonal;
         console.log(
-          `isParticipant result for uid=${uid}: Host? ${isHost}, Invited? ${isInvited}`,
+          `isParticipant result for uid=${uid}: Host? ${isHost}, Invited? ${isInvited}, Personal? ${isPersonal}`,
         );
       }
     } else {
@@ -1570,7 +1568,8 @@ app.get("/api/meetings/:id/token", protect, async (req: any, res: any) => {
         const uid = String(userId);
         isParticipant =
           String(memMtg.hostId) === uid ||
-          (memMtg.participants || []).some((p: any) => String(p) === uid);
+          (memMtg.participants || []).some((p: any) => String(p) === uid) ||
+          memMtg.isPersonalRoom === true;
       }
     }
 

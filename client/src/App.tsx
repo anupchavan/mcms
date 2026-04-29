@@ -226,12 +226,43 @@ function DashboardApp() {
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const meetingId = params.get('meeting');
-    if (!meetingId || meetings.length === 0) return;
+    const personalRoomId = params.get('personalRoom');
+
+    if (personalRoomId) {
+      // Fetch personal room details
+      fetchWithAuth(`${API_BASE}/meetings/personal-room/${personalRoomId}`)
+        .then(res => res.json())
+        .then(data => {
+          if (data && data.id) {
+            setSelectedMeeting(data);
+            setCurrentView('meeting');
+            // Remove the personalRoom param from the URL to clean it up, or leave it.
+            // Leaving it allows sharing the current URL easily.
+          }
+        })
+        .catch(err => console.error("Failed to fetch personal room:", err));
+      return;
+    }
+
+    if (!meetingId) return;
 
     const meeting = meetings.find(m => (m.id || m._id)?.toString() === meetingId.toString());
     if (meeting) {
       setSelectedMeeting(meeting);
       setCurrentView('meeting');
+    } else if (meetings.length > 0) {
+      // If meetings have loaded but this one isn't in there, try fetching it directly.
+      // The backend will automatically add the user to the participants list.
+      fetchWithAuth(`${API_BASE}/meetings/${meetingId}`)
+        .then(res => res.json())
+        .then(data => {
+          if (data && data.id) {
+            setSelectedMeeting(data);
+            setCurrentView('meeting');
+            fetchMeetings(); // Refresh list to include new meeting
+          }
+        })
+        .catch(err => console.error("Failed to fetch meeting by link:", err));
     }
   }, [meetings]);
 
@@ -478,7 +509,7 @@ function DashboardApp() {
       case "dashboard":
         return (
           <div style={{ flex: 1, overflow: "hidden" }}>
-            <ProductivityDashboard stats={dashboardStats} userName={user?.name} />
+            <ProductivityDashboard stats={dashboardStats} userName={user?.name} personalRoomId={user?.personalRoomId} />
           </div>
         );
 
@@ -577,6 +608,7 @@ function DashboardApp() {
             <VideoArea
               meetingId={selectedMeeting?.id}
               meetingTitle={selectedMeeting?.title || "Select a Meeting"}
+              meetingUrl={selectedMeeting?.meetingUrl}
               participants={selectedMeeting?.participants || []}
               modality={selectedMeeting?.modality}
               currentUser={user}
@@ -698,7 +730,7 @@ function DashboardApp() {
       case "analytics":
         return (
           <div style={{ flex: 1, overflow: "hidden" }}>
-            <ProductivityDashboard stats={dashboardStats} userName={user?.name} />
+            <ProductivityDashboard stats={dashboardStats} userName={user?.name} personalRoomId={user?.personalRoomId} />
           </div>
         );
 
