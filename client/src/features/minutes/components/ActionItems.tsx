@@ -7,7 +7,8 @@ import {
     CheckmarkCircle01Icon, Clock01Icon, AlertCircleIcon,
     ArrowRight01Icon,
     FlashIcon, Add01Icon, Delete02Icon, SparklesIcon, PencilEdit02Icon,
-    Video01Icon, MessageAdd01Icon,
+    Video01Icon, MessageAdd01Icon, UserIcon,
+    Calendar02Icon,
 } from '@hugeicons/core-free-icons';
 
 
@@ -40,17 +41,7 @@ function deadlineToApi(dateStr: string, timeStr: string, includeTime: boolean): 
     return d;
 }
 
-function formatDeadlineDisplay(deadline: string | undefined): string {
-    if (!deadline) return '';
-    if (deadline.includes('T')) {
-        const [datePart, rest] = deadline.split('T');
-        const hm = (rest || '').slice(0, 5);
-        return hm ? `${datePart} · ${hm}` : datePart;
-    }
-    return deadline;
-}
-
-function formatAssignedDate(dateValue: string | undefined): string {
+function formatDateOnlyDisplay(dateValue: string | undefined): string {
     if (!dateValue) return '';
     const date = new Date(dateValue);
     if (Number.isNaN(date.getTime())) return dateValue;
@@ -58,19 +49,6 @@ function formatAssignedDate(dateValue: string | undefined): string {
     const month = String(date.getMonth() + 1).padStart(2, '0');
     const day = String(date.getDate()).padStart(2, '0');
     return `${year}-${month}-${day}`;
-}
-
-function formatDateTimeDisplay(dateValue: string | undefined): string {
-    if (!dateValue) return '';
-    const date = new Date(dateValue);
-    if (Number.isNaN(date.getTime())) return dateValue;
-    return date.toLocaleString([], {
-        year: 'numeric',
-        month: 'short',
-        day: '2-digit',
-        hour: '2-digit',
-        minute: '2-digit',
-    });
 }
 
 interface ActionItem {
@@ -86,6 +64,7 @@ interface ActionItem {
     assignedAt?: string;
     source?: string;
     meetingTitle?: string;
+    meetingHostName?: string;
     meetingHostId?: string;
     completionSubmittedAt?: string;
     verifiedAt?: string;
@@ -161,6 +140,7 @@ export default function ActionItems({ items, sectionTitle = 'Action Items', empt
         }
     }, [agendaItems, newAgendaItemId]);
     const [editData, setEditData] = useState<Partial<ActionItem> | null>(null);
+    const [editingAgendaItems, setEditingAgendaItems] = useState<AgendaItemLink[] | null>(null);
 
     const groupedSections = useMemo(() => {
         if (!agendaItems.length) {
@@ -185,6 +165,17 @@ export default function ActionItems({ items, sectionTitle = 'Action Items', empt
         setEditingId(item.id || item._id || null);
         // Ensure assignee is correctly setup for the update request
         setEditData({ ...item, agendaItemId: item.agendaItemId || '' });
+        // If parent agenda list is not provided (e.g. tasks view), try fetching agenda for the item's meeting
+        const meetingId = (item as any).meetingId || (item as any).meeting || (item as any).meeting_id || null;
+        if ((!agendaItems || agendaItems.length === 0) && meetingId && fetchWithAuth) {
+            setEditingAgendaItems(null);
+            (fetchWithAuth || fetch)(`${API_BASE}/agenda/${meetingId}`).then(res => {
+                if (!res.ok) return null;
+                return res.json();
+            }).then((data: any) => {
+                if (Array.isArray(data)) setEditingAgendaItems(data.map((a: any) => ({ id: a.id || a._id || a._id, title: a.title })));
+            }).catch(() => {});
+        }
     };
 
     const cancelEditing = () => {
@@ -442,7 +433,6 @@ export default function ActionItems({ items, sectionTitle = 'Action Items', empt
                                 const isEditing = editingId === (item.id || item._id);
                                 const allowStatusEdit = canEditStatus(item);
                                 const allowDetailEdit = canEditDetails(item);
-                                const agendaLabel = item.agendaItemId ? agendaLookup.get(String(item.agendaItemId)) : null;
 
                                 if (isEditing && editData) {
                                     return (
@@ -478,21 +468,26 @@ export default function ActionItems({ items, sectionTitle = 'Action Items', empt
                                                         ))}
                                                     </select>
                                                 ) : (
-                                                    <input className="input-field" placeholder="Assignee" value={editData.assignee || ''} onChange={e => handleUpdateField('assignee', e.target.value)} style={{ flex: 1 }} />
+                                                    <input className="input-field" placeholder="Assigned to" value={editData.assignee || ''} onChange={e => handleUpdateField('assignee', e.target.value)} style={{ flex: 1 }} />
                                                 )}
                                             </div>
-                                            {agendaItems.length > 0 && (
-                                                <select
-                                                    className="input-field"
-                                                    value={String(editData.agendaItemId || '')}
-                                                    onChange={e => handleUpdateField('agendaItemId', e.target.value)}
-                                                    style={{ marginBottom: '4px' }}
-                                                >
-                                                    <option value="">General / Unlinked</option>
-                                                    {agendaItems.map((agendaItem) => (
-                                                        <option key={agendaItem.id} value={agendaItem.id}>{agendaItem.title}</option>
-                                                    ))}
-                                                </select>
+                                            {(agendaItems.length > 0 || (editingAgendaItems && editingAgendaItems.length > 0)) && (
+                                                (() => {
+                                                    const available = (agendaItems && agendaItems.length > 0) ? agendaItems : (editingAgendaItems || []);
+                                                    return (
+                                                        <select
+                                                            className="input-field"
+                                                            value={String(editData.agendaItemId || '')}
+                                                            onChange={e => handleUpdateField('agendaItemId', e.target.value)}
+                                                            style={{ marginBottom: '4px' }}
+                                                        >
+                                                            <option value="">General / Unlinked</option>
+                                                            {available.map((agendaItem) => (
+                                                                <option key={agendaItem.id} value={agendaItem.id}>{agendaItem.title}</option>
+                                                            ))}
+                                                        </select>
+                                                    );
+                                                })()
                                             )}
                                             <input className="input-field" placeholder="Deadline (YYYY-MM-DD)" value={editData.deadline || ''} onChange={e => handleUpdateField('deadline', e.target.value)} style={{ marginBottom: '4px' }} />
                                             <div className="inline-form-row">
@@ -552,11 +547,6 @@ export default function ActionItems({ items, sectionTitle = 'Action Items', empt
                                             <span className={`chip ${categoryChips[item.category] || 'chip-blue'}`}>
                                                 {item.category}
                                             </span>
-                                            {agendaLabel && (
-                                                <span className="chip chip-cyan" title={agendaLabel}>
-                                                    {agendaLabel}
-                                                </span>
-                                            )}
                                             {allowStatusEdit ? (
                                                 <label className="ai-status-control" title="Update status">
                                                     <span className="ai-status-label">Status</span>
@@ -585,43 +575,49 @@ export default function ActionItems({ items, sectionTitle = 'Action Items', empt
                                                     {status.label}
                                                 </span>
                                             )}
-                                            <span className="ai-card-assignee" title={item.assignee}>
-                                                <Icon icon={ArrowRight01Icon} size={10} />
-                                                {item.assignee}
-                                            </span>
                                             {item.meetingTitle && (
-                                                <span className="ai-card-meta-item" title={item.meetingTitle}>
+                                                <span className="ai-card-meta-item" title={`${item.meetingTitle}${item.meetingHostName ? ' — ' + item.meetingHostName : ''}`}>
                                                     <Icon icon={Video01Icon} size={10} />
                                                     <span className="ai-card-meta-label">Meeting:</span>
-                                                    <span className="ai-card-meta-value">{item.meetingTitle}</span>
+                                                    <span className="ai-card-meta-value">
+                                                        {item.meetingTitle}
+                                                        {item.meetingHostName ? (
+                                                            <span style={{ marginLeft: 6, color: 'var(--text-secondary)', fontWeight: 500 }}>— {item.meetingHostName}</span>
+                                                        ) : null}
+                                                    </span>
                                                 </span>
                                             )}
+                                            {String(item.agendaItemId || '').trim() && (
+                                                <span className="ai-card-meta-item" title={agendaLookup.get(String(item.agendaItemId)) || 'General / Unlinked'}>
+                                                    <Icon icon={Calendar02Icon} size={10} />
+                                                    <span className="ai-card-meta-label">Agenda:</span>
+                                                    <span className="ai-card-meta-value">{agendaLookup.get(String(item.agendaItemId)) || 'General / Unlinked'}</span>
+                                                </span>
+                                            )}
+                                            <span className="ai-card-meta-item" title={item.assignee || 'Unassigned'}>
+                                                <Icon icon={ArrowRight01Icon} size={10} />
+                                                <span className="ai-card-meta-label">Assigned to:</span>
+                                                <span className="ai-card-meta-value">{item.assignee || 'Unassigned'}</span>
+                                            </span>
                                             {item.assignedAt && (
                                                 <span className="ai-card-meta-item">
                                                     <Icon icon={Clock01Icon} size={10} />
-                                                    <span className="ai-card-meta-label">Assigned:</span>
-                                                    <span className="ai-card-meta-value">{formatAssignedDate(item.assignedAt)}</span>
-                                                </span>
-                                            )}
-                                            {item.completionSubmittedAt && (
-                                                <span className="ai-card-meta-item">
-                                                    <Icon icon={Clock01Icon} size={10} />
-                                                    <span className="ai-card-meta-label">Submitted:</span>
-                                                    <span className="ai-card-meta-value">{formatDateTimeDisplay(item.completionSubmittedAt)}</span>
-                                                </span>
-                                            )}
-                                            {item.verifiedAt && (
-                                                <span className="ai-card-meta-item">
-                                                    <Icon icon={CheckmarkCircle01Icon} size={10} />
-                                                    <span className="ai-card-meta-label">Verified:</span>
-                                                    <span className="ai-card-meta-value">{formatDateTimeDisplay(item.verifiedAt)}</span>
+                                                    <span className="ai-card-meta-label">Assigned on:</span>
+                                                    <span className="ai-card-meta-value">{formatDateOnlyDisplay(item.assignedAt)}</span>
                                                 </span>
                                             )}
                                             {item.deadline && (
                                                 <span className="ai-card-deadline ai-card-meta-item">
                                                     <Icon icon={Clock01Icon} size={10} />
                                                     <span className="ai-card-meta-label">Deadline:</span>
-                                                    <span className="ai-card-meta-value">{formatDeadlineDisplay(item.deadline)}</span>
+                                                    <span className="ai-card-meta-value">{formatDateOnlyDisplay(item.deadline)}</span>
+                                                </span>
+                                            )}
+                                            {item.verifiedAt && (
+                                                <span className="ai-card-meta-item">
+                                                    <Icon icon={CheckmarkCircle01Icon} size={10} />
+                                                    <span className="ai-card-meta-label">Verified:</span>
+                                                    <span className="ai-card-meta-value">{formatDateOnlyDisplay(item.verifiedAt)}</span>
                                                 </span>
                                             )}
                                         </div>

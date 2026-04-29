@@ -82,6 +82,7 @@ export = function ({ protect, usingMongo, Notification, emitToUser, inMemoryActi
             aiConfidence: item.aiConfidence,
             meetingId: (item.meetingId?._id || item.meetingId)?.toString(),
             meetingTitle: item.meetingId?.title || null,
+            meetingHostName: item.meetingId?.host || null,
             meetingHostId: (item.meetingId?.hostId?._id || item.meetingId?.hostId)?.toString() || null,
             assignedAt: item.createdAt || null,
             completionSubmittedAt: item.completionSubmittedAt || null,
@@ -131,7 +132,7 @@ export = function ({ protect, usingMongo, Notification, emitToUser, inMemoryActi
 
                 const [assignedToMe, assignedByMe] = await Promise.all([
                     ActionItem.find({ assignee: userId })
-                        .populate('meetingId', 'title hostId')
+                        .populate('meetingId', 'title host hostId')
                         .populate('assignee', 'name email')
                         .sort({ createdAt: -1 }),
                     hostedMeetingIds.length > 0
@@ -139,7 +140,7 @@ export = function ({ protect, usingMongo, Notification, emitToUser, inMemoryActi
                             meetingId: { $in: hostedMeetingIds },
                             assignee: { $nin: [null, userId] },
                         })
-                            .populate('meetingId', 'title hostId')
+                            .populate('meetingId', 'title host hostId')
                             .populate('assignee', 'name email')
                             .sort({ createdAt: -1 })
                         : Promise.resolve([]),
@@ -160,10 +161,28 @@ export = function ({ protect, usingMongo, Notification, emitToUser, inMemoryActi
                 (items || []).map((item: any) => ({ ...item, meetingId })),
             );
 
-            return res.json({
-                assignedToMe: allItems.filter((item: any) => String(item.assigneeId || '') === userId),
-                assignedByMe: allItems.filter((item: any) => hostedMeetingIds.has(String(item.meetingId || '')) && String(item.assigneeId || '') !== userId),
-            });
+                return res.json({
+                    assignedToMe: allItems
+                        .filter((item: any) => String(item.assigneeId || '') === userId)
+                        .map((item: any) => {
+                            const meeting = (inMemoryMeetings || []).find((m: any) => String(m.id || m._id) === String(item.meetingId || ''));
+                            return {
+                                ...item,
+                                meetingTitle: item.meetingTitle || meeting?.title || null,
+                                meetingHostName: item.meetingHostName || meeting?.host || null,
+                            };
+                        }),
+                    assignedByMe: allItems
+                        .filter((item: any) => hostedMeetingIds.has(String(item.meetingId || '')) && String(item.assigneeId || '') !== userId)
+                        .map((item: any) => {
+                            const meeting = (inMemoryMeetings || []).find((m: any) => String(m.id || m._id) === String(item.meetingId || ''));
+                            return {
+                                ...item,
+                                meetingTitle: item.meetingTitle || meeting?.title || null,
+                                meetingHostName: item.meetingHostName || meeting?.host || null,
+                            };
+                        }),
+                });
         } catch (error: any) {
             res.status(500).json({ message: 'Server error', error: error.message });
         }
@@ -173,7 +192,7 @@ export = function ({ protect, usingMongo, Notification, emitToUser, inMemoryActi
         try {
             if (usingMongo() && ActionItem) {
                 const items = await ActionItem.find({ meetingId: req.params.meetingId })
-                    .populate('meetingId', 'title hostId')
+                    .populate('meetingId', 'title host hostId')
                     .populate('assignee', 'name email')
                     .sort({ createdAt: 1 });
                 return res.json(items.map(processItem));
@@ -238,7 +257,7 @@ export = function ({ protect, usingMongo, Notification, emitToUser, inMemoryActi
                 `You've been assigned: "${title}"`,
             );
 
-            const populated = await ActionItem.findById(item._id).populate('meetingId', 'title hostId').populate('assignee', 'name email');
+            const populated = await ActionItem.findById(item._id).populate('meetingId', 'title host hostId').populate('assignee', 'name email');
             res.status(201).json(processItem(populated));
             broadcastSync(req.params.meetingId);
         } catch (error: any) {
@@ -251,7 +270,7 @@ export = function ({ protect, usingMongo, Notification, emitToUser, inMemoryActi
             if (!usingMongo()) return res.status(400).json({ message: 'Database required' });
 
             const item = await ActionItem.findById(req.params.id)
-                .populate('meetingId', 'title hostId')
+                .populate('meetingId', 'title host hostId')
                 .populate('assignee', 'name email');
             if (!item) return res.status(404).json({ message: 'Action item not found' });
 
@@ -341,7 +360,7 @@ export = function ({ protect, usingMongo, Notification, emitToUser, inMemoryActi
 
             await ActionItem.findByIdAndUpdate(req.params.id, updates, { new: true });
             const updatedItem = await ActionItem.findById(req.params.id)
-                .populate('meetingId', 'title hostId')
+                .populate('meetingId', 'title host hostId')
                 .populate('assignee', 'name email');
 
             if (!updatedItem) return res.status(404).json({ message: 'Action item not found' });
