@@ -432,7 +432,7 @@ export default function VideoArea({
       profileImage: peer.profileImage,
       muted: false,
       isSelf: false,
-      isScreenShare: false,
+      isScreenShare: peer.isScreenShare,
       speaking: false,
     }));
     const allTiles = [selfTile, ...peerTiles];
