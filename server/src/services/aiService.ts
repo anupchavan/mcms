@@ -64,6 +64,25 @@ async function callAIMeetingSummary(payload: {
     }
 }
 
+async function callAIExtractTags(transcriptText: string) {
+    try {
+        const resp = await fetch(`${AI_SERVICE_URL}/extract-tags`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ text: transcriptText }),
+        });
+        if (!resp.ok) {
+            const errText = await resp.text().catch(() => '');
+            throw new Error(`AI req failed ${resp.status}: ${errText}`);
+        }
+        const data: any = await resp.json();
+        return data.tags || [];
+    } catch (error: any) {
+        console.error('AI extract-tags call failed:', error.message);
+        throw error;
+    }
+}
+
 async function callAISentiment(text: string) {
     try {
         const resp = await fetch(`${AI_SERVICE_URL}/sentiment`, {
@@ -79,4 +98,4 @@ async function callAISentiment(text: string) {
     }
 }
 
-export { callAISummarize, callAIExtractActions, callAIMeetingSummary, callAISentiment };
+export { callAISummarize, callAIExtractActions, callAIMeetingSummary, callAISentiment, callAIExtractTags };

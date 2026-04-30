@@ -337,9 +337,29 @@ export default function ArchiveView({ fetchWithAuth }: ArchiveViewProps) {
     const [loadingFinalSummary, setLoadingFinalSummary] = useState(false);
     const [extractingActions, setExtractingActions] = useState(false);
     const [viewAll, setViewAll] = useState(false);
+    const [availableTags, setAvailableTags] = useState<string[]>([]);
+    const [availablePeople, setAvailablePeople] = useState<{ _id: string, name: string, email: string }[]>([]);
+    const [selectedTags, setSelectedTags] = useState<string[]>([]);
+    const [selectedPeople, setSelectedPeople] = useState<string[]>([]);
     const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-    const search = useCallback(async (searchInput: string, fetchAll: boolean) => {
+    useEffect(() => {
+        const fetchFilters = async () => {
+            try {
+                const res = await (fetchWithAuth || fetch)(`${API_BASE}/archive/filters`);
+                if (res.ok) {
+                    const data = await res.json();
+                    setAvailableTags(data.tags || []);
+                    setAvailablePeople(data.people || []);
+                }
+            } catch (err) {
+                console.error('Failed to load archive filters:', err);
+            }
+        };
+        fetchFilters();
+    }, [fetchWithAuth]);
+
+    const search = useCallback(async (searchInput: string, tags: string[], people: string[], fetchAll: boolean) => {
         const { textQuery, dateFrom, dateTo } = parseArchiveSearchInput(searchInput);
         setLoading(true);
         try {
@@ -347,8 +367,10 @@ export default function ArchiveView({ fetchWithAuth }: ArchiveViewProps) {
             if (textQuery.trim()) params.set('q', textQuery.trim());
             if (dateFrom) params.set('dateFrom', dateFrom);
             if (dateTo) params.set('dateTo', dateTo);
+            if (tags.length > 0) params.set('tags', tags.join(','));
+            if (people.length > 0) params.set('people', people.join(','));
 
-            if (!textQuery.trim() && !dateFrom && !dateTo && !fetchAll) {
+            if (!textQuery.trim() && !dateFrom && !dateTo && tags.length === 0 && people.length === 0 && !fetchAll) {
                 params.set('limit', '5');
             }
 
@@ -366,9 +388,9 @@ export default function ArchiveView({ fetchWithAuth }: ArchiveViewProps) {
         const isSearchEmpty = parseArchiveSearchInput(query).textQuery.trim() === '' && !parseArchiveSearchInput(query).dateFrom;
         if (!isSearchEmpty && viewAll) setViewAll(false);
 
-        debounceRef.current = setTimeout(() => search(query, viewAll), SEARCH_DEBOUNCE_MS);
+        debounceRef.current = setTimeout(() => search(query, selectedTags, selectedPeople, viewAll), SEARCH_DEBOUNCE_MS);
         return () => { if (debounceRef.current) clearTimeout(debounceRef.current); };
-    }, [query, viewAll, search]);
+    }, [query, selectedTags, selectedPeople, viewAll, search]);
 
     const loadDetail = async (meetingId: string) => {
         setSelectedMeeting(meetingId);
@@ -609,6 +631,24 @@ export default function ArchiveView({ fetchWithAuth }: ArchiveViewProps) {
                         onChange={(e) => setQuery(e.target.value)}
                     />
                 </div>
+                <div style={{ display: 'flex', gap: '1rem', marginTop: '0.75rem' }}>
+                    <div style={{ flex: 1 }}>
+                        <MultiSelectDropdown 
+                            options={availableTags.map(t => ({ value: t, label: t }))}
+                            selected={selectedTags}
+                            onChange={setSelectedTags}
+                            placeholder="Filter by tags"
+                        />
+                    </div>
+                    <div style={{ flex: 1 }}>
+                        <MultiSelectDropdown 
+                            options={availablePeople.map(p => ({ value: p._id, label: `${p.name} (${p.email})` }))}
+                            selected={selectedPeople}
+                            onChange={setSelectedPeople}
+                            placeholder="Filter by people"
+                        />
+                    </div>
+                </div>
             </div>
 
             {loading ? (
@@ -646,13 +686,53 @@ export default function ArchiveView({ fetchWithAuth }: ArchiveViewProps) {
                         <p style={{ color: 'var(--text-muted)', fontSize: '0.875rem' }}>No completed meetings found.</p>
                     )}
                     
-                    {!loading && !query.trim() && !viewAll && results.length > 0 && (
+                    {!loading && !query.trim() && selectedTags.length === 0 && selectedPeople.length === 0 && !viewAll && results.length > 0 && (
                         <div style={{ textAlign: 'center', marginTop: '1.5rem', marginBottom: '1rem' }}>
                             <button className="btn btn-secondary" onClick={() => setViewAll(true)}>
                                 Load Full History
                             </button>
                         </div>
                     )}
+                </div>
+            )}
+        </div>
+    );
+}
+
+function MultiSelectDropdown({ options, selected, onChange, placeholder }: any) {
+    const [open, setOpen] = useState(false);
+    return (
+        <div style={{ position: 'relative', width: '100%' }}>
+            <div 
+                className="input-field" 
+                onClick={() => setOpen(!open)}
+                style={{ cursor: 'pointer', display: 'flex', flexWrap: 'wrap', gap: '4px', minHeight: '38px', alignItems: 'center', padding: '6px 12px' }}
+            >
+                {selected.length === 0 ? <span style={{ color: 'var(--text-muted)' }}>{placeholder}</span> : null}
+                {selected.map((val: string) => {
+                    const opt = options.find((o: any) => o.value === val);
+                    return <span key={val} className="chip chip-emerald" style={{ fontSize: '0.75rem', padding: '2px 6px', margin: 0 }}>{opt ? opt.label : val}</span>;
+                })}
+            </div>
+            {open && (
+                <div className="glass-card" style={{ position: 'absolute', top: '100%', left: 0, right: 0, zIndex: 10, maxHeight: '200px', overflowY: 'auto', padding: '4px', marginTop: '4px' }}>
+                    {options.length === 0 ? <div style={{ padding: '8px', color: 'var(--text-muted)', fontSize: '0.875rem' }}>No options available</div> : null}
+                    {options.map((opt: any) => (
+                        <div 
+                            key={opt.value}
+                            onClick={() => {
+                                if (selected.includes(opt.value)) {
+                                    onChange(selected.filter((v: string) => v !== opt.value));
+                                } else {
+                                    onChange([...selected, opt.value]);
+                                }
+                            }}
+                            style={{ padding: '6px 10px', fontSize: '0.875rem', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px', borderRadius: '4px', backgroundColor: selected.includes(opt.value) ? 'var(--bg-hover)' : 'transparent' }}
+                        >
+                            <input type="checkbox" checked={selected.includes(opt.value)} readOnly style={{ margin: 0 }} />
+                            {opt.label}
+                        </div>
+                    ))}
                 </div>
             )}
         </div>

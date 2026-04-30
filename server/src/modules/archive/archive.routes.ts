@@ -103,12 +103,39 @@ export = function ({ User, Meeting, protect, usingMongo, callAISummarize, callAI
 			.lean();
 	}
 
+	router.get('/filters', protect, async (req: any, res: any) => {
+		try {
+			if (!usingMongo() || !Meeting) return res.json({ tags: [], people: [] });
+			const meetings = await Meeting.find({ status: 'completed' })
+				.populate('participants', 'name email')
+				.populate('hostId', 'name email');
+			
+			const tagSet = new Set<string>();
+			const peopleMap = new Map<string, any>();
+
+			meetings.forEach((m: any) => {
+				(m.tags || []).forEach((t: string) => tagSet.add(t));
+				if (m.hostId) peopleMap.set(m.hostId._id.toString(), { _id: m.hostId._id, name: m.hostId.name, email: m.hostId.email });
+				(m.participants || []).forEach((p: any) => {
+					if (p && p._id) peopleMap.set(p._id.toString(), { _id: p._id, name: p.name, email: p.email });
+				});
+			});
+
+			res.json({
+				tags: Array.from(tagSet),
+				people: Array.from(peopleMap.values())
+			});
+		} catch (error: any) {
+			res.status(500).json({ message: 'Server error', error: error.message });
+		}
+	});
+
 	router.get('/', protect, async (req: any, res: any) => {
 		try {
-			const { q, agendaTitle, dateFrom, dateTo, limit } = req.query;
+			const { q, agendaTitle, dateFrom, dateTo, limit, tags, people } = req.query;
 
 			// Check cache for top 5 recent archives
-			const isTop5Request = limit === '5' && !q && !agendaTitle && !dateFrom && !dateTo;
+			const isTop5Request = limit === '5' && !q && !agendaTitle && !dateFrom && !dateTo && !tags && !people;
 			const cacheKey = 'archive:top5';
 
 			if (isTop5Request) {
@@ -154,6 +181,7 @@ export = function ({ User, Meeting, protect, usingMongo, callAISummarize, callAI
 			}
 
 			const meetingFilter: any = { status: 'completed' };
+			const andConditions: any[] = [];
 
 			if (dateFrom || dateTo) {
 				const dateRange: any = {};
@@ -163,10 +191,31 @@ export = function ({ User, Meeting, protect, usingMongo, callAISummarize, callAI
 					toDate.setDate(toDate.getDate() + 1);
 					dateRange.$lt = toDate.toISOString().slice(0, 10);
 				}
-				meetingFilter.$or = [
-					{ confirmedDate: dateRange },
-					{ date: dateRange },
-				];
+				andConditions.push({
+					$or: [
+						{ confirmedDate: dateRange },
+						{ date: dateRange },
+					]
+				});
+			}
+
+			if (tags) {
+				const tagArray = String(tags).split(',').map(t => t.trim()).filter(t => t);
+				if (tagArray.length > 0) {
+					meetingFilter.tags = { $in: tagArray };
+				}
+			}
+
+			if (people) {
+				const peopleArray = String(people).split(',').map(p => p.trim()).filter(p => p);
+				if (peopleArray.length > 0) {
+					andConditions.push({
+						$or: [
+							{ hostId: { $in: peopleArray } },
+							{ participants: { $in: peopleArray } }
+						]
+					});
+				}
 			}
 
 			let restrictIds: mongoose.Types.ObjectId[] | null = null;
@@ -186,12 +235,11 @@ export = function ({ User, Meeting, protect, usingMongo, callAISummarize, callAI
 			}
 
 			if (restrictIds) {
-				if (meetingFilter.$or) {
-					meetingFilter.$and = [{ $or: meetingFilter.$or }, { _id: { $in: restrictIds } }];
-					delete meetingFilter.$or;
-				} else {
-					meetingFilter._id = { $in: restrictIds };
-				}
+				meetingFilter._id = { $in: restrictIds };
+			}
+
+			if (andConditions.length > 0) {
+				meetingFilter.$and = andConditions;
 			}
 
 			const meetings = await Meeting.find(meetingFilter)
@@ -226,6 +274,7 @@ export = function ({ User, Meeting, protect, usingMongo, callAISummarize, callAI
 					time: m.confirmedTime || m.time,
 					host: m.host, hostId: m.hostId,
 					participants: m.participants,
+					tags: m.tags || [],
 					matchedTranscripts: matchedTranscripts.map((t: any) => ({
 						text: t.text, speaker: t.speaker,
 						timestamp: t.timestamp, agendaItemId: t.agendaItemId,

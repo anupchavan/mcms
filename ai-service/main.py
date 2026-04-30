@@ -134,6 +134,11 @@ class SentimentRequest(BaseModel):
     text: str
 
 
+class ExtractTagsRequest(BaseModel):
+    text: str
+
+
+
 def normalize_whitespace(text: str) -> str:
     return re.sub(r"\s+", " ", (text or "")).strip()
 
@@ -607,6 +612,45 @@ async def extract_actions(req: ExtractActionsRequest):
             unique_actions.append(a)
 
     return {"actions": [unique_actions[i] for i in range(min(10, len(unique_actions)))]}
+
+
+@app.post("/extract-tags")
+async def extract_tags(req: ExtractTagsRequest):
+    client, model = get_preferred_client("summary")
+    default_tags = ["Meeting", "Discussion", "General"]
+    
+    if client:
+        try:
+            response = client.chat.completions.create(
+                model=model,
+                messages=[
+                    {
+                        "role": "system",
+                        "content": (
+                            "You are a meeting assistant. Given a meeting transcript, extract 3 to 5 high-level, "
+                            "semantic tags that describe the meeting's topics, domain, or outcome (e.g., 'Strategic Planning', "
+                            "'Code Review', 'Urgent', 'Budget', 'Brainstorming'). "
+                            "Return a JSON object with a single key 'tags' mapping to an array of strings."
+                        ),
+                    },
+                    {"role": "user", "content": pyre_slice(str(req.text), 0, 15000)},
+                ],
+                response_format={"type": "json_object"},
+                max_tokens=150,
+                temperature=0.3,
+            )
+            import json
+            data = json.loads(response.choices[0].message.content)
+            tags = data.get("tags", default_tags)
+            if not isinstance(tags, list):
+                tags = default_tags
+            return {"tags": [str(t).strip() for t in tags[:5]]}
+        except Exception as e:
+            global last_ai_error
+            last_ai_error = str(e)
+            print(f"AI extract-tags error: {e}")
+            return {"tags": default_tags}
+    return {"tags": default_tags}
 
 
 @app.post("/sentiment")

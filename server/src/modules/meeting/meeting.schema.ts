@@ -19,6 +19,7 @@ interface IMeeting extends Document {
 	jitsiRoomName?: string;
 	isPersonalRoom?: boolean;
 	personalRoomId?: string;
+	tags?: string[];
 	createdAt: Date;
 	updatedAt: Date;
 }
@@ -41,6 +42,7 @@ const meetingSchema = new mongoose.Schema({
 	jitsiRoomName: { type: String },
 	isPersonalRoom: { type: Boolean, default: false },
 	personalRoomId: { type: String, default: null },
+	tags: [{ type: String }],
 }, {
 	timestamps: true
 });

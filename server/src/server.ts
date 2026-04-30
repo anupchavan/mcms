@@ -216,6 +216,7 @@ const {
   callAISummarize,
   callAIExtractActions,
   callAIMeetingSummary,
+  callAIExtractTags,
 } = require("./services/aiService");
 
 async function sendRsvpEmail(
@@ -1220,6 +1221,16 @@ io.on("connection", (socket: any) => {
                   "AI meeting summary persistence failed:",
                   e.message,
                 );
+              }
+
+              try {
+                const tags = await callAIExtractTags(fullText);
+                if (tags && tags.length > 0) {
+                  meeting.tags = tags;
+                  await meeting.save();
+                }
+              } catch (e: any) {
+                console.error("AI tag extraction failed:", e.message);
               }
             }
           } catch (e: any) {

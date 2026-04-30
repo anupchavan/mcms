@@ -57,6 +57,10 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
                         const updated = { ...parsed, ...freshData };
                         localStorage.setItem('mcms_userInfo', JSON.stringify(updated));
                         setUser(updated);
+                    } else if (res.status === 401) {
+                        console.warn("Token expired or invalid, logging out automatically");
+                        localStorage.removeItem('mcms_userInfo');
+                        setUser(null);
                     }
                 } catch (e) {
                     console.error("Failed to refresh user data", e);
