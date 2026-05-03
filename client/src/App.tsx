@@ -2,11 +2,9 @@ import { useState, useEffect, useRef, useMemo, useCallback } from "react";
 import "./styles/index.css";
 import TopBar from "./layouts/TopBar";
 import Sidebar from "./layouts/Sidebar";
-import AgendaPanel from "./features/agenda/components/AgendaPanel";
 import VideoArea from "./features/meeting/components/VideoArea";
-import TranscriptFeed from "./features/transcript/components/TranscriptFeed";
-import ChatPanel, { ChatMessage } from "./features/meeting/components/ChatPanel";
-import ActionItems from "./features/minutes/components/ActionItems";
+import MeetingDock, { type DockPanelId } from "./features/meeting/components/MeetingDock";
+import { type ChatMessage } from "./features/meeting/components/ChatPanel";
 import MeetingCreation from "./modules/meeting/microFrontends/createMeeting/components/MeetingCreation";
 import ProductivityDashboard from "./features/dashboard/components/ProductivityDashboard";
 import PollVoting from "./features/polls/components/PollVoting";
@@ -14,7 +12,6 @@ import ProfileSettings from "./features/profile/components/ProfileSettings";
 import ArchiveView from "./features/dashboard/components/ArchiveView";
 import LocationMapModal from "./features/meeting/components/LocationMapModal";
 import AttendanceMarkPage from "./features/attendance/components/AttendanceMarkPage";
-import RubricSidebar from "./features/rubric/components/RubricSidebar";
 import useKeyboardShortcuts from "./hooks/useKeyboardShortcuts";
 import Icon from "./shared/components/Icon";
 import { Search01Icon, Calendar02Icon, Clock01Icon, Location01Icon, UserIcon } from "@hugeicons/core-free-icons";
@@ -160,8 +157,11 @@ function DashboardApp() {
   const [actionItems, setActionItems] = useState<any[]>([]);
   const [dashboardStats, setDashboardStats] = useState<any>(null);
   const [selectedMeeting, setSelectedMeeting] = useState<any>(null);
-  const [agendaPanelOpen, setAgendaPanelOpen] = useState(true);
-  const [rightPanelOpen, setRightPanelOpen] = useState(true);
+  // Unified dock state — replaces the old `agendaPanelOpen`/`rightPanelOpen`
+  // pair and the `chatOpen` overlay. The dock hosts Agenda / Chat / Transcript /
+  // Minutes / Action Items as tabs in a single right-side panel.
+  const [dockOpen, setDockOpen] = useState(true);
+  const [dockActivePanelId, setDockActivePanelId] = useState<DockPanelId>('agenda');
   const [addActionItemTrigger, setAddActionItemTrigger] = useState(0);
   const [addAgendaItemTrigger, setAddAgendaItemTrigger] = useState(0);
   const [myActionItems, setMyActionItems] = useState<{ assignedToMe: any[]; assignedByMe: any[] }>({
@@ -184,19 +184,28 @@ function DashboardApp() {
   }, []);
 
   const triggerAddActionItem = useCallback(() => {
-    setRightPanelOpen(true);
+    setDockActivePanelId('actions');
+    setDockOpen(true);
     setAddActionItemTrigger(t => t + 1);
   }, []);
 
   const triggerAddAgendaItem = useCallback(() => {
-    setAgendaPanelOpen(true);
+    setDockActivePanelId('agenda');
+    setDockOpen(true);
     setAddAgendaItemTrigger(t => t + 1);
   }, []);
 
-  const toggleAgendaPanel = useCallback(() => setAgendaPanelOpen(prev => !prev), []);
-  const toggleRightPanel = useCallback(() => setRightPanelOpen(prev => !prev), []);
-  const [chatOpen, setChatOpen] = useState(false);
-  const toggleChat = useCallback(() => setChatOpen(prev => !prev), []);
+  const toggleDockOpen = useCallback(() => setDockOpen(prev => !prev), []);
+  const selectDockPanel = useCallback((id: DockPanelId) => {
+    setDockActivePanelId(id);
+    setDockOpen(true);
+  }, []);
+  // Chat button in HostControls now switches the dock to the Chat tab.
+  const toggleChat = useCallback(() => {
+    setDockActivePanelId('chat');
+    setDockOpen(true);
+  }, []);
+  const chatOpen = dockOpen && dockActivePanelId === 'chat';
   const toggleFullscreen = useCallback(() => {
     const target = meetingLayoutRef.current;
     if (!target) return;
@@ -209,8 +218,9 @@ function DashboardApp() {
     { key: 'M', shift: true, handler: () => setShowCreateMeeting(true) },
     { key: 'd', handler: () => setTheme(prev => prev === 'dark' ? 'light' : 'dark') },
     { key: 'f', handler: toggleFullscreen },
-    { key: '[', mod: true, handler: () => setAgendaPanelOpen(prev => !prev), allowInInput: true },
-    { key: ']', mod: true, handler: () => setRightPanelOpen(prev => !prev), allowInInput: true },
+    // mod+] toggles the dock open/closed; mod+[ jumps to the Agenda tab.
+    { key: ']', mod: true, handler: () => setDockOpen(prev => !prev), allowInInput: true },
+    { key: '[', mod: true, handler: () => { setDockActivePanelId('agenda'); setDockOpen(true); }, allowInInput: true },
     { key: 'Escape', handler: () => { if (pollMeetingId) setPollMeetingId(null); }, allowInInput: true },
     ...VIEW_KEYS.map((view, i) => ({ key: String(i + 1), handler: () => setCurrentView(view) })),
   ], [pollMeetingId, toggleFullscreen]);
@@ -597,22 +607,9 @@ function DashboardApp() {
           );
         }
         const isOffline = selectedMeeting?.modality === 'Offline';
+        const liveParticipantsList = liveParticipants.length > 0 ? liveParticipants : (selectedMeeting?.participants || []);
         return (
-          <div ref={meetingLayoutRef} className={`meeting-layout ${isOffline ? 'offline-mode' : ''} ${!agendaPanelOpen ? 'agenda-hidden' : ''} ${!rightPanelOpen ? 'right-hidden' : ''}`}>
-            {agendaPanelOpen && (
-              <div className="meeting-side-panel meeting-side-panel-left open">
-                <AgendaPanel
-                  agendaItems={agendaItems}
-                  isHost={isSelectedMeetingHost}
-                  onItemChange={handleAgendaChange}
-                />
-                <RubricSidebar
-                  meetingId={selectedMeeting.id}
-                  participants={liveParticipants.length > 0 ? liveParticipants : (selectedMeeting.participants || [])}
-                  fetchWithAuth={fetchWithAuth}
-                />
-              </div>
-            )}
+          <div ref={meetingLayoutRef} className={`meeting-layout ${isOffline ? 'offline-mode' : ''} ${!dockOpen ? 'dock-collapsed' : ''}`}>
             <VideoArea
               meetingId={selectedMeeting?.id}
               meetingTitle={selectedMeeting?.title || "Select a Meeting"}
@@ -622,10 +619,6 @@ function DashboardApp() {
               currentUser={user}
               isHost={isSelectedMeetingHost}
               fullscreenRef={meetingLayoutRef}
-              agendaPanelOpen={agendaPanelOpen}
-              rightPanelOpen={rightPanelOpen}
-              onToggleAgendaPanel={toggleAgendaPanel}
-              onToggleRightPanel={toggleRightPanel}
               onMeetingEnded={handleMeetingEnded}
               onTriggerAddActionItem={triggerAddActionItem}
               onTriggerAddAgendaItem={triggerAddAgendaItem}
@@ -637,44 +630,27 @@ function DashboardApp() {
               chatOpen={chatOpen}
               onToggleChat={toggleChat}
             />
-            {chatOpen && (
-              <div style={{ position: 'absolute', bottom: '80px', right: rightPanelOpen ? '340px' : '20px', width: '320px', height: '450px', zIndex: 100, backgroundColor: 'var(--bg-primary)', borderRadius: '12px', boxShadow: '0 8px 24px rgba(0,0,0,0.2)', border: '1px solid var(--border)' }}>
-                <ChatPanel
-                  messages={chatMessages}
-                  currentUserId={(user?.id || user?._id)?.toString() || ''}
-                  onSendMessage={handleSendMessage}
-                  isHost={isSelectedMeetingHost}
-                  onClose={toggleChat}
-                />
-              </div>
-            )}
-            {rightPanelOpen && (
-              <div className="meeting-side-panel meeting-side-panel-right open">
-                <div className="right-panel-content">
-                  <div className="right-panel-transcript">
-                    <TranscriptFeed
-                      transcripts={transcripts}
-                      onClosePanel={toggleRightPanel}
-                    />
-                  </div>
-                  <div className="right-panel-bottom" style={{ height: '50%' }}>
-                    <div className="right-panel-half right-panel-half-actions" style={{ height: '100%', borderTop: 'none' }}>
-                      <ActionItems
-                        items={actionItems}
-                        meetingId={selectedMeeting.id}
-                        meetingHostId={selectedMeeting.hostId}
-                        agendaItems={agendaItems}
-                        fetchWithAuth={fetchWithAuth}
-                        onRefresh={() => fetchActionItems(selectedMeeting.id)}
-                        addActionItemTrigger={addActionItemTrigger}
-                        onAddTriggered={() => setAddActionItemTrigger(0)}
-                        participants={liveParticipants.length > 0 ? liveParticipants : (selectedMeeting.participants || [])}
-                      />
-                    </div>
-                  </div>
-                </div>
-              </div>
-            )}
+            <MeetingDock
+              meetingId={selectedMeeting?.id}
+              meetingHostId={selectedMeeting?.hostId}
+              isHost={isSelectedMeetingHost}
+              activePanelId={dockActivePanelId}
+              isOpen={dockOpen}
+              onSelectPanel={selectDockPanel}
+              onToggleOpen={toggleDockOpen}
+              agendaItems={agendaItems}
+              actionItems={actionItems}
+              transcripts={transcripts}
+              participants={liveParticipantsList}
+              addActionItemTrigger={addActionItemTrigger}
+              chatMessages={chatMessages}
+              currentUserId={(user?.id || user?._id)?.toString() || ''}
+              onSendChatMessage={handleSendMessage}
+              onAgendaChange={handleAgendaChange}
+              onAddActionItemConsumed={() => setAddActionItemTrigger(0)}
+              onRefreshActionItems={() => fetchActionItems(selectedMeeting.id)}
+              fetchWithAuth={fetchWithAuth}
+            />
           </div>
         );
 

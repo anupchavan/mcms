@@ -1,21 +1,8 @@
 import { useState, useEffect } from "react";
 import { createPortal } from "react-dom";
-import { MapContainer, TileLayer, Marker } from "react-leaflet";
-import L from "leaflet";
-import "leaflet/dist/leaflet.css";
 import Icon from "../../../shared/components/Icon";
 import { Cancel01Icon, Location01Icon } from "@hugeicons/core-free-icons";
-
-// Fix Leaflet default icon in bundlers (idempotent — safe to call multiple times)
-import markerIcon2x from "leaflet/dist/images/marker-icon-2x.png";
-import markerIcon from "leaflet/dist/images/marker-icon.png";
-import markerShadow from "leaflet/dist/images/marker-shadow.png";
-delete (L.Icon.Default.prototype as any)._getIconUrl;
-L.Icon.Default.mergeOptions({
-  iconRetinaUrl: markerIcon2x,
-  iconUrl: markerIcon,
-  shadowUrl: markerShadow,
-});
+import { FlexokiMap } from "../../../shared/components/map/FlexokiMap";
 
 interface LocationMapModalProps {
   address: string;
@@ -36,7 +23,8 @@ export default function LocationMapModal({ address, onClose }: LocationMapModalP
       .then((r) => r.json())
       .then((data) => {
         if (data && data.length > 0) {
-          setCoords([parseFloat(data[0].lat), parseFloat(data[0].lon)]);
+          // MapLibre uses [longitude, latitude] — Nominatim returns lat/lon strings.
+          setCoords([parseFloat(data[0].lon), parseFloat(data[0].lat)]);
         } else {
           setError(true);
         }
@@ -45,7 +33,6 @@ export default function LocationMapModal({ address, onClose }: LocationMapModalP
       .finally(() => setLoading(false));
   }, [address]);
 
-  // Close on Escape
   useEffect(() => {
     const handle = (e: KeyboardEvent) => {
       if (e.key === "Escape") onClose();
@@ -80,7 +67,6 @@ export default function LocationMapModal({ address, onClose }: LocationMapModalP
           animation: "modalIn 0.2s ease",
         }}
       >
-        {/* Header */}
         <div
           style={{
             display: "flex",
@@ -150,7 +136,6 @@ export default function LocationMapModal({ address, onClose }: LocationMapModalP
           </button>
         </div>
 
-        {/* Map area */}
         <div style={{ height: 300, position: "relative", background: "var(--bg-elevated)" }}>
           {loading && (
             <div
@@ -191,17 +176,16 @@ export default function LocationMapModal({ address, onClose }: LocationMapModalP
           )}
 
           {!loading && !error && coords && (
-            <MapContainer center={coords} zoom={15} style={{ height: "100%", width: "100%" }} zoomControl={true}>
-              <TileLayer
-                attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OSM</a>'
-                url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-              />
-              <Marker position={coords} />
-            </MapContainer>
+            <FlexokiMap
+              initialCenter={coords}
+              initialZoom={15}
+              markerPos={{ lng: coords[0], lat: coords[1] }}
+              interactive={false}
+              showNavigation={false}
+            />
           )}
         </div>
 
-        {/* Footer */}
         <div
           style={{
             padding: "0.625rem 1.125rem",

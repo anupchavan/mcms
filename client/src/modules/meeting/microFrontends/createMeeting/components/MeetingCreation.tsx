@@ -13,15 +13,37 @@ import {
   Copy01Icon,
   Tick01Icon,
   Add01Icon,
+  ArrowExpand01Icon,
+  ArrowShrink01Icon,
 } from "@hugeicons/core-free-icons";
 import * as chrono from "chrono-node";
 import { useAuth } from "../../../../../stores/AuthContext";
+import { FlexokiMap } from "../../../../../shared/components/map/FlexokiMap";
 import { Suggestion, Slot, MeetingCreationProps, CreatedMeeting, ParticipantUser } from "../interfaces";
 import { buildSuggestions, formatSlotDisplay } from "../hooks/useMeetingSlots.ts";
 
 const _raw = import.meta.env.VITE_API_URL || "http://localhost:5001/api";
 const SERVER_BASE = _raw.replace(/(\/api\/?)+$/, "");
 const API_BASE = `${SERVER_BASE}/api`;
+
+interface LngLat { lng: number; lat: number; }
+
+/**
+ * Reverse-geocode helper for the map click handler. Returns either a
+ * Nominatim `display_name` or a `lat, lng` fallback string so the
+ * address field always gets _something_ even when the network fails.
+ */
+async function reverseGeocode(lat: number, lng: number): Promise<string> {
+  try {
+    const res = await fetch(
+      `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}`,
+    );
+    const data = await res.json();
+    return data?.display_name || `${lat.toFixed(5)}, ${lng.toFixed(5)}`;
+  } catch {
+    return `${lat.toFixed(5)}, ${lng.toFixed(5)}`;
+  }
+}
 
 
 
@@ -52,6 +74,46 @@ export default function MeetingCreation({
   const [labelText, setLabelText] = useState("Scheduling Poll Slots");
   const [labelFading, setLabelFading] = useState(false);
   const [closing, setClosing] = useState(false);
+
+  // ──────────────────────────────────────────────────────────────────
+  // Map picker state (Flexoki / MapLibre + OpenFreeMap vector tiles)
+  // ──────────────────────────────────────────────────────────────────
+  const [mapPos, setMapPos] = useState<LngLat | null>(null);
+  // MapLibre uses GeoJSON [longitude, latitude] order (note: opposite of Leaflet).
+  const [mapCenter, setMapCenter] = useState<[number, number]>([78.123, 17.5947]);
+  const [showMap, setShowMap] = useState(false);
+  const [mapExpanded, setMapExpanded] = useState(false);
+  /**
+   * One-shot latch: once the user opens the inline map, keep it mounted
+   * for the rest of the modal session and toggle visibility via CSS.
+   * Eliminates the 1-3s WebGL/shader/tile re-init cost on every Show/Hide.
+   */
+  const [inlineMapMounted, setInlineMapMounted] = useState(false);
+  const [expandedMapMounted, setExpandedMapMounted] = useState(false);
+  useEffect(() => { if (showMap) setInlineMapMounted(true); }, [showMap]);
+  useEffect(() => { if (mapExpanded) setExpandedMapMounted(true); }, [mapExpanded]);
+  const [geocoding, setGeocoding] = useState(false);
+  const geocodeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  /**
+   * Holds the address string most recently produced by a click→reverse-geocode.
+   * The geocode-on-typing useEffect below skips the forward-geocode when
+   * `location === skipGeocodeForRef`, preventing the click pin from drifting
+   * to a slightly different coordinate produced by the round-trip.
+   */
+  const skipGeocodeForRef = useRef<string | null>(null);
+
+  /**
+   * Stable map-click handler. `setMapPos`/`setLocation` are referentially
+   * stable from `useState`, `skipGeocodeForRef` is a ref, and
+   * `reverseGeocode` is module-scope — so `[]` is the correct dep array.
+   */
+  const handleMapClick = useCallback(({ lng, lat }: LngLat) => {
+    setMapPos({ lng, lat });
+    reverseGeocode(lat, lng).then((address) => {
+      skipGeocodeForRef.current = address;
+      setLocation(address);
+    });
+  }, []);
 
   const handleClose = useCallback(() => {
     if (closing) return;
@@ -194,6 +256,40 @@ export default function MeetingCreation({
       if (searchTimerRef.current) clearTimeout(searchTimerRef.current);
     };
   }, [participantQuery, fetchParticipantSuggestions]);
+
+  // Input → Map: debounced forward-geocode when user types in the location field
+  useEffect(() => {
+    if (!showMap || locationType !== "Outside") return;
+    if (geocodeTimerRef.current) clearTimeout(geocodeTimerRef.current);
+    // If `location` was just set by a click→reverse-geocode, the pin is
+    // already correctly placed — don't forward-geocode and re-pin it.
+    if (skipGeocodeForRef.current !== null && skipGeocodeForRef.current === location) {
+      skipGeocodeForRef.current = null;
+      return;
+    }
+    const trimmed = location.trim();
+    if (!trimmed) return;
+    geocodeTimerRef.current = setTimeout(() => {
+      setGeocoding(true);
+      fetch(
+        `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(trimmed)}&limit=1`,
+      )
+        .then((r) => r.json())
+        .then((data) => {
+          if (data && data.length > 0) {
+            const lat = parseFloat(data[0].lat);
+            const lng = parseFloat(data[0].lon);
+            setMapPos({ lng, lat });
+            // Triggers FlexokiMap.flyToTarget — animates camera to the
+            // typed-address location while preserving the user's zoom.
+            setMapCenter([lng, lat]);
+          }
+        })
+        .catch(() => { /* ignore network errors — pin stays where it was */ })
+        .finally(() => setGeocoding(false));
+    }, 600);
+    return () => { if (geocodeTimerRef.current) clearTimeout(geocodeTimerRef.current); };
+  }, [location, showMap, locationType]);
 
   const selectSuggestion = (suggestion: Suggestion) => {
     setSlots((prev) => [
@@ -693,17 +789,127 @@ export default function MeetingCreation({
                       onChange={(e) => setLocation(e.target.value)}
                       required={modality === "Offline" || modality === "Hybrid"}
                     />
-                    <a
-                      href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(location || "Hyderabad")}`}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="btn btn-secondary"
-                      style={{ flexShrink: 0, display: "flex", alignItems: "center", gap: "0.375rem", padding: "0 0.75rem", textDecoration: "none" }}
-                      title="Search on Google Maps"
+                    <button
+                      type="button"
+                      className={`btn btn-secondary${showMap ? ' active' : ''}`}
+                      onClick={() => setShowMap(!showMap)}
+                      style={{ flexShrink: 0, display: "flex", alignItems: "center", gap: "0.375rem", padding: "0 0.75rem", background: showMap ? "var(--bg-hover)" : undefined }}
+                      title={showMap ? "Hide map" : "Show map"}
                     >
-                      <Icon icon={Location01Icon} size={14} /> Map
-                    </a>
+                      <Icon icon={Location01Icon} size={14} /> {showMap ? "Hide" : "Map"}
+                    </button>
                   </div>
+
+                  {/*
+                    Visibility — not unmount — toggle. After the user shows the
+                    map for the first time, `inlineMapMounted` latches on and
+                    the FlexokiMap stays in the DOM for the rest of the modal
+                    session. Subsequent Show/Hide and expand/collapse only flip
+                    `display`, so MapLibre never re-creates its WebGL context
+                    or re-fetches tiles. Hidden entirely while expanded so we
+                    never run two MapLibre instances at the same time.
+                  */}
+                  {inlineMapMounted && (
+                    <div style={{ marginTop: "0.5rem", borderRadius: "var(--radius-sm)", overflow: "hidden", border: "1px solid var(--border)", display: showMap && !mapExpanded ? "block" : "none" }}>
+                      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "4px 8px", background: "var(--bg-elevated)", borderBottom: "1px solid var(--border)", fontSize: "0.7rem", color: "var(--text-muted)", gap: "6px" }}>
+                        <span style={{ flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                          {geocoding
+                            ? "Locating…"
+                            : mapPos
+                            ? `${mapPos.lat.toFixed(5)}, ${mapPos.lng.toFixed(5)}`
+                            : "Click the map or type an address above"}
+                        </span>
+                        <div style={{ display: "flex", alignItems: "center", gap: "4px", flexShrink: 0 }}>
+                          {mapPos && (
+                            <button
+                              type="button"
+                              onClick={() => { setMapPos(null); setMapCenter([78.123, 17.5947]); setLocation(""); }}
+                              style={{ background: "none", border: "none", cursor: "pointer", color: "var(--accent-rose, #f87171)", fontSize: "0.7rem", padding: "0 3px" }}
+                            >
+                              Clear
+                            </button>
+                          )}
+                          <button
+                            type="button"
+                            onClick={() => setMapExpanded(true)}
+                            style={{ background: "none", border: "none", cursor: "pointer", color: "var(--text-muted)", padding: "2px 3px", display: "flex", alignItems: "center" }}
+                            title="Expand map"
+                          >
+                            <Icon icon={ArrowExpand01Icon} size={13} />
+                          </button>
+                        </div>
+                      </div>
+                      <div style={{ height: "220px" }}>
+                        <FlexokiMap
+                          initialCenter={mapCenter}
+                          markerPos={mapPos}
+                          flyToTarget={mapCenter}
+                          onMapClick={handleMapClick}
+                        />
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Expanded map portal — same keep-alive pattern. */}
+                  {expandedMapMounted && createPortal(
+                    <div
+                      style={{
+                        position: "fixed", inset: 0, zIndex: 99999,
+                        display: mapExpanded ? "flex" : "none", alignItems: "center", justifyContent: "center",
+                        background: "rgba(0,0,0,0.7)", backdropFilter: "blur(6px)",
+                      }}
+                      onClick={() => setMapExpanded(false)}
+                    >
+                      <div
+                        onClick={(e) => e.stopPropagation()}
+                        style={{
+                          width: "min(860px, 96vw)", height: "min(580px, 92vh)",
+                          borderRadius: "var(--radius-md, 12px)", overflow: "hidden",
+                          border: "1px solid var(--border)",
+                          display: "flex", flexDirection: "column",
+                          boxShadow: "0 24px 64px rgba(0,0,0,0.5)",
+                          background: "var(--bg-secondary)",
+                        }}
+                      >
+                        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "8px 14px", background: "var(--bg-elevated)", borderBottom: "1px solid var(--border)", fontSize: "0.8rem", color: "var(--text-muted)" }}>
+                          <span>
+                            {geocoding ? "Locating…" : mapPos ? `${mapPos.lat.toFixed(5)}, ${mapPos.lng.toFixed(5)}` : "Click to pin a location"}
+                          </span>
+                          <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                            <button
+                              type="button"
+                              onClick={() => setMapExpanded(false)}
+                              style={{ background: "none", border: "none", cursor: "pointer", color: "var(--text-muted)", display: "flex", alignItems: "center", padding: "2px" }}
+                              title="Close"
+                            >
+                              <Icon icon={ArrowShrink01Icon} size={15} />
+                            </button>
+                          </div>
+                        </div>
+                        <div style={{ flex: 1 }}>
+                          <FlexokiMap
+                            initialCenter={mapCenter}
+                            markerPos={mapPos}
+                            flyToTarget={mapCenter}
+                            onMapClick={handleMapClick}
+                          />
+                        </div>
+                        <div style={{ padding: "8px 14px", background: "var(--bg-elevated)", borderTop: "1px solid var(--border)", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                          <span style={{ fontSize: "0.75rem", color: "var(--text-secondary)", flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                            {location || "No location selected"}
+                          </span>
+                          <button
+                            type="button"
+                            className="btn btn-primary btn-sm"
+                            onClick={() => setMapExpanded(false)}
+                          >
+                            Done
+                          </button>
+                        </div>
+                      </div>
+                    </div>,
+                    document.body,
+                  )}
                 </>
               )}
             </div>
