@@ -105,9 +105,14 @@ function AttendanceRoute() {
     return <AttendanceMarkPage meetingId={meetingId} token={token} />;
 }
 
+const routerBasename =
+    typeof import.meta.env.BASE_URL === "string"
+        ? import.meta.env.BASE_URL.replace(/\/$/, "")
+        : "";
+
 export default function App() {
     return (
-        <BrowserRouter>
+        <BrowserRouter basename={routerBasename || undefined}>
             <LegacyParamsRedirect />
             <Routes>
                 <Route path="/attendance" element={<AttendanceRoute />} />
