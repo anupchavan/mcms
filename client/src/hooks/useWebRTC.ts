@@ -36,6 +36,8 @@ export default function useWebRTC(
     const [isJoined, setIsJoined] = useState(false);
     const [localTracks, setLocalTracks] = useState<LocalTrack[]>([]);
     const [screenStream, setScreenStream] = useState<MediaStream | null>(null);
+    /** When starting screen share, pass through to `getDisplayMedia` / LiveKit (`audio: …`). */
+    const [screenShareSystemAudio, setScreenShareSystemAudio] = useState(false);
 
     const roomRef = useRef<Room | null>(null);
     // Mirror of `localTracks` for use inside cleanups / async paths where the
@@ -230,6 +232,7 @@ export default function useWebRTC(
         setIsJoined(false);
         setParticipants([]);
         setScreenStream(null);
+        setScreenShareSystemAudio(false);
         setAudioEnabled(true);
         setVideoEnabled(true);
     }, []);
@@ -258,13 +261,41 @@ export default function useWebRTC(
 
         try {
             const isSharing = activeRoom.localParticipant.isScreenShareEnabled;
-            await activeRoom.localParticipant.setScreenShareEnabled(!isSharing);
+            if (!isSharing) {
+                await activeRoom.localParticipant.setScreenShareEnabled(true, {
+                    audio: screenShareSystemAudio,
+                });
+            } else {
+                await activeRoom.localParticipant.setScreenShareEnabled(false);
+            }
             syncLocalScreenShare(activeRoom);
         } catch (err: any) {
             console.error('Screen share toggle failed:', err);
             setMediaError(err?.message || 'Screen sharing failed');
         }
-    }, [syncLocalScreenShare]);
+    }, [syncLocalScreenShare, screenShareSystemAudio]);
+
+    /** Updates preference; if already presenting, restarts capture so audio tracks match. */
+    const setScreenShareSystemAudioPref = useCallback(
+        (wantAudio: boolean) => {
+            setScreenShareSystemAudio(wantAudio);
+            const activeRoom = roomRef.current;
+            if (!activeRoom?.localParticipant.isScreenShareEnabled) return;
+            void (async () => {
+                try {
+                    await activeRoom.localParticipant.setScreenShareEnabled(false);
+                    await activeRoom.localParticipant.setScreenShareEnabled(true, {
+                        audio: wantAudio,
+                    });
+                    syncLocalScreenShare(activeRoom);
+                } catch (err: any) {
+                    console.error('Screen share audio preference failed:', err);
+                    setMediaError(err?.message || 'Could not update presentation audio');
+                }
+            })();
+        },
+        [syncLocalScreenShare],
+    );
 
     useEffect(() => {
         return () => { leaveRoom(); };
@@ -276,6 +307,8 @@ export default function useWebRTC(
         audioEnabled,
         videoEnabled,
         screenStream,
+        screenShareSystemAudio,
+        setScreenShareSystemAudioPref,
         mediaError,
         joinRoom,
         leaveRoom,

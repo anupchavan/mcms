@@ -20,6 +20,9 @@ export interface HostControlsProps {
     onToggleAudio: () => void;
     onToggleVideo: () => void;
     onToggleScreenShare: () => void;
+    /** When sharing a screen, include system/tab audio in the capture (browser / OS permitting). */
+    screenShareSystemAudio?: boolean;
+    onScreenShareSystemAudioChange?: (enabled: boolean) => void;
     onLeave: () => void;
     hasJoined: boolean;
     onMeetingEnded?: () => void;
@@ -39,6 +42,8 @@ const HostControls = forwardRef<HostControlsRef, HostControlsProps>(function Hos
     meetingId, meetingTitle, meetingUrl, modality,
     audioEnabled, videoEnabled, screenSharing,
     onToggleAudio, onToggleVideo, onToggleScreenShare,
+    screenShareSystemAudio = false,
+    onScreenShareSystemAudioChange,
     onLeave, hasJoined, onMeetingEnded, isHost = false,
     chatOpen = false, onToggleChat
 }, ref) {
@@ -130,14 +135,16 @@ const HostControls = forwardRef<HostControlsRef, HostControlsProps>(function Hos
         let link = meetingUrl || '';
         if (!link) {
             const isPersonal = meetingId.startsWith('personal-');
-            const param = isPersonal ? `personalRoom=${meetingId.replace('personal-', '')}` : `meeting=${meetingId}`;
-            link = `${window.location.origin}/?${param}`;
+            const path = isPersonal
+                ? `/rooms/${meetingId.replace('personal-', '')}`
+                : `/meetings/${meetingId}`;
+            link = `${window.location.origin}${path}`;
         }
         navigator.clipboard.writeText(link).then(() => {
             setCopied(true);
             setTimeout(() => setCopied(false), 2000);
         });
-    }, [meetingId]);
+    }, [meetingId, meetingUrl]);
 
     return (
         <>
@@ -174,6 +181,23 @@ const HostControls = forwardRef<HostControlsRef, HostControlsProps>(function Hos
                                     <Icon icon={ComputerScreenShareIcon} size={18} />
                                 </button>
                             </ShortcutTooltip>
+
+                            <div
+                                className={`screen-audio-toggle ${screenSharing ? 'screen-audio-toggle--live' : ''}`}
+                                title="Include computer audio when you share your screen (browser and OS support required)"
+                            >
+                                <span className="screen-audio-toggle-label">System audio</span>
+                                <button
+                                    type="button"
+                                    role="switch"
+                                    aria-checked={screenShareSystemAudio}
+                                    className={`screen-audio-switch ${screenShareSystemAudio ? 'on' : ''}`}
+                                    disabled={!hasJoined}
+                                    onClick={() => onScreenShareSystemAudioChange?.(!screenShareSystemAudio)}
+                                >
+                                    <span className="screen-audio-switch-thumb" />
+                                </button>
+                            </div>
 
                             <div className="controls-divider"></div>
 

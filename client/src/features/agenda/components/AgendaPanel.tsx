@@ -44,7 +44,7 @@ const AgendaPanel: FC<AgendaPanelProps> = ({ agendaItems = [], isHost = false, o
   return (
     <div className="agenda-panel panel">
       <div className="section-header">
-        <span className="section-title">📋 Agenda</span>
+        <span className="section-title">Agenda</span>
         {isHost ? (
           <button
             className={`btn-icon ${isAdding ? 'active' : ''}`}

@@ -1,14 +1,13 @@
-import { useCallback, useState, useEffect, useRef, useMemo } from "react";
+import { useCallback, useState, useEffect, useRef, useMemo, type MutableRefObject, type CSSProperties } from "react";
 import HostControls, { type HostControlsRef } from "./HostControls";
 import useKeyboardShortcuts from "../../../hooks/useKeyboardShortcuts";
 import Icon from "../../../shared/components/Icon";
 import {
   UserGroupIcon,
   FullScreenIcon,
-  MinimizeScreenIcon,
+  ArrowShrink02Icon,
   Clock01Icon,
   Note01Icon,
-  Task01Icon,
   ArrowRight01Icon,
   PlayIcon,
   PauseIcon,
@@ -41,6 +40,10 @@ interface VideoTileProps {
   pinned?: boolean;
   onTogglePin?: (tileId: string) => void;
   speaking?: boolean;
+  /** Camera tiles use `cover` to reduce letterboxing; screen share uses `contain`. */
+  videoObjectFit?: "contain" | "cover";
+  /** Layout slot: gallery grid, main stage (screen share), or sidebar filmstrip. */
+  layoutVariant?: "gallery" | "stage" | "filmstrip";
 }
 
 interface VideoAreaProps {
@@ -75,6 +78,10 @@ interface VideoAreaProps {
   canJoin?: boolean;
   chatOpen?: boolean;
   onToggleChat?: () => void;
+  /** Fires when the user enters/leaves the call (Online/Hybrid). Offline is ignored — parent may treat offline as always in-session for chat. */
+  onCallJoinedChange?: (joined: boolean) => void;
+  /** Assign `current` to a function that starts the same join flow as the prejoin button. */
+  joinMeetingActionRef?: MutableRefObject<(() => Promise<void>) | null>;
 }
 
 function VideoTile({
@@ -88,6 +95,8 @@ function VideoTile({
   pinned,
   onTogglePin,
   speaking,
+  videoObjectFit: videoObjectFitProp,
+  layoutVariant = "gallery",
 }: VideoTileProps) {
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const videoBackdropRef = useRef<HTMLVideoElement | null>(null);
@@ -132,10 +141,11 @@ function VideoTile({
   }, [stream]);
 
   const initial: string = name?.charAt(0)?.toUpperCase() || "?";
+  const videoObjectFit = videoObjectFitProp ?? (isScreenShare ? "contain" : "contain");
 
   return (
     <div
-      className={`video-tile ${speaking ? "speaking" : ""} ${pinned ? "pinned" : ""} ${isScreenShare ? "screen-share" : ""}`}
+      className={`video-tile video-tile--${layoutVariant} ${speaking ? "speaking" : ""} ${pinned ? "pinned" : ""} ${isScreenShare ? "screen-share" : ""}`}
     >
       <button
         type="button"
@@ -152,8 +162,8 @@ function VideoTile({
         aria-hidden
         className="video-tile-video-backdrop"
         style={isSelf && !isScreenShare
-          ? { transform: "scaleX(-1)", display: hasVideo ? undefined : "none" }
-          : { display: hasVideo ? undefined : "none" }
+          ? { transform: "scaleX(-1)", display: hasVideo ? undefined : "none", objectFit: "cover" as const }
+          : { display: hasVideo ? undefined : "none", objectFit: "cover" as const }
         }
       />
       <video
@@ -163,8 +173,8 @@ function VideoTile({
         muted={muted}
         className="video-tile-video"
         style={isSelf && !isScreenShare
-          ? { transform: "scaleX(-1)", display: hasVideo ? undefined : "none" }
-          : { display: hasVideo ? undefined : "none" }
+          ? { transform: "scaleX(-1)", display: hasVideo ? undefined : "none", objectFit: videoObjectFit }
+          : { display: hasVideo ? undefined : "none", objectFit: videoObjectFit }
         }
       />
       {!hasVideo && (
@@ -217,6 +227,8 @@ export default function VideoArea({
   canJoin = true,
   chatOpen = false,
   onToggleChat,
+  onCallJoinedChange,
+  joinMeetingActionRef,
 }: VideoAreaProps) {
   const { socket, connected } = useSocket();
   const [elapsedTime, setElapsedTime] = useState(0);
@@ -321,6 +333,8 @@ export default function VideoArea({
     toggleAudio,
     toggleVideo,
     toggleScreenShare,
+    screenShareSystemAudio,
+    setScreenShareSystemAudioPref,
   } = useWebRTC(socket, meetingId, currentUser);
 
   useTranscriptionCapture(socket, meetingId || null, localStream);
@@ -347,6 +361,21 @@ export default function VideoArea({
     const success = await joinRoom();
     if (success) setHasJoined(true);
   }, [joinRoom, canJoin]);
+
+  useEffect(() => {
+    if (!joinMeetingActionRef) return;
+    joinMeetingActionRef.current = async () => {
+      await handleJoin();
+    };
+    return () => {
+      joinMeetingActionRef.current = null;
+    };
+  }, [joinMeetingActionRef, handleJoin]);
+
+  useEffect(() => {
+    if (modality === "Offline") return;
+    onCallJoinedChange?.(hasJoined);
+  }, [modality, hasJoined, onCallJoinedChange]);
 
   const handleLeave = useCallback(() => {
     leaveRoom();
@@ -456,6 +485,24 @@ export default function VideoArea({
     });
   }, [screenStream, localStream, currentUser?.name, currentUser?.profileImage, peers, pinnedTileIds]);
 
+  const { screenTiles, cameraTiles, hasAnyScreenShare } = useMemo(() => {
+    const screen = meetingTiles.filter((t) => t.isScreenShare);
+    const cameras = meetingTiles.filter((t) => !t.isScreenShare);
+    return {
+      screenTiles: screen,
+      cameraTiles: cameras,
+      hasAnyScreenShare: screen.length > 0,
+    };
+  }, [meetingTiles]);
+
+  const galleryColCount = useMemo(() => {
+    const n = meetingTiles.length;
+    if (n <= 1) return 1;
+    if (n <= 4) return 2;
+    if (n <= 9) return 3;
+    return 4;
+  }, [meetingTiles.length]);
+
   return (
     <div className="video-area">
       {showToast && <div className={`focus-toast show`}>{showToast}</div>}
@@ -489,7 +536,7 @@ export default function VideoArea({
             onClick={toggleFullscreen}
             aria-label={isFullscreen ? "Exit fullscreen" : "Fullscreen"}
           >
-            <Icon icon={isFullscreen ? MinimizeScreenIcon : FullScreenIcon} size={16} />
+            <Icon icon={isFullscreen ? ArrowShrink02Icon : FullScreenIcon} size={16} />
           </button>
         </ShortcutTooltip>
       </div>
@@ -655,22 +702,80 @@ export default function VideoArea({
                   {mediaError}
                 </div>
               )}
-              <div className="video-grid">
-                {meetingTiles.map((tile) => (
-                  <VideoTile
-                    key={tile.id}
-                    tileId={tile.id}
-                    stream={tile.stream}
-                    name={tile.name}
-                    profileImage={tile.profileImage}
-                    muted={tile.muted}
-                    isSelf={tile.isSelf}
-                    isScreenShare={tile.isScreenShare}
-                    speaking={tile.speaking}
-                    pinned={pinnedTileIds.has(tile.id)}
-                    onTogglePin={togglePin}
-                  />
-                ))}
+              <div
+                className={
+                  hasAnyScreenShare
+                    ? "video-layout video-layout--stage"
+                    : `video-layout video-layout--gallery video-layout--count-${meetingTiles.length}`
+                }
+                style={
+                  hasAnyScreenShare
+                    ? undefined
+                    : ({ "--video-gallery-cols": String(galleryColCount) } as CSSProperties)
+                }
+              >
+                {hasAnyScreenShare ? (
+                  <>
+                    <div className="video-layout-main">
+                      {screenTiles.map((tile) => (
+                        <VideoTile
+                          key={tile.id}
+                          tileId={tile.id}
+                          stream={tile.stream}
+                          name={tile.name}
+                          profileImage={tile.profileImage}
+                          muted={tile.muted}
+                          isSelf={tile.isSelf}
+                          isScreenShare={tile.isScreenShare}
+                          speaking={tile.speaking}
+                          pinned={pinnedTileIds.has(tile.id)}
+                          onTogglePin={togglePin}
+                          videoObjectFit="contain"
+                          layoutVariant="stage"
+                        />
+                      ))}
+                    </div>
+                    {cameraTiles.length > 0 ? (
+                      <div className="video-layout-filmstrip">
+                        {cameraTiles.map((tile) => (
+                          <VideoTile
+                            key={tile.id}
+                            tileId={tile.id}
+                            stream={tile.stream}
+                            name={tile.name}
+                            profileImage={tile.profileImage}
+                            muted={tile.muted}
+                            isSelf={tile.isSelf}
+                            isScreenShare={tile.isScreenShare}
+                            speaking={tile.speaking}
+                            pinned={pinnedTileIds.has(tile.id)}
+                            onTogglePin={togglePin}
+                            videoObjectFit="cover"
+                            layoutVariant="filmstrip"
+                          />
+                        ))}
+                      </div>
+                    ) : null}
+                  </>
+                ) : (
+                  meetingTiles.map((tile) => (
+                    <VideoTile
+                      key={tile.id}
+                      tileId={tile.id}
+                      stream={tile.stream}
+                      name={tile.name}
+                      profileImage={tile.profileImage}
+                      muted={tile.muted}
+                      isSelf={tile.isSelf}
+                      isScreenShare={tile.isScreenShare}
+                      speaking={tile.speaking}
+                      pinned={pinnedTileIds.has(tile.id)}
+                      onTogglePin={togglePin}
+                      videoObjectFit="cover"
+                      layoutVariant="gallery"
+                    />
+                  ))
+                )}
               </div>
             </>
           )}
@@ -689,6 +794,8 @@ export default function VideoArea({
         onToggleAudio={toggleAudio}
         onToggleVideo={toggleVideo}
         onToggleScreenShare={toggleScreenShare}
+        screenShareSystemAudio={screenShareSystemAudio}
+        onScreenShareSystemAudioChange={setScreenShareSystemAudioPref}
         onLeave={handleLeave}
         hasJoined={hasJoined}
         onMeetingEnded={onMeetingEnded}
@@ -698,15 +805,7 @@ export default function VideoArea({
       />
 
       <style>{`
-        .video-area {
-          display: flex;
-          flex-direction: column;
-          height: 100%;
-          background: var(--bg-primary);
-          border: 0.0625rem solid var(--border);
-          border-radius: var(--radius-md);
-          overflow: hidden;
-        }
+
         .video-panel-toggle {
           flex-shrink: 0;
           width: 2rem;
@@ -831,19 +930,109 @@ export default function VideoArea({
           box-shadow: 0 0.0625rem 0 rgba(0,0,0,0.15);
         }
 
-        /* Video grid */
-        .video-grid {
-          display: grid;
-          grid-template-columns: repeat(auto-fit, minmax(20rem, 1fr));
-          grid-template-rows: minmax(0, 1fr);
-          grid-auto-rows: minmax(0, 1fr);
-          grid-auto-flow: dense;
-          gap: 0.5rem;
+        /* Meet-style layout: primary stage + filmstrip while sharing; adaptive gallery otherwise */
+        .video-layout {
           width: 100%;
           height: 100%;
-          align-content: start;
+          min-height: 0;
+          box-sizing: border-box;
+        }
+        .video-layout--stage {
+          display: flex;
+          flex-direction: row;
+          flex-wrap: nowrap;
+          align-items: stretch;
+          gap: 0.5rem;
+          padding: 0.125rem 0.25rem 0.125rem 0.125rem;
+          overflow: hidden;
+        }
+        .video-layout-main {
+          flex: 1 1 0;
+          min-width: 0;
+          min-height: 0;
+          display: flex;
+          flex-direction: column;
+          gap: 0.5rem;
+          overflow: hidden;
+        }
+        .video-layout-filmstrip {
+          flex: 0 0 clamp(11rem, 22vw, 19rem);
+          width: clamp(11rem, 22vw, 19rem);
+          min-height: 0;
+          display: flex;
+          flex-direction: column;
+          gap: 0.5rem;
+          overflow-x: hidden;
           overflow-y: auto;
           padding-right: 0.125rem;
+        }
+        .video-tile--stage {
+          flex: 1 1 0;
+          min-height: 0;
+          width: 100%;
+          max-height: 100%;
+        }
+        .video-tile--filmstrip {
+          flex: 0 0 auto;
+          width: 100%;
+          aspect-ratio: 16 / 9;
+          min-height: 0;
+          max-height: min(40vh, 260px);
+        }
+        .video-layout--gallery {
+          display: grid;
+          grid-template-columns: repeat(var(--video-gallery-cols, 2), minmax(0, 1fr));
+          grid-auto-rows: auto;
+          gap: 0.5rem;
+          height: 100%;
+          min-height: 0;
+          overflow-y: auto;
+          align-content: center;
+          justify-items: stretch;
+          padding: 0.25rem;
+        }
+        .video-layout--gallery.video-layout--count-1 {
+          display: flex;
+          align-items: center;
+          justify-content: center;
+        }
+        .video-layout--gallery.video-layout--count-1 .video-tile--gallery {
+          width: min(96%, 70rem);
+          max-width: 100%;
+          max-height: min(82vh, calc(100% - 1rem));
+          aspect-ratio: 16 / 9;
+        }
+        .video-tile--gallery {
+          width: 100%;
+          aspect-ratio: 16 / 9;
+          min-height: 0;
+          max-height: min(48vh, 560px);
+        }
+
+        @media (max-width: 720px) {
+          .video-layout--stage {
+            flex-direction: column;
+            overflow-y: auto;
+            align-items: stretch;
+          }
+          .video-layout-main {
+            flex: 1 1 auto;
+            min-height: 12rem;
+          }
+          .video-layout-filmstrip {
+            flex: 0 0 auto;
+            width: 100%;
+            max-height: 40vh;
+            flex-direction: row;
+            overflow-x: auto;
+            overflow-y: hidden;
+            gap: 0.5rem;
+          }
+          .video-tile--filmstrip {
+            flex: 0 0 auto;
+            width: min(72vw, 16rem);
+            max-height: none;
+          }
         }
 
         .video-tile {
@@ -860,14 +1049,6 @@ export default function VideoArea({
           transition: border-color 0.3s;
           width: 100%;
           min-height: 0;
-        }
-        .video-tile.pinned,
-        .video-tile.screen-share {
-          grid-column: span 2;
-          grid-row: span 2;
-        }
-        .video-tile.screen-share {
-          min-height: 20rem;
         }
         .video-tile-pin {
           position: absolute;
@@ -897,7 +1078,6 @@ export default function VideoArea({
         .video-tile-video {
           width: 100%;
           height: 100%;
-          object-fit: contain;
           border-radius: inherit;
           position: relative;
           z-index: 2;

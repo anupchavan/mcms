@@ -7,8 +7,16 @@ const router = express.Router();
 
 export = function ({ User, protect, usingMongo, inMemoryUsers }: any) {
 
+    // At runtime, __dirname is `server/dist/modules/profile`. Three levels up
+    // reaches `server/`; matches the static mount in server.ts:
+    //   app.use("/uploads", express.static(path.join(__dirname, "..", "uploads")));
+    // Without `recursive: true`, multer would 500 with ENOENT on a fresh
+    // checkout where `server/uploads/avatars/` hasn't been created yet.
+    const avatarsDir = path.join(__dirname, '..', '..', '..', 'uploads', 'avatars');
+    fs.mkdirSync(avatarsDir, { recursive: true });
+
     const avatarStorage = multer.diskStorage({
-        destination: (_req: any, _file: any, cb: any) => cb(null, path.join(__dirname, '..', '..', 'uploads', 'avatars')),
+        destination: (_req: any, _file: any, cb: any) => cb(null, avatarsDir),
         filename: (req: any, file: any, cb: any) => {
             const ext = path.extname(file.originalname);
             cb(null, `${req.user.id}-${Date.now()}${ext}`);

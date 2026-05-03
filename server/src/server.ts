@@ -41,7 +41,8 @@ let Transcript: any = null,
   Minutes: any = null,
   ActionItem: any = null,
   Attendance: any = null,
-  MeetingSummary: any = null;
+  MeetingSummary: any = null,
+  ChatMessage: any = null;
 
 try {
   const mongoose = require("mongoose");
@@ -56,9 +57,14 @@ try {
       : mongoUri;
   mongoose
     .connect(builtUri, { serverSelectionTimeoutMS: 15000 })
-    .then(() => {
+    .then(async () => {
       console.log("MongoDB Connected");
       usingMongoFlag = true;
+      try {
+        await backfillMeetingShortIds();
+      } catch (err: any) {
+        console.error("Failed to backfill meeting shortIds:", err?.message || err);
+      }
     })
     .catch((err: any) => {
       console.log(
@@ -81,11 +87,37 @@ try {
   ActionItem = require("./modules/action-item/action-item.schema");
   Attendance = require("./modules/attendance/attendance.schema");
   MeetingSummary = require("./modules/meeting/meeting-summary.schema");
+  ChatMessage = require("./modules/chat/chat.schema");
 } catch (e) {
   console.log("Mongoose not found — using in-memory store");
 }
 
 const usingMongo = () => usingMongoFlag;
+
+/**
+ * Lazy backfill: any meeting that pre-dates the `shortId` field gets a fresh
+ * unique short identifier. We do this once on Mongo connect so existing
+ * archives keep working with the new short URL scheme.
+ */
+async function backfillMeetingShortIds() {
+  if (!Meeting) return;
+  const { generateUniqueShortId } = require("./utils/shortId");
+  const cursor = Meeting.find({ $or: [{ shortId: { $exists: false } }, { shortId: null }] }).cursor();
+  let updated = 0;
+  for await (const doc of cursor) {
+    try {
+      doc.shortId = await generateUniqueShortId(async (candidate: string) => {
+        const existing = await Meeting.exists({ shortId: candidate });
+        return !!existing;
+      });
+      await doc.save();
+      updated += 1;
+    } catch (err: any) {
+      console.error(`shortId backfill failed for meeting ${doc._id}:`, err?.message || err);
+    }
+  }
+  if (updated > 0) console.log(`Backfilled shortId on ${updated} meeting(s)`);
+}
 
 // ── In-memory fallback store ─────────────────────────────────
 const inMemoryUsers: any[] = [];
@@ -238,7 +270,7 @@ async function sendRsvpEmail(
       : `${meeting.date} at ${meeting.time}`;
     const meetingUrl =
       meeting.modality !== "Offline"
-        ? `${CLIENT_URL.replace(/\/$/, "")}?meeting=${meeting._id}`
+        ? `${CLIENT_URL.replace(/\/$/, "")}/meetings/${meeting.shortId || meeting._id}`
         : null;
     const meetingLinkSection = meetingUrl
       ? `<p style="margin:16px 0"><strong>Meeting Link:</strong> <a href="${meetingUrl}" style="color:#6366f1">${meetingUrl}</a></p>`
@@ -297,6 +329,9 @@ const inMemoryMeetings: any[] = [];
 const inMemoryAgendas: Record<string, any[]> = {};
 const inMemoryMinutes: Record<string, any[]> = {};
 const inMemoryTranscripts: Record<string, any[]> = {};
+const inMemoryChatMessages: Record<string, any[]> = {};
+/** Client-shaped pinned message snapshot per meeting id string (host pin). */
+const inMemoryMeetingPinnedChat: Record<string, any | null> = {};
 const inMemoryActionItems: Record<string, any[]> = {};
 const inMemoryMeetingSummaries: Record<string, any> = {};
 
@@ -323,9 +358,12 @@ const deps = {
   inMemoryAgendas,
   inMemoryMinutes,
   inMemoryTranscripts,
+  inMemoryChatMessages,
+  inMemoryMeetingPinnedChat,
   inMemoryActionItems,
   inMemoryMeetingSummaries,
   MeetingSummary,
+  ChatMessage,
   callAISummarize,
   callAIExtractActions,
   callAIMeetingSummary,
@@ -365,6 +403,7 @@ app.use(
   "/api/transcript",
   require("./modules/transcript/transcript.routes")(deps),
 );
+app.use("/api/chat", require("./modules/chat/chat.routes")(deps));
 
 // ---- sarvam transcription: meeting-relative clock + paragraph / speaker-turn aggregation
 
@@ -788,6 +827,78 @@ if (process.env.REDIS_URL) {
 
 // ── Socket.io event handlers ─────────────────────────────────
 io.on("connection", (socket: any) => {
+  async function resolveMeetingForChatPin(meetingIdParam: string) {
+    if (usingMongoFlag && Meeting) {
+      return Meeting.findOne({
+        $or: [{ _id: meetingIdParam }, { shortId: meetingIdParam }],
+      })
+        .select("_id hostId")
+        .lean();
+    }
+    const m = inMemoryMeetings.find(
+      (mm: any) =>
+        String(mm.id || mm._id) === String(meetingIdParam) ||
+        String(mm.shortId) === String(meetingIdParam),
+    );
+    if (!m) return null;
+    return { _id: m.id || m._id, hostId: m.hostId };
+  }
+
+  /** Persist join/leave as chat rows so history survives everyone leaving. */
+  async function persistChatPresenceEvent(
+    meetingIdParam: string,
+    type: "join" | "leave",
+    userId: any,
+    name: string,
+    profileImage: string | null,
+  ): Promise<{ messageId: string; timestamp: number } | null> {
+    const sentAt = Date.now();
+    const resolved = await resolveMeetingForChatPin(meetingIdParam);
+    if (!resolved) return null;
+    const mongoId = resolved._id;
+    const displayName = String(name || "User");
+
+    try {
+      if (usingMongoFlag && ChatMessage) {
+        const doc = await ChatMessage.create({
+          meetingId: mongoId,
+          senderId: userId,
+          senderName: displayName,
+          senderImage: profileImage ?? null,
+          text: "",
+          sentAt,
+          kind: type,
+        });
+        return { messageId: String(doc._id), timestamp: sentAt };
+      }
+      const id = `chat-${sentAt}-${Math.random().toString(36).slice(2, 9)}`;
+      const row = {
+        id,
+        meetingId: String(meetingIdParam),
+        senderId: String(userId),
+        senderName: displayName,
+        senderImage: profileImage ?? null,
+        text: "",
+        timestamp: sentAt,
+        kind: type,
+      };
+      if (!inMemoryChatMessages[meetingIdParam]) {
+        inMemoryChatMessages[meetingIdParam] = [];
+      }
+      inMemoryChatMessages[meetingIdParam].push(row);
+      if (String(mongoId) !== String(meetingIdParam)) {
+        if (!inMemoryChatMessages[String(mongoId)]) {
+          inMemoryChatMessages[String(mongoId)] = [];
+        }
+        inMemoryChatMessages[String(mongoId)].push(row);
+      }
+      return { messageId: id, timestamp: sentAt };
+    } catch (err: any) {
+      console.error("persistChatPresenceEvent:", err?.message || err);
+      return null;
+    }
+  }
+
   connectedUsers.set(socket.userId, socket.id);
   socket.join(`user:${socket.userId}`);
 
@@ -809,6 +920,7 @@ io.on("connection", (socket: any) => {
       });
     }
 
+    const wasInRoom = room.has(socket.id);
     room.set(socket.id, {
       userId: socket.userId,
       name: name || "User",
@@ -821,6 +933,24 @@ io.on("connection", (socket: any) => {
       name: name || "User",
       profileImage: profileImage || null,
     });
+    if (!wasInRoom) {
+      const persisted = await persistChatPresenceEvent(
+        meetingId,
+        "join",
+        socket.userId,
+        name || "User",
+        profileImage || null,
+      );
+      io.to(`meeting:${meetingId}`).emit("chat_presence", {
+        meetingId,
+        type: "join",
+        userId: socket.userId,
+        name: name || "User",
+        profileImage: profileImage || null,
+        messageId: persisted?.messageId,
+        timestamp: persisted?.timestamp ?? Date.now(),
+      });
+    }
 
     const session = transcriptionSessions.get(meetingId);
     if (session && session.active) {
@@ -844,17 +974,40 @@ io.on("connection", (socket: any) => {
     io.to(to).emit("signal", { from: socket.id, signal }),
   );
 
-  socket.on("leave_room", ({ meetingId }: any) => {
+  socket.on("leave_room", async ({ meetingId }: any) => {
     if (!meetingId) return;
     socket.leave(`meeting:${meetingId}`);
     const room = meetingRooms.get(meetingId);
+    let left: any = null;
     if (room) {
+      left = room.get(socket.id);
       room.delete(socket.id);
       if (room.size === 0) meetingRooms.delete(meetingId);
     }
-    socket
-      .to(`meeting:${meetingId}`)
-      .emit("peer_left", { socketId: socket.id });
+    socket.to(`meeting:${meetingId}`).emit("peer_left", {
+      socketId: socket.id,
+      userId: left?.userId,
+      name: left?.name,
+      profileImage: left?.profileImage,
+    });
+    if (left) {
+      const persisted = await persistChatPresenceEvent(
+        meetingId,
+        "leave",
+        left.userId,
+        left.name,
+        left.profileImage ?? null,
+      );
+      io.to(`meeting:${meetingId}`).emit("chat_presence", {
+        meetingId,
+        type: "leave",
+        userId: left.userId,
+        name: left.name,
+        profileImage: left.profileImage,
+        messageId: persisted?.messageId,
+        timestamp: persisted?.timestamp ?? Date.now(),
+      });
+    }
 
     const session = transcriptionSessions.get(meetingId);
     if (session && session.speakers.has(socket.id)) {
@@ -1003,10 +1156,166 @@ io.on("connection", (socket: any) => {
     }
   });
 
-  // chat broadcast
-  socket.on("send_chat_message", (msg: any) => {
+  // chat: persist then broadcast (room members recover history after reload)
+  socket.on("send_chat_message", async (msg: any) => {
     if (!msg || !msg.meetingId) return;
-    io.to(`meeting:${msg.meetingId}`).emit("chat_message", msg);
+    const text = String(msg.text ?? "").trim();
+    if (!text) return;
+    if (String(msg.senderId || "") !== String(socket.userId)) return;
+    const meetingId = String(msg.meetingId);
+    const sentAt =
+      typeof msg.timestamp === "number" ? msg.timestamp : Date.now();
+    const clientMsgId = msg.id ? String(msg.id) : null;
+    const senderName = String(msg.senderName || "User");
+    const senderImage = msg.senderImage ?? null;
+
+    const broadcast = (row: any) => {
+      const payload = {
+        id: String(row.id),
+        meetingId,
+        senderId: String(socket.userId),
+        senderName: row.senderName,
+        senderImage: row.senderImage,
+        text: row.text,
+        timestamp: row.sentAt,
+        ...(clientMsgId ? { clientMsgId } : {}),
+      };
+      io.to(`meeting:${meetingId}`).emit("chat_message", payload);
+    };
+
+    try {
+      if (usingMongoFlag && ChatMessage) {
+        const doc = await ChatMessage.create({
+          meetingId,
+          senderId: socket.userId,
+          senderName,
+          senderImage,
+          text,
+          sentAt,
+        });
+        broadcast({
+          id: doc._id,
+          senderName,
+          senderImage,
+          text,
+          sentAt,
+        });
+      } else {
+        const id =
+          clientMsgId ||
+          `chat-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+        if (!inMemoryChatMessages[meetingId]) inMemoryChatMessages[meetingId] = [];
+        inMemoryChatMessages[meetingId].push({
+          id,
+          meetingId,
+          senderId: String(socket.userId),
+          senderName,
+          senderImage,
+          text,
+          timestamp: sentAt,
+        });
+        broadcast({
+          id,
+          senderName,
+          senderImage,
+          text,
+          sentAt,
+        });
+      }
+    } catch (err: any) {
+      console.error("send_chat_message:", err?.message || err);
+    }
+  });
+
+  socket.on("pin_chat_message", async ({ meetingId, messageId }: any) => {
+    if (!meetingId || !messageId) return;
+    try {
+      const doc = await resolveMeetingForChatPin(meetingId);
+      if (!doc || String(doc.hostId) !== String(socket.userId)) return;
+      const roomKey = String(meetingId);
+      const mongoId = doc._id;
+
+      if (usingMongoFlag && ChatMessage && Meeting) {
+        const row = await ChatMessage.findOne({
+          meetingId: mongoId,
+          _id: messageId,
+        }).lean();
+        if (!row) return;
+        if (row.kind && row.kind !== "message") return;
+        const snapshot = {
+          messageId: row._id,
+          senderId: row.senderId,
+          senderName: row.senderName,
+          senderImage: row.senderImage,
+          text: row.text,
+          sentAt: row.sentAt,
+        };
+        await Meeting.updateOne({ _id: mongoId }, { $set: { pinnedChat: snapshot } });
+        const clientPin = {
+          id: String(row._id),
+          meetingId: roomKey,
+          senderId: String(row.senderId),
+          senderName: row.senderName,
+          senderImage: row.senderImage,
+          text: row.text,
+          timestamp: row.sentAt,
+        };
+        io.to(`meeting:${roomKey}`).emit("chat_pin_updated", {
+          meetingId: roomKey,
+          pinned: clientPin,
+        });
+        return;
+      }
+
+      const rows =
+        inMemoryChatMessages[roomKey] ||
+        inMemoryChatMessages[String(mongoId)] ||
+        [];
+      const row = rows.find((r: any) => String(r.id) === String(messageId));
+      if (!row) return;
+      if (row.kind && row.kind !== "message") return;
+      const clientPin = {
+        id: String(row.id),
+        meetingId: roomKey,
+        senderId: String(row.senderId),
+        senderName: row.senderName,
+        senderImage: row.senderImage,
+        text: row.text,
+        timestamp: row.timestamp,
+      };
+      inMemoryMeetingPinnedChat[roomKey] = clientPin;
+      io.to(`meeting:${roomKey}`).emit("chat_pin_updated", {
+        meetingId: roomKey,
+        pinned: clientPin,
+      });
+    } catch (err: any) {
+      console.error("pin_chat_message:", err?.message || err);
+    }
+  });
+
+  socket.on("unpin_chat_message", async ({ meetingId }: any) => {
+    if (!meetingId) return;
+    try {
+      const doc = await resolveMeetingForChatPin(meetingId);
+      if (!doc || String(doc.hostId) !== String(socket.userId)) return;
+      const roomKey = String(meetingId);
+      const mongoId = doc._id;
+      if (usingMongoFlag && Meeting) {
+        await Meeting.updateOne({ _id: mongoId }, { $set: { pinnedChat: null } });
+        io.to(`meeting:${roomKey}`).emit("chat_pin_updated", {
+          meetingId: roomKey,
+          pinned: null,
+        });
+        return;
+      }
+      delete inMemoryMeetingPinnedChat[roomKey];
+      io.to(`meeting:${roomKey}`).emit("chat_pin_updated", {
+        meetingId: roomKey,
+        pinned: null,
+      });
+    } catch (err: any) {
+      console.error("unpin_chat_message:", err?.message || err);
+    }
   });
 
   // end meeting — only the host may end the meeting for everyone
@@ -1402,7 +1711,7 @@ io.on("connection", (socket: any) => {
     }
   });
 
-  socket.on("join_meeting", ({ meetingId, name, profileImage }: any) => {
+  socket.on("join_meeting", async ({ meetingId, name, profileImage }: any) => {
     if (meetingId) {
       socket.join(`meeting:${meetingId}`);
       // Persist metadata for transcription segments
@@ -1411,11 +1720,30 @@ io.on("connection", (socket: any) => {
 
       if (!meetingRooms.has(meetingId)) meetingRooms.set(meetingId, new Map());
       const room = meetingRooms.get(meetingId)!;
+      const wasInRoom = room.has(socket.id);
       room.set(socket.id, {
         userId: socket.userId,
         name: socket.userName,
         profileImage: socket.profileImage,
       });
+      if (!wasInRoom) {
+        const persisted = await persistChatPresenceEvent(
+          meetingId,
+          "join",
+          socket.userId,
+          socket.userName,
+          socket.profileImage,
+        );
+        io.to(`meeting:${meetingId}`).emit("chat_presence", {
+          meetingId,
+          type: "join",
+          userId: socket.userId,
+          name: socket.userName,
+          profileImage: socket.profileImage,
+          messageId: persisted?.messageId,
+          timestamp: persisted?.timestamp ?? Date.now(),
+        });
+      }
 
       const session = transcriptionSessions.get(meetingId);
       if (session && session.active && !session.speakers.has(socket.id)) {
@@ -1439,8 +1767,34 @@ io.on("connection", (socket: any) => {
   const handleSocketLeaveMeeting = (meetingId: string, socketId: string) => {
     const room = meetingRooms.get(meetingId);
     if (room && room.has(socketId)) {
+      const peer = room.get(socketId);
       room.delete(socketId);
-      io.to(`meeting:${meetingId}`).emit("peer_left", { socketId });
+      io.to(`meeting:${meetingId}`).emit("peer_left", {
+        socketId,
+        userId: peer?.userId,
+        name: peer?.name,
+        profileImage: peer?.profileImage,
+      });
+      if (peer) {
+        void (async () => {
+          const persisted = await persistChatPresenceEvent(
+            meetingId,
+            "leave",
+            peer.userId,
+            peer.name,
+            peer.profileImage ?? null,
+          );
+          io.to(`meeting:${meetingId}`).emit("chat_presence", {
+            meetingId,
+            type: "leave",
+            userId: peer.userId,
+            name: peer.name,
+            profileImage: peer.profileImage,
+            messageId: persisted?.messageId,
+            timestamp: persisted?.timestamp ?? Date.now(),
+          });
+        })();
+      }
 
       const session = transcriptionSessions.get(meetingId);
       if (session && session.speakers.has(socketId)) {
@@ -1509,7 +1863,7 @@ cron.schedule("0 * * * *", async () => {
     for (const meeting of meetings) {
       try {
         const brief = await generateBrief(meeting, callAISummarize);
-        const html = formatBriefEmail(brief, meeting._id, CLIENT_URL);
+        const html = formatBriefEmail(brief, meeting.shortId || meeting._id, CLIENT_URL);
         const transport = await getMailTransporter();
 
         for (const p of meeting.participants) {

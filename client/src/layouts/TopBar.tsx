@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { useNavigate } from 'react-router-dom';
 import Icon from '../shared/components/Icon';
 import {
     Search01Icon,
@@ -36,8 +37,6 @@ interface TopBarProps {
     onLogout?: () => void;
     onOpenPoll?: (meetingId: string) => void;
     searchInputRef?: React.RefObject<HTMLInputElement | null>;
-    onViewChange?: (view: string) => void;
-    onSearchResultSelect?: (meeting: any) => void;
 }
 
 function formatDate(dateStr: string) {
@@ -68,9 +67,10 @@ function timeAgo(dateStr: string) {
     return `${days}d ago`;
 }
 
-export default function TopBar({ streak, userName, onNewMeeting, theme = 'dark', onToggleTheme, sidebarCollapsed, onSidebarToggle, onLogout, onOpenPoll, searchInputRef, onViewChange, onSearchResultSelect }: TopBarProps) {
+export default function TopBar({ streak, userName, onNewMeeting, theme = 'dark', onToggleTheme, sidebarCollapsed, onSidebarToggle, onLogout, onOpenPoll, searchInputRef }: TopBarProps) {
     const { user } = useAuth();
     const { socket } = useSocket();
+    const navigate = useNavigate();
     const [showNotif, setShowNotif] = useState(false);
     const [showUserMenu, setShowUserMenu] = useState(false);
     const [notifications, setNotifications] = useState<any[]>([]);
@@ -209,11 +209,15 @@ export default function TopBar({ streak, userName, onNewMeeting, theme = 'dark',
     };
 
     const selectSearchResult = useCallback((m: any) => {
-        onSearchResultSelect?.({ id: m.id, title: m.title, modality: m.modality, date: m.date, time: m.time, host: m.host, hostId: m.hostId, status: m.status, participants: m.participants });
+        const linkId = (m.shortId || m.id || m._id)?.toString();
+        if (linkId) {
+            const path = m.status === 'completed' ? `/archives/${linkId}` : `/meetings/${linkId}`;
+            navigate(path);
+        }
         setSearchQuery('');
         setShowSearchDropdown(false);
         setSearchSelectedIndex(-1);
-    }, [onSearchResultSelect]);
+    }, [navigate]);
 
     const handleSearchKeyDown = useCallback((e: React.KeyboardEvent) => {
         if (e.key === 'Escape') {
@@ -391,7 +395,7 @@ export default function TopBar({ streak, userName, onNewMeeting, theme = 'dark',
                                 <div style={{ fontSize: '0.8125rem', fontWeight: 600 }}>{userName}</div>
                                 <div style={{ fontSize: '0.6875rem', color: 'var(--text-muted)' }}>Host Account</div>
                             </div>
-                            <button className="btn btn-secondary" style={{ width: '100%', justifyContent: 'flex-start', border: 'none' }} onClick={() => { onViewChange?.('profile'); setShowUserMenu(false); }}>Profile Settings</button>
+                            <button className="btn btn-secondary" style={{ width: '100%', justifyContent: 'flex-start', border: 'none' }} onClick={() => { navigate('/settings'); setShowUserMenu(false); }}>Profile Settings</button>
                             {onLogout && (
                                 <button
                                     className="btn btn-secondary"
