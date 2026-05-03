@@ -21,10 +21,14 @@ interface ShortcutTooltipProps {
   label?: string;
   position?: 'top' | 'bottom' | 'right' | 'left';
   fullWidth?: boolean;
+  /** Extra className appended to the anchor wrapper. Useful when the wrapper
+   *  must be opted out of a parent layout (e.g. `display: contents` to avoid
+   *  consuming a CSS grid cell). */
+  anchorClassName?: string;
   children: React.ReactNode;
 }
 
-export default function ShortcutTooltip({ keys, label, position = 'bottom', fullWidth, children }: ShortcutTooltipProps) {
+export default function ShortcutTooltip({ keys, label, position = 'bottom', fullWidth, anchorClassName, children }: ShortcutTooltipProps) {
   const [visible, setVisible] = useState(false);
   const [coords, setCoords] = useState<{ top: number; left: number } | null>(null);
   const anchorRef = useRef<HTMLDivElement>(null);
@@ -84,7 +88,7 @@ export default function ShortcutTooltip({ keys, label, position = 'bottom', full
   return (
     <div
       ref={anchorRef}
-      className={`shortcut-tooltip-anchor ${fullWidth ? 'shortcut-tooltip-anchor-fullwidth' : ''}`}
+      className={`shortcut-tooltip-anchor ${fullWidth ? 'shortcut-tooltip-anchor-fullwidth' : ''} ${anchorClassName || ''}`}
       onMouseEnter={show}
       onMouseLeave={hide}
       onFocus={show}

@@ -1,21 +1,8 @@
 import { useState, useEffect } from "react";
 import { createPortal } from "react-dom";
-import { MapContainer, TileLayer, Marker } from "react-leaflet";
-import L from "leaflet";
-import "leaflet/dist/leaflet.css";
 import Icon from "./Icon";
 import { Cancel01Icon, Location01Icon } from "@hugeicons/core-free-icons";
-
-// Fix Leaflet default icon in bundlers (idempotent — safe to call multiple times)
-import markerIcon2x from "leaflet/dist/images/marker-icon-2x.png";
-import markerIcon from "leaflet/dist/images/marker-icon.png";
-import markerShadow from "leaflet/dist/images/marker-shadow.png";
-delete (L.Icon.Default.prototype as any)._getIconUrl;
-L.Icon.Default.mergeOptions({
-  iconRetinaUrl: markerIcon2x,
-  iconUrl: markerIcon,
-  shadowUrl: markerShadow,
-});
+import { FlexokiMap } from "../utils/FlexokiMap";
 
 interface LocationMapModalProps {
   address: string;
@@ -23,6 +10,7 @@ interface LocationMapModalProps {
 }
 
 export default function LocationMapModal({ address, onClose }: LocationMapModalProps) {
+  // Stored as [lng, lat] to match MapLibre / GeoJSON ordering.
   const [coords, setCoords] = useState<[number, number] | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
@@ -36,7 +24,7 @@ export default function LocationMapModal({ address, onClose }: LocationMapModalP
       .then((r) => r.json())
       .then((data) => {
         if (data && data.length > 0) {
-          setCoords([parseFloat(data[0].lat), parseFloat(data[0].lon)]);
+          setCoords([parseFloat(data[0].lon), parseFloat(data[0].lat)]);
         } else {
           setError(true);
         }
@@ -191,13 +179,10 @@ export default function LocationMapModal({ address, onClose }: LocationMapModalP
           )}
 
           {!loading && !error && coords && (
-            <MapContainer center={coords} zoom={15} style={{ height: "100%", width: "100%" }} zoomControl={true}>
-              <TileLayer
-                attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OSM</a>'
-                url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-              />
-              <Marker position={coords} />
-            </MapContainer>
+            <FlexokiMap
+              initialCenter={coords}
+              markerPos={{ lng: coords[0], lat: coords[1] }}
+            />
           )}
         </div>
 

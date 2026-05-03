@@ -19,20 +19,9 @@ import {
 import * as chrono from "chrono-node";
 import { useAuth } from "../context/AuthContext";
 import { useShowScrollbarWhileScrolling } from "../hooks/useShowScrollbarWhileScrolling";
-import "leaflet/dist/leaflet.css";
-import { MapContainer, TileLayer, Marker, useMapEvents } from "react-leaflet";
-import L from "leaflet";
+import { FlexokiMap } from "../utils/FlexokiMap";
 
-// Fix Leaflet's default icon paths in bundlers
-import markerIcon2x from "leaflet/dist/images/marker-icon-2x.png";
-import markerIcon from "leaflet/dist/images/marker-icon.png";
-import markerShadow from "leaflet/dist/images/marker-shadow.png";
-delete (L.Icon.Default.prototype as any)._getIconUrl;
-L.Icon.Default.mergeOptions({
-  iconRetinaUrl: markerIcon2x,
-  iconUrl: markerIcon,
-  shadowUrl: markerShadow,
-});
+type LngLat = { lng: number; lat: number };
 
 interface Suggestion {
   label: string;
@@ -236,32 +225,21 @@ function buildSuggestions(query: string): Suggestion[] {
 }
 
 
-function LocationMapPicker({
-  markerPos,
-  onLocationSelect,
-}: {
-  markerPos: L.LatLng | null;
-  onLocationSelect: (pos: L.LatLng, address: string) => void;
-}) {
-  useMapEvents({
-    click(e) {
-      const { lat, lng } = e.latlng;
-      fetch(
-        `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}`,
-      )
-        .then((r) => r.json())
-        .then((data) =>
-          onLocationSelect(
-            e.latlng,
-            data?.display_name || `${lat.toFixed(5)}, ${lng.toFixed(5)}`,
-          ),
-        )
-        .catch(() =>
-          onLocationSelect(e.latlng, `${lat.toFixed(5)}, ${lng.toFixed(5)}`),
-        );
-    },
-  });
-  return markerPos ? <Marker position={markerPos} /> : null;
+/**
+ * Reverse-geocode helper for the map click handler. Returns either a
+ * Nominatim `display_name` or a `lat, lng` fallback string so the
+ * address field always gets _something_ even when the network fails.
+ */
+async function reverseGeocode(lat: number, lng: number): Promise<string> {
+  try {
+    const res = await fetch(
+      `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}`,
+    );
+    const data = await res.json();
+    return data?.display_name || `${lat.toFixed(5)}, ${lng.toFixed(5)}`;
+  } catch {
+    return `${lat.toFixed(5)}, ${lng.toFixed(5)}`;
+  }
 }
 
 export default function MeetingCreation({
@@ -273,13 +251,32 @@ export default function MeetingCreation({
   const [description, setDescription] = useState("");
   const [location, setLocation] = useState("");
   const [locationType, setLocationType] = useState<"Inside" | "Outside">("Inside");
-  const [mapPos, setMapPos] = useState<L.LatLng | null>(null);
-  const [mapCenter, setMapCenter] = useState<[number, number]>([17.5947, 78.123]);
-  const [mapKey, setMapKey] = useState(0);
+  const [mapPos, setMapPos] = useState<LngLat | null>(null);
+  // MapLibre uses GeoJSON [longitude, latitude] order — note the swap
+  // from the previous Leaflet [lat, lng] convention.
+  const [mapCenter, setMapCenter] = useState<[number, number]>([78.123, 17.5947]);
   const [showMap, setShowMap] = useState(false);
   const [mapExpanded, setMapExpanded] = useState(false);
+  /**
+   * One-shot latch: once the user has opened the inline map at least
+   * once, keep the FlexokiMap mounted for the rest of the modal session
+   * and toggle visibility via CSS instead of unmounting. Eliminates the
+   * 1-3s WebGL/shader/tile re-init cost on every Show/Hide click.
+   */
+  const [inlineMapMounted, setInlineMapMounted] = useState(false);
+  /** Same latch for the expand portal. */
+  const [expandedMapMounted, setExpandedMapMounted] = useState(false);
+  useEffect(() => { if (showMap) setInlineMapMounted(true); }, [showMap]);
+  useEffect(() => { if (mapExpanded) setExpandedMapMounted(true); }, [mapExpanded]);
   const [geocoding, setGeocoding] = useState(false);
   const geocodeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  /**
+   * Holds the address string most recently produced by a click→reverse-geocode.
+   * When the geocode-on-typing useEffect sees `location === skipGeocodeForRef`,
+   * it skips the forward-geocode (which would otherwise overwrite the click
+   * pin with a slightly different coordinate). Cleared whenever the user types.
+   */
+  const skipGeocodeForRef = useRef<string | null>(null);
   const [roomNo, setRoomNo] = useState("");
   const [building, setBuilding] = useState("");
   const [duration, setDuration] = useState<number>(30);
@@ -306,6 +303,21 @@ export default function MeetingCreation({
     setClosing(true);
     setTimeout(() => onClose(), 300);
   }, [closing, onClose]);
+
+  /**
+   * Stable map-click handler. `setMapPos`/`setLocation` are referentially
+   * stable from `useState`, `skipGeocodeForRef` is a ref, and
+   * `reverseGeocode` is module-scope — so `[]` is the correct dep array.
+   * Keeping this stable prevents react-map-gl from re-attaching the
+   * `click` listener on every parent re-render.
+   */
+  const handleMapClick = useCallback(({ lng, lat }: LngLat) => {
+    setMapPos({ lng, lat });
+    reverseGeocode(lat, lng).then((address) => {
+      skipGeocodeForRef.current = address;
+      setLocation(address);
+    });
+  }, []);
 
   // Participant picker state
   const [participants, setParticipants] = useState<ParticipantUser[]>([]);
@@ -401,6 +413,12 @@ export default function MeetingCreation({
   useEffect(() => {
     if (!showMap || locationType !== "Outside") return;
     if (geocodeTimerRef.current) clearTimeout(geocodeTimerRef.current);
+    // If `location` was just set by a click→reverse-geocode, the pin is
+    // already correctly placed — don't forward-geocode and re-pin it.
+    if (skipGeocodeForRef.current !== null && skipGeocodeForRef.current === location) {
+      skipGeocodeForRef.current = null;
+      return;
+    }
     const trimmed = location.trim();
     if (!trimmed) return;
     geocodeTimerRef.current = setTimeout(() => {
@@ -413,10 +431,10 @@ export default function MeetingCreation({
           if (data && data.length > 0) {
             const lat = parseFloat(data[0].lat);
             const lng = parseFloat(data[0].lon);
-            const newPos = L.latLng(lat, lng);
-            setMapPos(newPos);
-            setMapCenter([lat, lng]);   // update reactive center
-            setMapKey((k) => k + 1);   // force MapContainer remount at new center
+            setMapPos({ lng, lat });
+            // Triggers FlexokiMap.flyToTarget — animates camera to the
+            // typed-address location while preserving zoom.
+            setMapCenter([lng, lat]);
           }
         })
         .catch(() => {/* ignore */})
@@ -982,8 +1000,17 @@ export default function MeetingCreation({
                     </button>
                   </div>
 
-                  {showMap && (
-                    <div style={{ marginTop: "0.5rem", borderRadius: "var(--radius-sm)", overflow: "hidden", border: "1px solid var(--border)" }}>
+                  {/*
+                    Visibility — not unmount — toggle. After the user shows the
+                    map for the first time, `inlineMapMounted` latches on and
+                    the FlexokiMap stays in the DOM for the rest of the modal
+                    session. Subsequent Show/Hide and expand/collapse only flip
+                    `display`, so MapLibre never re-creates its WebGL context
+                    or re-fetches tiles. Hidden entirely while expanded so we
+                    never run two MapLibre instances at the same time.
+                  */}
+                  {inlineMapMounted && (
+                    <div style={{ marginTop: "0.5rem", borderRadius: "var(--radius-sm)", overflow: "hidden", border: "1px solid var(--border)", display: showMap && !mapExpanded ? "block" : "none" }}>
                       {/* status bar */}
                       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "4px 8px", background: "var(--bg-elevated)", borderBottom: "1px solid var(--border)", fontSize: "0.7rem", color: "var(--text-muted)", gap: "6px" }}>
                         <span style={{ flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
@@ -997,7 +1024,7 @@ export default function MeetingCreation({
                           {mapPos && (
                             <button
                               type="button"
-                              onClick={() => { setMapPos(null); setMapCenter([17.5947, 78.123]); setMapKey(k => k + 1); setLocation(""); }}
+                              onClick={() => { setMapPos(null); setMapCenter([78.123, 17.5947]); setLocation(""); }}
                               style={{ background: "none", border: "none", cursor: "pointer", color: "var(--accent-rose, #f87171)", fontSize: "0.7rem", padding: "0 3px" }}
                             >
                               Clear
@@ -1015,29 +1042,24 @@ export default function MeetingCreation({
                         </div>
                       </div>
                       <div style={{ height: "220px" }}>
-                        <MapContainer key={mapKey} center={mapCenter} zoom={15} style={{ height: "100%", width: "100%" }}>
-                          <TileLayer
-                            attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OSM</a>'
-                            url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-                          />
-                          <LocationMapPicker
-                            markerPos={mapPos}
-                            onLocationSelect={(pos, address) => {
-                              setMapPos(pos);
-                              setLocation(address);
-                            }}
-                          />
-                        </MapContainer>
+                        <FlexokiMap
+                          initialCenter={mapCenter}
+                          markerPos={mapPos}
+                          flyToTarget={mapCenter}
+                          onMapClick={handleMapClick}
+                        />
                       </div>
                     </div>
                   )}
 
-                  {/* Expanded map portal */}
-                  {mapExpanded && createPortal(
+                  {/* Expanded map portal — same keep-alive pattern as the
+                      inline map: latched on first open, then visibility-only
+                      toggling so the FlexokiMap inside survives close/reopen. */}
+                  {expandedMapMounted && createPortal(
                     <div
                       style={{
                         position: "fixed", inset: 0, zIndex: 99999,
-                        display: "flex", alignItems: "center", justifyContent: "center",
+                        display: mapExpanded ? "flex" : "none", alignItems: "center", justifyContent: "center",
                         background: "rgba(0,0,0,0.7)", backdropFilter: "blur(6px)",
                       }}
                       onClick={() => setMapExpanded(false)}
@@ -1070,21 +1092,12 @@ export default function MeetingCreation({
                         </div>
                         {/* expanded map */}
                         <div style={{ flex: 1 }}>
-                          <MapContainer key={`exp-${mapKey}`} center={mapCenter} zoom={15} style={{ height: "100%", width: "100%" }}>
-                            <TileLayer
-                              attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OSM</a>'
-                              url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-                            />
-                            <LocationMapPicker
-                              markerPos={mapPos}
-                              onLocationSelect={(pos, address) => {
-                                setMapPos(pos);
-                                setLocation(address);
-                                setMapCenter([pos.lat, pos.lng]);
-                                setMapKey(k => k + 1);
-                              }}
-                            />
-                          </MapContainer>
+                          <FlexokiMap
+                            initialCenter={mapCenter}
+                            markerPos={mapPos}
+                            flyToTarget={mapCenter}
+                            onMapClick={handleMapClick}
+                          />
                         </div>
                         {/* expanded footer */}
                         <div style={{ padding: "8px 14px", background: "var(--bg-elevated)", borderTop: "1px solid var(--border)", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
