@@ -218,6 +218,7 @@
   --shadow-lg: 0 0.5rem   2rem     rgba(16,15,15,0.85);
 
   /* ── Radii ── */
+  --radius-2xs: var(--lk-size-3xs);
   --radius-xs: var(--lk-size-2xs);
   --radius-sm: var(--lk-size-xs);
   --radius-md: var(--lk-size-sm);
@@ -808,160 +809,148 @@ input[type="date"].input-field {
   min-width: 0;
 }
 
+/* ═══════════════════════════════════════════════════════════════
+   MEETING LAYOUT — VideoArea (left) + MeetingDock (right rail)
+   ═══════════════════════════════════════════════════════════════
+   Two-column layout: the VideoArea grows to fill available space,
+   the MeetingDock on the right contains a fixed-width icon rail
+   and an expandable content area for the active panel. The video
+   area's right corners (and the dock content's left corners) are
+   tighter (`--radius-2xs`) to read as a single connected pane.    */
+
 .meeting-layout {
   display: grid;
-  grid-template-columns: 18.75rem 1fr 21.25rem;
-  gap: 0;
+  grid-template-columns: 1fr 22.5rem 3rem;
+  gap: var(--lk-size-2xs);
   height: 100%;
   width: 100%;
   overflow: hidden;
   padding: var(--lk-size-xs);
-  transition: grid-template-columns 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  position: relative;
 }
 
-.meeting-layout.agenda-hidden {
-  grid-template-columns: 1fr 21.25rem;
+.meeting-layout.dock-collapsed {
+  grid-template-columns: 1fr 3rem;
 }
 
-.meeting-layout.right-hidden {
-  grid-template-columns: 18.75rem 1fr;
+.meeting-layout .video-area {
+  border-radius: var(--radius-md) var(--radius-2xs) var(--radius-2xs) var(--radius-md);
 }
 
-.meeting-layout.agenda-hidden.right-hidden {
-  grid-template-columns: 1fr;
+.meeting-layout.dock-collapsed .video-area {
+  border-radius: var(--radius-md);
 }
 
-/* Offline Mode */
+/* Offline Mode (no live video, but agenda/notes still in dock) */
 .meeting-layout.offline-mode {
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: 1fr 22.5rem 3rem;
   grid-template-rows: auto 1fr;
-  gap: var(--lk-size-xs);
+}
+
+.meeting-layout.offline-mode.dock-collapsed {
+  grid-template-columns: 1fr 3rem;
 }
 
 .meeting-layout.offline-mode .video-area {
-  grid-column: 1 / -1;
-  grid-row: 1;
-  height: auto;
-  min-height: 0;
-  border-bottom: 1px solid var(--border);
-}
-
-.meeting-layout.offline-mode .video-container {
-  display: none;
-}
-
-.meeting-layout.offline-mode .meeting-side-panel-left {
   grid-column: 1;
-  grid-row: 2;
-  margin-right: 0;
+  grid-row: 1 / -1;
+  height: 100%;
+  min-height: 0;
 }
 
-.meeting-layout.offline-mode .meeting-side-panel-right {
+/* ═══════════════════════════════════════════════════════════════
+   MEETING DOCK — Tabbed right-side panel with persistent icon rail
+   ═══════════════════════════════════════════════════════════════
+   The dock occupies columns 2 (content) + 3 (rail) of `.meeting-layout`
+   when open. When collapsed, the content column drops out of the grid
+   and only the 3rem rail remains visible — clicking any rail tab
+   re-opens the dock to that panel.                                   */
+
+.meeting-dock {
+  display: contents;
+  color: var(--text-primary);
+}
+
+.meeting-dock-content {
   grid-column: 2;
-  grid-row: 2;
-  margin-left: 0;
-}
-
-.meeting-layout .panel {
-  height: 100%;
-  overflow-y: auto;
-  border-right: 0.0625rem solid var(--border);
-}
-
-.meeting-layout .panel:last-child {
-  border-right: none;
-}
-
-.meeting-side-panel {
-  height: 100%;
+  min-height: 0;
   overflow: hidden;
-  border-radius: var(--radius-md);
+  background: var(--bg-card);
   border: 0.0625rem solid var(--border);
-  transition: opacity 0.25s ease;
+  border-radius: var(--radius-2xs) var(--radius-md) var(--radius-md) var(--radius-2xs);
+  display: flex;
+  flex-direction: column;
+}
+
+.meeting-dock-content > * {
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.meeting-dock-rail {
+  grid-column: -2;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--lk-size-2xs) 0;
   background: var(--bg-card);
+  border: 0.0625rem solid var(--border);
+  border-radius: var(--radius-md);
+  width: 3rem;
 }
 
-.meeting-side-panel.open {
-  overflow-y: auto;
-}
-
-.meeting-side-panel.closed {
-  display: none;
-}
-
-.meeting-side-panel-left {
-  margin-right: var(--lk-size-xs);
-}
-
-.meeting-side-panel-right {
-  margin-left: var(--lk-size-xs);
-}
-
-.meeting-side-panel-right.open {
+.meeting-dock-rail-tabs {
   display: flex;
   flex-direction: column;
-  overflow: hidden;
+  gap: var(--lk-size-3xs);
 }
 
-.meeting-side-panel .panel {
-  border-right: none;
+.meeting-dock-rail-btn {
+  width: 2.25rem;
+  height: 2.25rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: none;
+  border-radius: var(--radius-sm);
+  color: var(--text-muted);
+  cursor: pointer;
+  padding: 0;
+  transition: background-color 120ms ease, color 120ms ease;
 }
 
-.right-panel-content {
-  display: flex;
-  flex-direction: column;
-  flex: 1;
-  min-height: 0;
-  background: var(--bg-card);
+.meeting-dock-rail-btn:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
 }
 
-/* Transcript on top: must not use .panel height:100% or it steals the whole sidebar */
-.right-panel-transcript {
-  flex: 0 1 auto;
-  min-height: 0;
-  max-height: min(42vh, 22rem);
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
-  border-bottom: 0.0625rem solid var(--border);
+.meeting-dock-rail-btn:focus-visible {
+  outline: none;
+  box-shadow: inset 0 0 0 2px var(--primary);
 }
 
-.right-panel-transcript .transcript-panel.panel {
-  height: auto;
-  flex: 1;
-  min-height: 0;
-  overflow: hidden;
+.meeting-dock-rail-btn.active {
+  background: var(--primary-muted, var(--bg-hover));
+  color: var(--primary);
 }
 
-.right-panel-bottom {
-  flex: 1;
-  min-height: 0;
-  display: flex;
-  flex-direction: column;
+.meeting-dock-rail-btn-toggle {
+  margin-top: auto;
 }
 
-.right-panel-half {
-  flex: 1;
-  min-height: 0;
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
-}
-
-.right-panel-half-minutes {
-  border-bottom: 0.0625rem solid var(--border);
-}
-
-.right-panel-half .minutes-panel-root {
-  flex: 1;
-  min-height: 0;
-  overflow-y: auto;
-  display: flex;
-  flex-direction: column;
-}
-
-.meeting-side-panel.closed {
-  display: none;
+/* Chat panel inside the dock fills the available space cleanly. */
+.meeting-dock-content .chat-panel-root,
+.meeting-dock-content .agenda-panel,
+.meeting-dock-content .minutes-panel,
+.meeting-dock-content .transcript-panel {
+  border-radius: 0;
+  border: none;
+  height: 100%;
 }
 
 .collapsible-header {
@@ -1537,7 +1526,6 @@ input[type="date"].input-field {
   background: var(--bg-card);
   border-right: 0.0625rem solid var(--border);
   padding: var(--lk-size-sm) var(--lk-size-xs);
-  transition: width 0.25s cubic-bezier(0.4, 0, 0.2, 1);
   flex-shrink: 0;
   gap: var(--lk-size-sm);
   overflow: hidden;
@@ -1545,8 +1533,8 @@ input[type="date"].input-field {
 
 .sidebar.collapsed { width: auto; }
 
-.sidebar-toggle-icon-open  { width: 24%; transition: width 0.25s cubic-bezier(0.4, 0, 0.2, 1); }
-.sidebar-toggle-icon-close { width: 0.33%; transition: width 0.25s cubic-bezier(0.4, 0, 0.2, 1); }
+.sidebar-toggle-icon-open  { width: 24%; }
+.sidebar-toggle-icon-close { width: 0.33%; }
 
 .sidebar-nav {
   display: flex;
@@ -3584,3 +3572,139 @@ font-family: 'Unica One', cursive;
   font-size: 0.6875rem;
   color: var(--text-muted);
 }
+
+/* ═══════════════════════════════════════════════════════════════
+   MAPLIBRE — FLEXOKI VECTOR MAP
+   ═══════════════════════════════════════════════════════════════
+   The map itself ships its own per-feature colors via the JSON style
+   in `src/shared/components/map/mapStyle.ts` (light + dark variants,
+   swapped reactively by `useTheme()`). The rules here only theme the
+   chrome around the canvas: container background, focus outline,
+   and the attribution control. */
+
+.maplibregl-map {
+  font-family: inherit;
+  background: var(--flexoki-paper);
+}
+:root:not([data-theme='light']) .maplibregl-map {
+  background: var(--flexoki-black);
+}
+
+.maplibregl-canvas:focus {
+  outline: none;
+}
+
+.maplibregl-ctrl-attrib {
+  background: rgba(255, 252, 240, 0.85) !important;
+  color: var(--flexoki-700) !important;
+  font-size: 10px !important;
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+}
+.maplibregl-ctrl-attrib a,
+.maplibregl-ctrl-attrib a:visited {
+  color: var(--flexoki-blue-700) !important;
+}
+.maplibregl-ctrl-attrib-button {
+  background-color: rgba(255, 252, 240, 0.85) !important;
+}
+
+:root:not([data-theme='light']) .maplibregl-ctrl-attrib {
+  background: rgba(16, 15, 15, 0.75) !important;
+  color: var(--flexoki-400) !important;
+}
+:root:not([data-theme='light']) .maplibregl-ctrl-attrib a,
+:root:not([data-theme='light']) .maplibregl-ctrl-attrib a:visited {
+  color: var(--flexoki-cyan-400) !important;
+}
+:root:not([data-theme='light']) .maplibregl-ctrl-attrib-button {
+  background-color: rgba(16, 15, 15, 0.75) !important;
+}
+
+/* Custom Hugeicons-based zoom controls (rendered by `<FlexokiZoomControls>`
+   in `FlexokiMap.tsx`, replaces MapLibre's default NavigationControl). */
+.flexoki-map-zoom {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  z-index: 2;
+  display: flex;
+  flex-direction: column;
+  background: var(--flexoki-paper);
+  border: 1px solid var(--flexoki-200);
+  border-radius: var(--radius-sm, 6px);
+  box-shadow: var(--shadow-sm, 0 1px 3px rgba(0, 0, 0, 0.08));
+  overflow: hidden;
+}
+.flexoki-map-zoom button {
+  width: 28px;
+  height: 28px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  color: var(--flexoki-800);
+  transition: background-color 120ms ease, color 120ms ease;
+}
+.flexoki-map-zoom button + button {
+  border-top: 1px solid var(--flexoki-150);
+}
+.flexoki-map-zoom button:hover {
+  background: var(--flexoki-50);
+  color: var(--flexoki-black);
+}
+.flexoki-map-zoom button:active {
+  background: var(--flexoki-100);
+}
+.flexoki-map-zoom button:focus-visible {
+  outline: none;
+  box-shadow: inset 0 0 0 2px var(--flexoki-300);
+}
+
+:root:not([data-theme='light']) .flexoki-map-zoom {
+  background: var(--flexoki-900);
+  border-color: var(--flexoki-800);
+}
+:root:not([data-theme='light']) .flexoki-map-zoom button {
+  color: var(--flexoki-200);
+}
+:root:not([data-theme='light']) .flexoki-map-zoom button + button {
+  border-top-color: var(--flexoki-800);
+}
+:root:not([data-theme='light']) .flexoki-map-zoom button:hover {
+  background: var(--flexoki-850);
+  color: var(--flexoki-paper);
+}
+:root:not([data-theme='light']) .flexoki-map-zoom button:active {
+  background: var(--flexoki-800);
+}
+:root:not([data-theme='light']) .flexoki-map-zoom button:focus-visible {
+  box-shadow: inset 0 0 0 2px var(--flexoki-700);
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   MAP MARKER — FLEXOKI TEARDROP PIN
+   ═══════════════════════════════════════════════════════════════
+   Inline SVG rendered by `<FlexokiPin>` and positioned by
+   react-map-gl's `<Marker anchor="bottom">`. Colors flip with the
+   global theme so the pin always reads against the map below.
+     light : black body  + paper dot
+     dark  : paper body  + black dot                                    */
+
+.flexoki-marker {
+  display: block;
+  filter: drop-shadow(0 2px 3px rgba(0, 0, 0, 0.35));
+}
+.flexoki-marker svg {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+.flexoki-marker .pin-body { fill: var(--flexoki-black); }
+.flexoki-marker .pin-dot  { fill: var(--flexoki-paper); }
+
+:root:not([data-theme='light']) .flexoki-marker .pin-body { fill: var(--flexoki-paper); }
+:root:not([data-theme='light']) .flexoki-marker .pin-dot  { fill: var(--flexoki-black); }
