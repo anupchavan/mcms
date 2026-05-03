@@ -1,19 +1,25 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../stores/AuthContext';
 import Icon from '../shared/components/Icon';
 import { Mail01Icon, Key01Icon, Alert01Icon, ArrowRight01Icon } from '@hugeicons/core-free-icons';
 
-interface LoginProps {
-  onNavigate: (view: string) => void;
-}
+export default function Login() {
+    const navigate = useNavigate();
+    const [searchParams] = useSearchParams();
+    const returnTo = searchParams.get('returnTo') || '/';
+    const { user, login } = useAuth();
 
-export default function Login({ onNavigate }: LoginProps) {
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
     const [error, setError] = useState('');
     const [isLoading, setIsLoading] = useState(false);
 
-    const { login } = useAuth();
+    useEffect(() => { document.title = 'Login — Concord'; }, []);
+
+    useEffect(() => {
+        if (user) navigate(returnTo, { replace: true });
+    }, [user, returnTo, navigate]);
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -86,7 +92,7 @@ export default function Login({ onNavigate }: LoginProps) {
                 <div className="auth-footer">
                     <p style={{ color: 'var(--text-muted)', fontSize: '14px' }}>
                         Don't have an account?{' '}
-                        <button className="text-btn" onClick={() => onNavigate('signup')}>Create one</button>
+                        <button className="text-btn" onClick={() => navigate('/signup')}>Create one</button>
                     </p>
                 </div>
             </div>

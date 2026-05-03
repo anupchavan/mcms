@@ -41,7 +41,7 @@ const MinutesPanel: FC<MinutesPanelProps> = ({ minutesItems = [], onItemChange }
   return (
     <div className="agenda-panel panel minutes-panel-root">
       <div className="section-header">
-        <span className="section-title">📝 Minutes</span>
+        <span className="section-title">Minutes</span>
         <button
           type="button"
           className={`btn-icon ${isAdding ? 'active' : ''}`}

@@ -1,7 +1,7 @@
-import { useState, useEffect, useRef } from 'react';
+import { useEffect, useRef } from 'react';
 import Icon from '../../../shared/components/Icon';
 import ShortcutTooltip from '../../../shared/components/ShortcutTooltip';
-import { PinIcon, ArrowDown01Icon, ArrowUp01Icon, Notebook01Icon, SidebarRightIcon } from '@hugeicons/core-free-icons';
+import { PinIcon, SidebarRightIcon } from '@hugeicons/core-free-icons';
 
 interface TranscriptEntry {
     id: string;
@@ -63,7 +63,6 @@ function speakerInitials(speaker: string): string {
  */
 export default function TranscriptFeed({ transcripts, isLive, onClosePanel, onPinResource, pins = [] }: TranscriptFeedProps) {
     const listRef = useRef<HTMLDivElement | null>(null);
-    const [collapsed, setCollapsed] = useState(false);
 
     const lastText = transcripts.length ? transcripts[transcripts.length - 1]?.text : '';
     useEffect(() => {
@@ -72,17 +71,12 @@ export default function TranscriptFeed({ transcripts, isLive, onClosePanel, onPi
 
     return (
         <div className="transcript-panel panel">
-            <div className="section-header collapsible-header" onClick={() => setCollapsed(c => !c)}>
+            <div className="section-header">
                 <div className="section-title-container">
-                    <Icon icon={Notebook01Icon} size={14} />
                     <span className="section-title">Live Transcript</span>
                 </div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '0.375rem' }}>
                     {isLive && <span className="chip chip-emerald" style={{ fontSize: '10px' }}>LIVE</span>}
-                    <span style={{ fontSize: '10px', color: 'var(--text-muted)' }}>
-                        {transcripts.length} segment{transcripts.length !== 1 ? 's' : ''}
-                    </span>
-                    <Icon icon={collapsed ? ArrowDown01Icon : ArrowUp01Icon} size={14} />
                     {onClosePanel && (
                         <ShortcutTooltip keys={['mod', ']']} position="bottom">
                             <button
@@ -96,7 +90,7 @@ export default function TranscriptFeed({ transcripts, isLive, onClosePanel, onPi
                 </div>
             </div>
 
-            <div className={`collapsible-body ${collapsed ? 'collapsed' : ''}`}>
+            <div className="collapsible-body">
                 <div className="collapsible-body-inner">
                     <div className="transcript-list" ref={listRef}>
                         {transcripts.map((entry) => {

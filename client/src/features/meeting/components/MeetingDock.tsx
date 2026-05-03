@@ -1,10 +1,10 @@
 import { FC, useMemo, ComponentType } from 'react';
 import {
-    Calendar03Icon,
+    ViewAgendaIcon,
     BubbleChatIcon,
-    Mic01Icon,
+    ClosedCaptionIcon,
     Note01Icon,
-    Task01Icon,
+    CheckListIcon,
     SidebarRight01Icon,
 } from '@hugeicons/core-free-icons';
 import Icon from '../../../shared/components/Icon';
@@ -30,11 +30,11 @@ interface DockTab {
 }
 
 const TABS: DockTab[] = [
-    { id: 'agenda',     label: 'Agenda',       icon: Calendar03Icon, hint: 'G' },
+    { id: 'agenda',     label: 'Agenda',       icon: ViewAgendaIcon, hint: 'G' },
     { id: 'chat',       label: 'Chat',         icon: BubbleChatIcon, hint: 'H' },
-    { id: 'transcript', label: 'Transcript',   icon: Mic01Icon,      hint: 'T' },
+    { id: 'transcript', label: 'Transcript',   icon: ClosedCaptionIcon, hint: 'T' },
     { id: 'minutes',    label: 'Minutes',      icon: Note01Icon,     hint: 'N' },
-    { id: 'actions',    label: 'Action items', icon: Task01Icon,     hint: 'K' },
+    { id: 'actions',    label: 'Action items', icon: CheckListIcon,  hint: 'K' },
 ];
 
 interface MeetingDockProps {
@@ -57,6 +57,12 @@ interface MeetingDockProps {
     chatMessages: ChatMessage[];
     currentUserId: string;
     onSendChatMessage: (text: string) => void;
+    pinnedChatMessage?: ChatMessage | null;
+    onPinChatMessage?: (messageId: string) => void;
+    onUnpinChatMessage?: () => void;
+    /** When false (online meeting, not in call yet), chat shows a join gate. */
+    chatSessionActive?: boolean;
+    onRequestJoinMeeting?: () => void | Promise<void>;
 
     onAgendaChange: (items: any[]) => void;
     onMinutesChange?: (items: any[]) => void;
@@ -82,6 +88,11 @@ const MeetingDock: FC<MeetingDockProps> = ({
     chatMessages,
     currentUserId,
     onSendChatMessage,
+    pinnedChatMessage = null,
+    onPinChatMessage,
+    onUnpinChatMessage,
+    chatSessionActive = true,
+    onRequestJoinMeeting,
     onAgendaChange,
     onMinutesChange,
     onAddActionItemConsumed,
@@ -107,6 +118,11 @@ const MeetingDock: FC<MeetingDockProps> = ({
                         currentUserId={currentUserId}
                         onSendMessage={onSendChatMessage}
                         isHost={isHost}
+                        pinnedMessage={pinnedChatMessage}
+                        onPinMessage={onPinChatMessage}
+                        onUnpinMessage={onUnpinChatMessage}
+                        chatSessionActive={chatSessionActive}
+                        onRequestJoinMeeting={onRequestJoinMeeting}
                     />
                 );
             case 'transcript':
@@ -141,6 +157,8 @@ const MeetingDock: FC<MeetingDockProps> = ({
         activePanelId, agendaItems, minutesItems, actionItems, transcripts,
         participants, isHost, meetingId, meetingHostId, addActionItemTrigger,
         chatMessages, currentUserId, onSendChatMessage,
+        pinnedChatMessage, onPinChatMessage, onUnpinChatMessage,
+        chatSessionActive, onRequestJoinMeeting,
         onAgendaChange, onMinutesChange, onAddActionItemConsumed,
         onRefreshActionItems, fetchWithAuth,
     ]);

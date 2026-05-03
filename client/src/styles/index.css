@@ -236,6 +236,8 @@
   --flair-amber-color: var(--flexoki-yellow-400);
   --flair-purple-background: #8B7EC81a;
   --flair-purple-color: var(--flexoki-purple-400);
+
+  --me-chat-bg: var(--flexoki-cyan-600);
 }
 
 
@@ -586,15 +588,16 @@ div.hangup-button {
   justify-content: space-between;
   padding: var(--lk-size-sm) var(--lk-size-sm);
   border-bottom: 0.0625rem solid var(--border);
+  min-height: 2.618rem;
+  background: var(--bg-card);
 }
 
 .section-title {
-  font-size: var(--font-size-caption);
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.0618em;
-  color: var(--text-secondary);
-  line-height: var(--lk-halfstep);
+  font-size: var(--font-size-label);
+font-weight: 600;
+letter-spacing: -0.012em;
+color: var(--text-secondary);
+line-height: var(--lk-halfstep);
 }
 
 .section-title-container {
@@ -810,22 +813,20 @@ input[type="date"].input-field {
 }
 
 /* ═══════════════════════════════════════════════════════════════
-   MEETING LAYOUT — VideoArea (left) + MeetingDock (right rail)
+   MEETING LAYOUT — VideoArea (left) + MeetingDock (right)
    ═══════════════════════════════════════════════════════════════
    Two-column layout: the VideoArea grows to fill available space,
-   the MeetingDock on the right contains a fixed-width icon rail
-   and an expandable content area for the active panel. The video
-   area's right corners (and the dock content's left corners) are
-   tighter (`--radius-2xs`) to read as a single connected pane.    */
+   the MeetingDock on the right is a single bordered pane that
+   contains an active panel + a persistent icon rail. The video
+   area's right corners and the dock's left corners are tighter
+   (`--radius-2xs`) to read as a connected workspace.               */
 
 .meeting-layout {
   display: grid;
-  grid-template-columns: 1fr 22.5rem 3rem;
-  gap: var(--lk-size-2xs);
+  grid-template-columns: 1fr 25.5rem;
   height: 100%;
   width: 100%;
   overflow: hidden;
-  padding: var(--lk-size-xs);
   position: relative;
 }
 
@@ -833,53 +834,53 @@ input[type="date"].input-field {
   grid-template-columns: 1fr 3rem;
 }
 
-.meeting-layout .video-area {
-  border-radius: var(--radius-md) var(--radius-2xs) var(--radius-2xs) var(--radius-md);
+/* .meeting-layout .video-area {
 }
 
 .meeting-layout.dock-collapsed .video-area {
-  border-radius: var(--radius-md);
-}
+} */
 
-/* Offline Mode (no live video, but agenda/notes still in dock) */
-.meeting-layout.offline-mode {
-  grid-template-columns: 1fr 22.5rem 3rem;
-  grid-template-rows: auto 1fr;
-}
-
-.meeting-layout.offline-mode.dock-collapsed {
-  grid-template-columns: 1fr 3rem;
-}
-
+/* Offline Mode (no live video grid; the focus shell renders inside
+   .video-area, dock still hosts agenda/notes/etc.). */
 .meeting-layout.offline-mode .video-area {
-  grid-column: 1;
-  grid-row: 1 / -1;
   height: 100%;
   min-height: 0;
 }
 
+.video-area {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  background: var(--bg-primary);
+  overflow: hidden;
+}
+
 /* ═══════════════════════════════════════════════════════════════
-   MEETING DOCK — Tabbed right-side panel with persistent icon rail
+   MEETING DOCK — Tabbed right-side pane with persistent icon rail
    ═══════════════════════════════════════════════════════════════
-   The dock occupies columns 2 (content) + 3 (rail) of `.meeting-layout`
-   when open. When collapsed, the content column drops out of the grid
-   and only the 3rem rail remains visible — clicking any rail tab
-   re-opens the dock to that panel.                                   */
+   Single bordered container. Content area + rail are siblings inside,
+   separated by a 1px seam. When collapsed the content slides out and
+   only the 3rem rail remains visible — clicking any rail tab pops
+   the dock back open on that panel.                                  */
 
 .meeting-dock {
-  display: contents;
+  display: flex;
+  flex-direction: row;
+  background: var(--bg-card);
+  border-left: 0.0625rem solid var(--border);
+  overflow: hidden;
   color: var(--text-primary);
+  min-width: 0;
 }
 
 .meeting-dock-content {
-  grid-column: 2;
+  flex: 1;
+  min-width: 0;
   min-height: 0;
   overflow: hidden;
-  background: var(--bg-card);
-  border: 0.0625rem solid var(--border);
-  border-radius: var(--radius-2xs) var(--radius-md) var(--radius-md) var(--radius-2xs);
   display: flex;
   flex-direction: column;
+  border-right: 0.0625rem solid var(--border);
 }
 
 .meeting-dock-content > * {
@@ -891,25 +892,25 @@ input[type="date"].input-field {
 }
 
 .meeting-dock-rail {
-  grid-column: -2;
+  flex-shrink: 0;
+  width: 3rem;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: space-between;
   padding: var(--lk-size-2xs) 0;
-  background: var(--bg-card);
-  border: 0.0625rem solid var(--border);
-  border-radius: var(--radius-md);
-  width: 3rem;
 }
 
 .meeting-dock-rail-tabs {
   display: flex;
   flex-direction: column;
   gap: var(--lk-size-3xs);
+  width: 100%;
+  align-items: center;
 }
 
 .meeting-dock-rail-btn {
+  position: relative;
   width: 2.25rem;
   height: 2.25rem;
   display: inline-flex;
@@ -934,23 +935,98 @@ input[type="date"].input-field {
   box-shadow: inset 0 0 0 2px var(--primary);
 }
 
+/* Active tab: filled dark background + a vertical accent stripe on
+   the seam between the content panel and the rail (the stripe sits
+   to the left of the button, exactly on the dock's internal divider,
+   so it reads as a tab marker, not just a hover highlight). */
 .meeting-dock-rail-btn.active {
-  background: var(--primary-muted, var(--bg-hover));
-  color: var(--primary);
+  background: var(--flexoki-800);
+  color: var(--flexoki-paper);
+}
+
+.meeting-dock-rail-btn.active::before {
+  content: "";
+  position: absolute;
+  /* Button is 2.25rem in a 3rem rail → 0.375rem of horizontal slack
+     on each side. -0.375rem lands the stripe exactly on the seam. */
+  left: -0.375rem;
+  top: 0.25rem;
+  bottom: 0.25rem;
+  width: 0.125rem;
+  background: var(--text-primary);
+  border-radius: 0 0.0625rem 0.0625rem 0;
+}
+
+:root[data-theme='light'] .meeting-dock-rail-btn.active {
+  background: var(--flexoki-800);
+  color: var(--flexoki-paper);
 }
 
 .meeting-dock-rail-btn-toggle {
   margin-top: auto;
 }
 
-/* Chat panel inside the dock fills the available space cleanly. */
+/* Panels inside the dock should fill the slot without their own
+   outer chrome — the dock provides the border + radius. */
 .meeting-dock-content .chat-panel-root,
 .meeting-dock-content .agenda-panel,
 .meeting-dock-content .minutes-panel,
-.meeting-dock-content .transcript-panel {
+.meeting-dock-content .transcript-panel,
+.meeting-dock-content .panel {
   border-radius: 0;
   border: none;
   height: 100%;
+  background: var(--bg-primary);
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   Chat panel scrollbar — tweak the custom properties below
+   (WebKit: Chrome, Safari, Edge. Firefox uses scrollbar-color only.)
+   ═══════════════════════════════════════════════════════════════ */
+.chat-messages-container {
+  /* Width of the vertical scrollbar bar */
+  --chat-scroll-width: 8px;
+  /* Thumb fill — default state */
+  --chat-scroll-thumb-color: color-mix(in srgb, var(--text-muted) 42%, transparent);
+  /* Thumb fill — hover (WebKit only; Firefox has no standard thumb &:hover) */
+  --chat-scroll-thumb-hover-color: color-mix(in srgb, var(--text-muted) 68%, transparent);
+  /* Rounded corners on the thumb */
+  --chat-scroll-radius: 999px;
+  /* Track behind the thumb */
+  --chat-scroll-track-bg: transparent;
+  /* Space inside the scrollbar gutter: block start/end */
+  --chat-scroll-margin-block: 6px;
+  /* Space inside the scrollbar gutter: inline start/end */
+  --chat-scroll-margin-inline: 2px;
+  /* Insets the thumb from the track edge (visual “padding” around thumb) */
+  --chat-scroll-thumb-inset: 2px;
+
+  scrollbar-width: thin;
+  scrollbar-color: var(--chat-scroll-thumb-color) var(--chat-scroll-track-bg);
+}
+
+.chat-messages-container::-webkit-scrollbar {
+  width: var(--chat-scroll-width);
+}
+
+.chat-messages-container::-webkit-scrollbar-track {
+  background: var(--chat-scroll-track-bg);
+  margin: var(--chat-scroll-margin-block) var(--chat-scroll-margin-inline);
+}
+
+.chat-messages-container::-webkit-scrollbar-thumb {
+  background-color: var(--chat-scroll-thumb-color);
+  border-radius: var(--chat-scroll-radius);
+  border: var(--chat-scroll-thumb-inset) solid transparent;
+  background-clip: padding-box;
+}
+
+.chat-messages-container::-webkit-scrollbar-thumb:hover {
+  background-color: var(--chat-scroll-thumb-hover-color);
+}
+
+.chat-messages-container::-webkit-scrollbar-corner {
+  background: transparent;
 }
 
 .collapsible-header {
@@ -1548,6 +1624,7 @@ input[type="date"].input-field {
   align-items: center;
   gap: var(--lk-size-xs);
   padding: var(--lk-size-xs);
+  text-decoration: none;
   border: none;
   border-radius: var(--radius-sm);
   background: transparent;
@@ -2088,7 +2165,6 @@ font-family: 'Unica One', cursive;
   padding: var(--lk-size-xs) var(--lk-size-sm);
   background: var(--bg-card);
   border-top: 0.0625rem solid var(--border);
-  border-bottom: 0.0625rem solid var(--border);
 }
 
 .controls-group {
@@ -2102,6 +2178,65 @@ font-family: 'Unica One', cursive;
   height: var(--lk-size-lg);
   background: var(--border);
   margin: 0 var(--lk-size-2xs);
+}
+
+.screen-audio-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+  padding: 0 0.25rem;
+  user-select: none;
+}
+
+.screen-audio-toggle-label {
+  font-size: var(--font-size-caption);
+  font-weight: 500;
+  color: var(--text-secondary);
+  white-space: nowrap;
+}
+
+.screen-audio-toggle--live .screen-audio-toggle-label {
+  color: var(--text-primary);
+}
+
+.screen-audio-switch {
+  position: relative;
+  width: 2rem;
+  height: 1.125rem;
+  border-radius: 999px;
+  border: 0.0625rem solid var(--border);
+  background: var(--bg-elevated);
+  cursor: pointer;
+  padding: 0;
+  flex-shrink: 0;
+  transition: background 0.2s, border-color 0.2s;
+}
+
+.screen-audio-switch:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.screen-audio-switch.on {
+  background: color-mix(in srgb, var(--primary) 35%, var(--bg-elevated));
+  border-color: color-mix(in srgb, var(--primary) 55%, var(--border));
+}
+
+.screen-audio-switch-thumb {
+  position: absolute;
+  top: 0.125rem;
+  left: 0.125rem;
+  width: 0.75rem;
+  height: 0.75rem;
+  border-radius: 50%;
+  background: var(--text-muted);
+  transition: transform 0.2s ease, background 0.2s;
+  pointer-events: none;
+}
+
+.screen-audio-switch.on .screen-audio-switch-thumb {
+  transform: translateX(0.875rem);
+  background: var(--primary);
 }
 
 .control-btn {

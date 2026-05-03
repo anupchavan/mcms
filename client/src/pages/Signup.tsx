@@ -1,13 +1,12 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../stores/AuthContext';
 import Icon from '../shared/components/Icon';
 import { UserIcon, Mail01Icon, Key01Icon, Alert01Icon, ArrowRight01Icon } from '@hugeicons/core-free-icons';
 
-interface SignupProps {
-  onNavigate: (view: string) => void;
-}
-
-export default function Signup({ onNavigate }: SignupProps) {
+export default function Signup() {
+    const navigate = useNavigate();
+    useEffect(() => { document.title = 'Signup — Concord'; }, []);
     const [name, setName] = useState('');
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
@@ -102,7 +101,7 @@ export default function Signup({ onNavigate }: SignupProps) {
                 <div className="auth-footer">
                     <p style={{ color: 'var(--text-muted)', fontSize: '14px' }}>
                         Already have an account?{' '}
-                        <button className="text-btn" onClick={() => onNavigate('login')}>Sign in</button>
+                        <button className="text-btn" onClick={() => navigate('/login')}>Sign in</button>
                     </p>
                 </div>
             </div>

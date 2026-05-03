@@ -9,9 +9,11 @@ export = function ({ Meeting, Poll, Notification, protect, usingMongo, emitToUse
             const poll = await Poll.findOne({ meetingId: req.params.meetingId });
             if (!poll) return res.status(404).json({ message: 'Poll not found' });
 
-            const meeting = await Meeting.findById(req.params.meetingId).select('title modality');
+            const meeting = await Meeting.findById(req.params.meetingId).select('title modality shortId');
             const base = (CLIENT_URL || 'http://localhost:5173').replace(/\/$/, '');
-            const meetingUrl = meeting?.modality !== 'Offline' ? `${base}?meeting=${req.params.meetingId}` : null;
+            const meetingUrl = meeting?.modality !== 'Offline'
+                ? `${base}/meetings/${meeting?.shortId || req.params.meetingId}`
+                : null;
             res.json({ ...poll.toObject(), meetingTitle: meeting?.title, modality: meeting?.modality, meetingUrl });
         } catch (error: any) {
             res.status(500).json({ message: 'Server error', error: error.message });
@@ -62,7 +64,7 @@ export = function ({ Meeting, Poll, Notification, protect, usingMongo, emitToUse
                     await meeting.save();
 
                     const base = (CLIENT_URL || 'http://localhost:5173').replace(/\/$/, '');
-                    const meetingUrl = meeting.modality !== 'Offline' ? `${base}?meeting=${meeting._id}` : null;
+                    const meetingUrl = meeting.modality !== 'Offline' ? `${base}/meetings/${meeting.shortId || meeting._id}` : null;
                     const meetingForIcs = { ...meeting.toObject(), meetingUrl };
                     const icsBuffer = generateICS(meetingForIcs, winSlot);
                     for (const p of meeting.participants) {
@@ -105,11 +107,12 @@ export = function ({ Meeting, Poll, Notification, protect, usingMongo, emitToUse
             }
 
             const base = (CLIENT_URL || 'http://localhost:5173').replace(/\/$/, '');
-            const meetingUrl = meeting.modality !== 'Offline' ? `${base}?meeting=${meeting._id}` : null;
+            const meetingUrl = meeting.modality !== 'Offline' ? `${base}/meetings/${meeting.shortId || meeting._id}` : null;
             res.json({
                 poll: poll.toObject(), resolved,
                 meeting: resolved ? {
-                    id: meeting._id, confirmedDate: meeting.confirmedDate,
+                    id: meeting._id, shortId: meeting.shortId,
+                    confirmedDate: meeting.confirmedDate,
                     confirmedTime: meeting.confirmedTime, meetingUrl,
                 } : null,
             });

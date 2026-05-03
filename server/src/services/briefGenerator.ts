@@ -53,7 +53,7 @@ async function generateBrief(meeting: any, callAISummarize: any) {
 }
 
 function formatBriefEmail(brief: any, meetingId: any, clientUrl: string) {
-    const agendaLink = `${clientUrl}/#meeting-${meetingId}`;
+    const agendaLink = `${clientUrl.replace(/\/$/, '')}/meetings/${meetingId}`;
     return `<!DOCTYPE html>
 <html><head><meta charset="utf-8"></head>
 <body style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;max-width:600px;margin:0 auto;padding:20px;color:#1a1a2e">

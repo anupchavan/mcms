@@ -96,7 +96,7 @@ export = function ({ User, protect, generateToken, usingMongo, inMemoryUsers }: 
                         { _id: { $ne: req.user.id } },
                         { $or: [{ name: regex }, { email: regex }] }
                     ]
-                }).select('name email').limit(10);
+                }).select('name email profileImage').limit(10);
                 return res.json(users);
             }
 
@@ -104,7 +104,7 @@ export = function ({ User, protect, generateToken, usingMongo, inMemoryUsers }: 
             const results = inMemoryUsers
                 .filter((u: any) => u._id !== req.user.id && (u.name.toLowerCase().includes(lower) || u.email.includes(lower)))
                 .slice(0, 10)
-                .map((u: any) => ({ _id: u._id, name: u.name, email: u.email }));
+                .map((u: any) => ({ _id: u._id, name: u.name, email: u.email, profileImage: u.profileImage ?? null }));
             res.json(results);
         } catch (error: any) {
             res.status(500).json({ message: 'Server error', error: error.message });

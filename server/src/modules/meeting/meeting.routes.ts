@@ -1,4 +1,6 @@
 import express from 'express';
+import { meetingQueryByAnyId } from './meeting.lookup';
+import { generateShortId } from '../../utils/shortId';
 const router = express.Router();
 
 const MEETING_COMPLETION_BUFFER_MINUTES = 10;
@@ -64,6 +66,7 @@ export = function ({ User, Meeting, Poll, Notification, Agenda, protect, usingMo
                 }
                 const formatted = dbMeetings.map((m: any) => ({
                     id: m._id,
+                    shortId: m.shortId,
                     title: m.title,
                     modality: m.modality,
                     date: m.confirmedDate || m.date,
@@ -74,7 +77,7 @@ export = function ({ User, Meeting, Poll, Notification, Agenda, protect, usingMo
                     hostId: m.hostId,
                     participants: m.participants,
                     status: m.status,
-                    meetingUrl: m.modality !== 'Offline' ? `${base}?meeting=${m._id}` : null,
+                    meetingUrl: m.modality !== 'Offline' ? `${base}/meetings/${m.shortId || m._id}` : null,
                     pollId: m.pollId,
                 }));
                 return res.json(formatted);
@@ -100,7 +103,7 @@ export = function ({ User, Meeting, Poll, Notification, Agenda, protect, usingMo
             const userId = req.user.id;
 
             if (usingMongo() && Meeting) {
-                let meeting = await Meeting.findById(id).populate('participants', 'name email');
+                let meeting = await meetingQueryByAnyId(Meeting, id)?.populate('participants', 'name email');
                 if (!meeting) return res.status(404).json({ message: 'Meeting not found' });
 
                 const isHost = String(meeting.hostId) === String(userId);
@@ -109,20 +112,25 @@ export = function ({ User, Meeting, Poll, Notification, Agenda, protect, usingMo
                 if (!isHost && !isParticipant) {
                     meeting.participants.push(userId);
                     await meeting.save();
-                    meeting = await Meeting.findById(id).populate('participants', 'name email');
+                    meeting = await Meeting.findById(meeting._id).populate('participants', 'name email');
                 }
 
                 const base = (CLIENT_URL || 'http://localhost:5173').replace(/\/$/, '');
-                const meetingUrl = meeting.modality !== 'Offline' ? `${base}?meeting=${meeting._id}` : (meeting.meetingUrl || null);
-                
+                const meetingUrl = meeting.modality !== 'Offline'
+                    ? `${base}/meetings/${meeting.shortId || meeting._id}`
+                    : (meeting.meetingUrl || null);
+
                 return res.json({
                     ...meeting.toObject(),
                     id: meeting._id,
+                    shortId: meeting.shortId,
                     meetingUrl
                 });
             }
 
-            const meeting = inMemoryMeetings.find((m: any) => String(m.id || m._id) === String(id));
+            const meeting = inMemoryMeetings.find((m: any) =>
+                String(m.shortId) === String(id) || String(m.id || m._id) === String(id),
+            );
             if (!meeting) return res.status(404).json({ message: 'Meeting not found' });
             
             const isHost = String(meeting.hostId) === String(userId);
@@ -183,7 +191,7 @@ export = function ({ User, Meeting, Poll, Notification, Agenda, protect, usingMo
                     });
                 }
                 const base = (CLIENT_URL || 'http://localhost:5173').replace(/\/$/, '');
-                const meetingUrl = modality !== 'Offline' ? `${base}?meeting=${newMeeting._id}` : null;
+                const meetingUrl = modality !== 'Offline' ? `${base}/meetings/${newMeeting.shortId || newMeeting._id}` : null;
 
                 let pollData: any = null;
 
@@ -234,7 +242,9 @@ export = function ({ User, Meeting, Poll, Notification, Agenda, protect, usingMo
                 const populated = await Meeting.findById(newMeeting._id).populate('participants', 'name email');
 
                 return res.status(201).json({
-                    id: populated._id, title: populated.title, modality: populated.modality,
+                    id: populated._id,
+                    shortId: populated.shortId,
+                    title: populated.title, modality: populated.modality,
                     date: populated.confirmedDate || populated.date,
                     time: populated.confirmedTime || populated.time,
                     durationMinutes: populated.durationMinutes,
@@ -247,10 +257,11 @@ export = function ({ User, Meeting, Poll, Notification, Agenda, protect, usingMo
 
             const slot = isSingleSlot ? timeSlots[0] : null;
             const meetingId = `mtg-${Date.now()}`;
+            const shortId = generateShortId();
             const base = (CLIENT_URL || 'http://localhost:5173').replace(/\/$/, '');
-            const meetingUrl = modality !== 'Offline' ? `${base}?meeting=${meetingId}` : null;
+            const meetingUrl = modality !== 'Offline' ? `${base}/meetings/${shortId}` : null;
             const newMeeting = {
-                id: meetingId, title, modality,
+                id: meetingId, shortId, title, modality,
                 description: description || undefined,
                 durationMinutes: durationMinutes != null ? Number(durationMinutes) : undefined,
                 date: slot?.date, time: slot?.time, location,
@@ -281,11 +292,11 @@ export = function ({ User, Meeting, Poll, Notification, Agenda, protect, usingMo
     router.get('/:id/calendar', protect, async (req: any, res: any) => {
         try {
             if (!usingMongo() || !Meeting) return res.status(400).json({ message: 'Database required' });
-            const meeting = await Meeting.findById(req.params.id);
+            const meeting = await meetingQueryByAnyId(Meeting, req.params.id);
             if (!meeting) return res.status(404).json({ message: 'Meeting not found' });
 
             const base = (CLIENT_URL || 'http://localhost:5173').replace(/\/$/, '');
-            const meetingUrl = meeting.modality !== 'Offline' ? `${base}?meeting=${meeting._id}` : null;
+            const meetingUrl = meeting.modality !== 'Offline' ? `${base}/meetings/${meeting.shortId || meeting._id}` : null;
             const meetingForIcs = { ...meeting.toObject(), meetingUrl };
             const slot = { date: meeting.confirmedDate || meeting.date, time: meeting.confirmedTime || meeting.time };
             const icsBuffer = generateICS(meetingForIcs, slot);
@@ -313,7 +324,7 @@ export = function ({ User, Meeting, Poll, Notification, Agenda, protect, usingMo
             }
 
             const base = (CLIENT_URL || 'http://localhost:5173').replace(/\/$/, '');
-            const meetingUrl = `${base}?personalRoom=${roomId}`;
+            const meetingUrl = `${base}/rooms/${roomId}`;
 
             if (usingMongo() && Meeting) {
                 let virtualMeeting = await Meeting.findOne({ isPersonalRoom: true, personalRoomId: roomId });

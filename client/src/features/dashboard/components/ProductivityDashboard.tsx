@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
+import { Link } from 'react-router-dom';
 import Icon from '../../../shared/components/Icon';
 import {
     ChartIncreaseIcon,
@@ -102,7 +103,7 @@ export default function ProductivityDashboard({ stats, userName, personalRoomId 
                                     <button 
                                         className="btn btn-secondary btn-sm"
                                         onClick={() => {
-                                            const link = `${window.location.origin}/?personalRoom=${personalRoomId}`;
+                                            const link = `${window.location.origin}/rooms/${personalRoomId}`;
                                             navigator.clipboard.writeText(link);
                                             const btn = document.getElementById('copy-personal-room');
                                             if (btn) {
@@ -115,9 +116,9 @@ export default function ProductivityDashboard({ stats, userName, personalRoomId 
                                     >
                                         Copy Link
                                     </button>
-                                    <a href={`/?personalRoom=${personalRoomId}`} className="btn btn-primary btn-sm">
+                                    <Link to={`/rooms/${personalRoomId}`} className="btn btn-primary btn-sm">
                                         Join Now
-                                    </a>
+                                    </Link>
                                 </div>
                             </div>
                         </div>

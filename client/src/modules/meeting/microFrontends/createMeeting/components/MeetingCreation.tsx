@@ -21,6 +21,7 @@ import { useAuth } from "../../../../../stores/AuthContext";
 import { FlexokiMap } from "../../../../../shared/components/map/FlexokiMap";
 import { Suggestion, Slot, MeetingCreationProps, CreatedMeeting, ParticipantUser } from "../interfaces";
 import { buildSuggestions, formatSlotDisplay } from "../hooks/useMeetingSlots.ts";
+import { avatarUrlFromPath } from "../../../../../shared/avatarUrl";
 
 const _raw = import.meta.env.VITE_API_URL || "http://localhost:5001/api";
 const SERVER_BASE = _raw.replace(/(\/api\/?)+$/, "");
@@ -443,10 +444,11 @@ export default function MeetingCreation({
   };
 
   const renderAvatar = (u: ParticipantUser, size = 10) => {
-    if (u.profileImage) {
+    const src = avatarUrlFromPath(u.profileImage);
+    if (src) {
       return (
         <img
-          src={`${SERVER_BASE}${u.profileImage}`}
+          src={src}
           alt=""
           className="participant-chip-avatar-img"
         />

@@ -6,7 +6,7 @@ import { useAuth } from '../../../stores/AuthContext';
 import {
     CheckmarkCircle01Icon, Clock01Icon, AlertCircleIcon,
     ArrowRight01Icon,
-    FlashIcon, Add01Icon, Delete02Icon, SparklesIcon, PencilEdit02Icon,
+    Add01Icon, Delete02Icon, SparklesIcon, PencilEdit02Icon,
     Video01Icon, MessageAdd01Icon, UserIcon,
     Calendar02Icon,
 } from '@hugeicons/core-free-icons';
@@ -409,7 +409,6 @@ export default function ActionItems({ items, sectionTitle = 'Action Items', empt
         <div className="action-items-section">
             <div className="section-header">
                 <div className="section-title-container">
-                    <Icon icon={FlashIcon} size={14} />
                     <span className="section-title">{sectionTitle}</span>
                     <span className="chip chip-blue">{items.length}</span>
                 </div>

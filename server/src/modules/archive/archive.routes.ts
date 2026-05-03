@@ -9,8 +9,24 @@ import ResourcePin = require('../pin/pin.schema');
 import Transcript = require('../transcript/transcript.schema');
 import { sanitizeTextSearch, escapeRegex } from '../../utils/searchHelpers';
 import { getCache, setCache } from '../../utils/cache';
+import { isShortId } from '../../utils/shortId';
 
 export = function ({ User, Meeting, protect, usingMongo, callAISummarize, callAIMeetingSummary, callAIExtractActions, inMemoryMeetingSummaries, inMemoryMeetings, inMemoryAgendas, inMemoryTranscripts, inMemoryActionItems }: any) {
+
+	/**
+	 * Accepts either a meeting `shortId` (`xxxx-xxxx`) or an ObjectId and
+	 * returns the canonical Mongo `_id` string. Returns null when no match.
+	 */
+	async function resolveMeetingId(maybeId: string): Promise<string | null> {
+		if (!maybeId) return null;
+		if (isShortId(maybeId)) {
+			const m = await Meeting.findOne({ shortId: maybeId }).select('_id').lean();
+			return m ? m._id.toString() : null;
+		}
+		if (mongoose.isValidObjectId(maybeId)) return maybeId;
+		const m = await Meeting.findOne({ shortId: maybeId }).select('_id').lean();
+		return m ? m._id.toString() : null;
+	}
 
 	async function meetingIdsMatchingTextSearch(qRaw: string): Promise<mongoose.Types.ObjectId[]> {
 		const q = (qRaw || '').trim();
@@ -170,7 +186,8 @@ export = function ({ User, Meeting, protect, usingMongo, callAISummarize, callAI
 				}
 
 				return res.json(results.map((m: any) => ({
-					id: m.id || m._id, title: m.title, modality: m.modality,
+					id: m.id || m._id, shortId: m.shortId,
+					title: m.title, modality: m.modality,
 					date: m.confirmedDate || m.date,
 					time: m.confirmedTime || m.time,
 					host: m.host, hostId: m.hostId,
@@ -269,7 +286,7 @@ export = function ({ User, Meeting, protect, usingMongo, callAISummarize, callAI
 				if (!agendaMatch) continue;
 
 				results.push({
-					id: m._id, title: m.title, modality: m.modality,
+					id: m._id, shortId: m.shortId, title: m.title, modality: m.modality,
 					date: m.confirmedDate || m.date,
 					time: m.confirmedTime || m.time,
 					host: m.host, hostId: m.hostId,
@@ -701,19 +718,22 @@ export = function ({ User, Meeting, protect, usingMongo, callAISummarize, callAI
 	router.get('/:meetingId', protect, async (req: any, res: any) => {
 		try {
 			if (!usingMongo()) {
-				const meeting = inMemoryMeetings.find((m: any) => (m.id || m._id) === req.params.meetingId);
+				const meeting = inMemoryMeetings.find((m: any) =>
+					(m.id || m._id) === req.params.meetingId || m.shortId === req.params.meetingId,
+				);
 				if (!meeting) return res.status(404).json({ message: 'Meeting not found' });
 
-				const agendaItems = inMemoryAgendas[req.params.meetingId] || [];
-				const transcripts = inMemoryTranscripts[req.params.meetingId] || [];
-				const actionItems = (inMemoryActionItems[req.params.meetingId] || []).map((i: any) => ({
+				const lookupId = (meeting.id || meeting._id);
+				const agendaItems = inMemoryAgendas[lookupId] || [];
+				const transcripts = inMemoryTranscripts[lookupId] || [];
+				const actionItems = (inMemoryActionItems[lookupId] || []).map((i: any) => ({
 					id: i.id || i._id, title: i.title,
 					assignee: i.assignee || 'Unassigned',
 					category: i.category, status: i.status, deadline: i.deadline,
 					source: i.source,
 					agendaItemId: i.agendaItemId || null,
 				}));
-				const summary = inMemoryMeetingSummaries[req.params.meetingId] || null;
+				const summary = inMemoryMeetingSummaries[lookupId] || null;
 
 				const transcriptsByAgenda: any = {};
 				const transcriptFlat: any[] = [];
@@ -756,14 +776,16 @@ export = function ({ User, Meeting, protect, usingMongo, callAISummarize, callAI
 				});
 			}
 
-			const meeting = await Meeting.findById(req.params.meetingId).populate('participants', 'name email');
+			const resolvedId = await resolveMeetingId(req.params.meetingId);
+			if (!resolvedId) return res.status(404).json({ message: 'Meeting not found' });
+			const meeting = await Meeting.findById(resolvedId).populate('participants', 'name email');
 			if (!meeting) return res.status(404).json({ message: 'Meeting not found' });
 
-			const agenda = await Agenda.findOne({ meetingId: req.params.meetingId });
-			const transcripts = await Transcript.find({ meetingId: req.params.meetingId }).sort({ startTime: 1, createdAt: 1 });
-			const actionItems = await ActionItem.find({ meetingId: req.params.meetingId }).populate('assignee', 'name email');
-			const pins = await ResourcePin.find({ meetingId: req.params.meetingId }).populate('userId', 'name');
-			const meetingSummary = await MeetingSummary.findOne({ meetingId: req.params.meetingId });
+			const agenda = await Agenda.findOne({ meetingId: resolvedId });
+			const transcripts = await Transcript.find({ meetingId: resolvedId }).sort({ startTime: 1, createdAt: 1 });
+			const actionItems = await ActionItem.find({ meetingId: resolvedId }).populate('assignee', 'name email');
+			const pins = await ResourcePin.find({ meetingId: resolvedId }).populate('userId', 'name');
+			const meetingSummary = await MeetingSummary.findOne({ meetingId: resolvedId });
 
 			const transcriptsByAgenda: any = {};
 			const transcriptFlat: any[] = [];
@@ -783,7 +805,8 @@ export = function ({ User, Meeting, protect, usingMongo, callAISummarize, callAI
 
 			res.json({
 				meeting: {
-					id: meeting._id, title: meeting.title, modality: meeting.modality,
+					id: meeting._id, shortId: meeting.shortId,
+					title: meeting.title, modality: meeting.modality,
 					date: meeting.confirmedDate || meeting.date,
 					time: meeting.confirmedTime || meeting.time,
 					host: meeting.host, participants: meeting.participants,
