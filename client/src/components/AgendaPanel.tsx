@@ -5,7 +5,9 @@ import {
   Clock01Icon,
   CheckmarkSquare01Icon,
   Cancel01Icon,
+  SidebarLeftIcon,
 } from '@hugeicons/core-free-icons';
+import ShortcutTooltip from './ShortcutTooltip';
 
 interface AgendaItem {
   id: string;
@@ -19,9 +21,12 @@ interface AgendaPanelProps {
   onItemChange?: (items: AgendaItem[]) => void;
   /** When false (non-host), the panel is read-only: no adding items, no status changes */
   isHost?: boolean;
+  /** Optional collapse callback. When provided, a close button is rendered in
+   *  the section header so users can hide the panel without leaving it. */
+  onClosePanel?: () => void;
 }
 
-const AgendaPanel: FC<AgendaPanelProps> = ({ agendaItems = [], onItemChange, isHost = false }) => {
+const AgendaPanel: FC<AgendaPanelProps> = ({ agendaItems = [], onItemChange, isHost = false, onClosePanel }) => {
   const [isAdding, setIsAdding] = useState(false);
   const [newTitle, setNewTitle] = useState('');
   const [newDuration, setNewDuration] = useState('15');
@@ -45,16 +50,30 @@ const AgendaPanel: FC<AgendaPanelProps> = ({ agendaItems = [], onItemChange, isH
     <div className="agenda-panel panel">
       <div className="section-header">
         <span className="section-title">📋 Agenda</span>
-        {isHost && (
-          <button
-            className={`btn-icon ${isAdding ? 'active' : ''}`}
-            id="btn-add-agenda"
-            onClick={() => setIsAdding(!isAdding)}
-            title="Add agenda item (host only)"
-          >
-            <Icon icon={isAdding ? Cancel01Icon : Add01Icon} size={16} />
-          </button>
-        )}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
+          {isHost && (
+            <button
+              className={`btn-icon ${isAdding ? 'active' : ''}`}
+              id="btn-add-agenda"
+              onClick={() => setIsAdding(!isAdding)}
+              title="Add agenda item (host only)"
+            >
+              <Icon icon={isAdding ? Cancel01Icon : Add01Icon} size={16} />
+            </button>
+          )}
+          {onClosePanel && (
+            <ShortcutTooltip keys={['mod', '[']} position="bottom">
+              <button
+                className="btn-icon"
+                onClick={onClosePanel}
+                aria-label="Collapse agenda panel"
+                title="Collapse agenda"
+              >
+                <Icon icon={SidebarLeftIcon} size={16} />
+              </button>
+            </ShortcutTooltip>
+          )}
+        </div>
       </div>
 
       {isAdding && (

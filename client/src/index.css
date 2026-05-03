@@ -217,12 +217,16 @@
   --shadow-md: 0 0.25rem  0.75rem  rgba(16,15,15,0.75);
   --shadow-lg: 0 0.5rem   2rem     rgba(16,15,15,0.85);
 
-  /* ── Radii ── */
-  --radius-xs: var(--lk-size-2xs);
-  --radius-sm: var(--lk-size-xs);
-  --radius-md: var(--lk-size-sm);
-  --radius-lg: var(--lk-size-md);
-  --radius-xl: var(--lk-size-lg);
+  /* ── Radii ──
+     Each tier shifts one step down the size scale: radius-N === lk-size-(N-1).
+     Use 2xs for tight outer corners (e.g. side-panel edges that meet the
+     viewport / app shell), and md+ for inner corners that face other panels. */
+  --radius-2xs: var(--lk-size-3xs);
+  --radius-xs:  var(--lk-size-2xs);
+  --radius-sm:  var(--lk-size-xs);
+  --radius-md:  var(--lk-size-sm);
+  --radius-lg:  var(--lk-size-md);
+  --radius-xl:  var(--lk-size-lg);
 
   /* ── Layout ── */
   --sidebar-width: 13.75rem;
@@ -720,6 +724,7 @@ div.hangup-button {
   justify-content: space-between;
   padding: var(--lk-size-sm) var(--lk-size-sm);
   border-bottom: 0.0625rem solid var(--border);
+  background: var(--bg-card);
 }
 
 .section-title {
@@ -990,41 +995,34 @@ input[type="date"].input-field {
   min-width: 0;
 }
 
+/* ═══════════════════════════════════════════════════════════════
+   MEETING LAYOUT — VideoArea + MeetingDock
+   ───────────────────────────────────────────────────────────────
+   Two-column layout. The dock sits on the right and owns a fixed
+   icon rail (~2.5rem) plus an optional panel-content column that
+   collapses / expands based on `dockOpen`.
+
+   Grid widths come from `--meeting-dock-rail-w` and
+   `--meeting-dock-panel-w` so the dock can size itself with
+   `width: calc(...)` without redefining the grid.
+   ═══════════════════════════════════════════════════════════════ */
+
 .meeting-layout {
+  --meeting-dock-rail-w:  2.625rem;   /* width of the always-visible icon rail */
+  --meeting-dock-panel-w: 21.25rem;   /* width of the active-panel content area */
+
   display: grid;
-  grid-template-columns: 18.75rem 1fr 21.25rem;
+  grid-template-columns: 1fr auto;
   gap: 0;
   height: 100%;
   width: 100%;
   overflow: hidden;
   padding: var(--lk-size-xs);
-  transition: grid-template-columns 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  transition: grid-template-columns 0.25s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
-.meeting-layout.agenda-hidden {
-  grid-template-columns: 1fr 21.25rem;
-}
-
-.meeting-layout.right-hidden {
-  grid-template-columns: 18.75rem 1fr;
-}
-
-.meeting-layout.agenda-hidden.right-hidden {
-  grid-template-columns: 1fr;
-}
-
-/* Offline Mode */
-.meeting-layout.offline-mode {
-  grid-template-columns: 1fr 1fr;
-  grid-template-rows: auto 1fr;
-  gap: var(--lk-size-xs);
-}
-
+/* Offline Mode — dock stays on the right; video area becomes a thin header. */
 .meeting-layout.offline-mode .video-area {
-  grid-column: 1 / -1;
-  grid-row: 1;
-  height: auto;
-  min-height: 0;
   border-bottom: 1px solid var(--border);
 }
 
@@ -1032,118 +1030,158 @@ input[type="date"].input-field {
   display: none;
 }
 
-.meeting-layout.offline-mode .meeting-side-panel-left {
-  grid-column: 1;
-  grid-row: 2;
-  margin-right: 0;
-}
-
-.meeting-layout.offline-mode .meeting-side-panel-right {
-  grid-column: 2;
-  grid-row: 2;
-  margin-left: 0;
-}
-
 .meeting-layout .panel {
   height: 100%;
   overflow-y: auto;
+}
+
+/* ── MeetingDock ─────────────────────────────────────────────── */
+.meeting-dock {
+  display: flex;
+  height: 100%;
+  margin-left: var(--lk-size-xs);
+  background: var(--bg-card);
+  border: 0.0625rem solid var(--border);
+  /* Outer (right) corners use the tighter 2xs radius — they sit against the
+     app-shell edge. Inner (left) corners face the video-area and use md. */
+  border-radius: var(--radius-md) var(--radius-2xs) var(--radius-2xs) var(--radius-md);
+  overflow: hidden;
+  transition: width 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+  width: calc(var(--meeting-dock-panel-w) + var(--meeting-dock-rail-w));
+}
+
+.meeting-dock.collapsed {
+  width: var(--meeting-dock-rail-w);
+}
+
+.meeting-dock-content {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  /* Subtle hairline separator between the active panel and the icon rail. */
   border-right: 0.0625rem solid var(--border);
 }
 
-.meeting-layout .panel:last-child {
-  border-right: none;
-}
-
-.meeting-side-panel {
-  height: 100%;
-  overflow: hidden;
-  border-radius: var(--radius-md);
-  border: 0.0625rem solid var(--border);
-  transition: opacity 0.25s ease;
+.meeting-dock-content > .panel {
+  flex: 1;
+  min-height: 0;
+  border: none;
+  border-radius: 0;
   background: var(--bg-card);
 }
 
-.meeting-side-panel.open {
-  overflow-y: auto;
-}
-
-.meeting-side-panel.closed {
-  display: none;
-}
-
-.meeting-side-panel-left {
-  margin-right: var(--lk-size-xs);
-}
-
-.meeting-side-panel-right {
-  margin-left: var(--lk-size-xs);
-}
-
-.meeting-side-panel-right.open {
+/* ── Icon rail (always visible) ──────────────────────────────── */
+.meeting-dock-rail {
+  flex-shrink: 0;
+  width: var(--meeting-dock-rail-w);
   display: flex;
   flex-direction: column;
-  overflow: hidden;
-}
-
-.meeting-side-panel .panel {
-  border-right: none;
-}
-
-.right-panel-content {
-  display: flex;
-  flex-direction: column;
-  flex: 1;
-  min-height: 0;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--lk-size-xs) 0;
   background: var(--bg-card);
 }
 
-/* Transcript on top: must not use .panel height:100% or it steals the whole sidebar */
-.right-panel-transcript {
-  flex: 0 1 auto;
-  min-height: 0;
-  max-height: min(42vh, 22rem);
+.meeting-dock-rail-tabs {
   display: flex;
   flex-direction: column;
-  overflow: hidden;
-  border-bottom: 0.0625rem solid var(--border);
+  gap: 0.1875rem;
+  align-items: center;
 }
 
-.right-panel-transcript .transcript-panel.panel {
-  height: auto;
-  flex: 1;
-  min-height: 0;
-  overflow: hidden;
+.meeting-dock-rail-btn {
+  width: 2rem;
+  height: 2rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: 0.0625rem solid transparent;
+  border-radius: var(--radius-sm);
+  color: var(--text-muted);
+  cursor: pointer;
+  padding: 0;
+  transition: background 0.15s ease, color 0.15s ease,
+              border-color 0.15s ease;
 }
 
-.right-panel-bottom {
-  flex: 1;
-  min-height: 0;
+.meeting-dock-rail-btn:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+  border-color: var(--border);
+}
+
+.meeting-dock-rail-btn.active {
+  background: var(--primary-muted);
+  color: var(--primary);
+  border-color: color-mix(in srgb, var(--primary) 35%, transparent);
+}
+
+.meeting-dock-rail-btn:focus-visible {
+  outline: 0.125rem solid var(--primary);
+  outline-offset: 0.0625rem;
+}
+
+.meeting-dock-rail-btn-toggle {
+  /* Pinned to the bottom of the rail, like the "Hide panel" button in the
+     ed-tech reference. Slightly muted so it reads as a meta control rather
+     than a panel selector. */
+  margin-top: var(--lk-size-xs);
+}
+
+/* ── VideoArea corner radii ──────────────────────────────────── */
+/* Left edge of the video area is always the outer-left edge of the layout,
+   so use the tight 2xs corners. Right edge faces the dock (or, when the
+   dock is collapsed, still butts up against the icon rail), so keep md. */
+.meeting-layout .video-area {
+  border-top-left-radius: var(--radius-2xs);
+  border-bottom-left-radius: var(--radius-2xs);
+  border-top-right-radius: var(--radius-md);
+  border-bottom-right-radius: var(--radius-md);
+}
+
+/* ── ChatPanel placeholder ───────────────────────────────────── */
+.chat-panel {
   display: flex;
   flex-direction: column;
 }
 
-.right-panel-half {
+.chat-empty-state {
   flex: 1;
-  min-height: 0;
   display: flex;
   flex-direction: column;
-  overflow: hidden;
+  align-items: center;
+  justify-content: center;
+  padding: var(--lk-size-md);
+  text-align: center;
+  color: var(--text-muted);
 }
 
-.right-panel-half-minutes {
-  border-bottom: 0.0625rem solid var(--border);
-}
-
-.right-panel-half .minutes-panel-root {
-  flex: 1;
-  min-height: 0;
-  overflow-y: auto;
+.chat-empty-icon {
   display: flex;
-  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  width: 3rem;
+  height: 3rem;
+  margin-bottom: var(--lk-size-sm);
+  color: var(--text-muted);
+  opacity: 0.7;
 }
 
-.meeting-side-panel.closed {
-  display: none;
+.chat-empty-title {
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin: 0 0 var(--lk-size-2xs) 0;
+}
+
+.chat-empty-sub {
+  font-size: 0.75rem;
+  line-height: 1.5;
+  max-width: 18rem;
+  margin: 0;
 }
 
 .collapsible-header {
@@ -1620,7 +1658,6 @@ input[type="date"].input-field {
   background: var(--bg-card);
   border-right: 0.0625rem solid var(--border);
   padding: var(--lk-size-sm) var(--lk-size-xs);
-  transition: width 0.25s cubic-bezier(0.4, 0, 0.2, 1);
   flex-shrink: 0;
   gap: var(--lk-size-sm);
   overflow: hidden;
@@ -1628,8 +1665,8 @@ input[type="date"].input-field {
 
 .sidebar.collapsed { width: auto; }
 
-.sidebar-toggle-icon-open  { width: 24%; transition: width 0.25s cubic-bezier(0.4, 0, 0.2, 1); }
-.sidebar-toggle-icon-close { width: 0.33%; transition: width 0.25s cubic-bezier(0.4, 0, 0.2, 1); }
+.sidebar-toggle-icon-open  { width: 24%; }
+.sidebar-toggle-icon-close { width: 0.33%; }
 
 .sidebar-nav {
   display: flex;
@@ -1665,7 +1702,6 @@ input[type="date"].input-field {
   white-space: nowrap;
   overflow: hidden;
   opacity: 1;
-  transition: opacity 0.2s ease, max-width 0.25s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 .sidebar-item-label.collapsed {
@@ -1703,7 +1739,7 @@ input[type="date"].input-field {
   background: none;
   color: var(--text-muted);
   cursor: pointer;
-  transition: all 0.2s;
+  transition: width 0.2s;
 }
 
 .sidebar-toggle:hover {
@@ -2242,7 +2278,7 @@ font-family: 'Unica One', cursive;
    ═══════════════════════════════════════════════════════════════ */
 
 .agenda-panel {
-  background: var(--bg-card);
+  background: var(--bg-primary);
 }
 
 .agenda-timer-bar {
@@ -3623,47 +3659,138 @@ font-family: 'Unica One', cursive;
 
 
 /* ═══════════════════════════════════════════════════════════════
-   RUBRIC SIDEBAR
-   ═══════════════════════════════════════════════════════════════ */
+   30. MAPLIBRE — FLEXOKI VECTOR MAP
+   ═══════════════════════════════════════════════════════════════
+   The map itself ships its own per-feature colors via the JSON style
+   in `src/utils/mapStyle.ts` (light + dark variants, swapped reactively
+   by `useTheme()`). The rules here only theme the chrome around the
+   canvas: the map container background (visible during tile load and
+   at the world-wrap edges), focus outlines, and the attribution
+   control. */
 
-.rubric-sidebar {
-  padding: 0.75rem;
+.maplibregl-map {
+  font-family: inherit;
+  background: var(--flexoki-paper);
+}
+:root:not([data-theme='light']) .maplibregl-map {
+  background: var(--flexoki-black);
+}
+
+.maplibregl-canvas:focus {
+  outline: none;
+}
+
+.maplibregl-ctrl-attrib {
+  background: rgba(255, 252, 240, 0.85) !important;
+  color: var(--flexoki-700) !important;
+  font-size: 10px !important;
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+}
+.maplibregl-ctrl-attrib a,
+.maplibregl-ctrl-attrib a:visited {
+  color: var(--flexoki-blue-700) !important;
+}
+.maplibregl-ctrl-attrib-button {
+  background-color: rgba(255, 252, 240, 0.85) !important;
+}
+
+:root:not([data-theme='light']) .maplibregl-ctrl-attrib {
+  background: rgba(16, 15, 15, 0.75) !important;
+  color: var(--flexoki-400) !important;
+}
+:root:not([data-theme='light']) .maplibregl-ctrl-attrib a,
+:root:not([data-theme='light']) .maplibregl-ctrl-attrib a:visited {
+  color: var(--flexoki-cyan-400) !important;
+}
+:root:not([data-theme='light']) .maplibregl-ctrl-attrib-button {
+  background-color: rgba(16, 15, 15, 0.75) !important;
+}
+
+/* Custom Hugeicons-based zoom controls (rendered by `<FlexokiZoomControls>`
+   in `FlexokiMap.tsx`, replaces MapLibre's default NavigationControl). */
+.flexoki-map-zoom {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  z-index: 2;
   display: flex;
   flex-direction: column;
-  gap: 0.75rem;
+  background: var(--flexoki-paper);
+  border: 1px solid var(--flexoki-200);
+  border-radius: var(--radius-sm, 6px);
+  box-shadow: var(--shadow-sm, 0 1px 3px rgba(0, 0, 0, 0.08));
+  overflow: hidden;
+}
+.flexoki-map-zoom button {
+  width: 28px;
+  height: 28px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  color: var(--flexoki-800);
+  transition: background-color 120ms ease, color 120ms ease;
+}
+.flexoki-map-zoom button + button {
+  border-top: 1px solid var(--flexoki-150);
+}
+.flexoki-map-zoom button:hover {
+  background: var(--flexoki-50);
+  color: var(--flexoki-black);
+}
+.flexoki-map-zoom button:active {
+  background: var(--flexoki-100);
+}
+.flexoki-map-zoom button:focus-visible {
+  outline: none;
+  box-shadow: inset 0 0 0 2px var(--flexoki-300);
+}
+
+:root:not([data-theme='light']) .flexoki-map-zoom {
+  background: var(--flexoki-900);
+  border-color: var(--flexoki-800);
+}
+:root:not([data-theme='light']) .flexoki-map-zoom button {
+  color: var(--flexoki-200);
+}
+:root:not([data-theme='light']) .flexoki-map-zoom button + button {
+  border-top-color: var(--flexoki-800);
+}
+:root:not([data-theme='light']) .flexoki-map-zoom button:hover {
+  background: var(--flexoki-850);
+  color: var(--flexoki-paper);
+}
+:root:not([data-theme='light']) .flexoki-map-zoom button:active {
+  background: var(--flexoki-800);
+}
+:root:not([data-theme='light']) .flexoki-map-zoom button:focus-visible {
+  box-shadow: inset 0 0 0 2px var(--flexoki-700);
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   31. MAP MARKER — FLEXOKI TEARDROP PIN
+   ═══════════════════════════════════════════════════════════════
+   Inline SVG rendered by `<FlexokiPin>` and positioned by
+   react-map-gl's `<Marker anchor="bottom">`. Colors flip with the
+   global theme so the pin always reads against the map below.
+     light : black body  + paper dot
+     dark  : paper body  + black dot                                    */
+
+.flexoki-marker {
+  display: block;
+  filter: drop-shadow(0 2px 3px rgba(0, 0, 0, 0.35));
+}
+.flexoki-marker svg {
+  width: 100%;
   height: 100%;
-  overflow-y: auto;
+  display: block;
 }
+.flexoki-marker .pin-body { fill: var(--flexoki-black); }
+.flexoki-marker .pin-dot  { fill: var(--flexoki-paper); }
 
-.rubric-sidebar h3 {
-  font-size: 0.875rem;
-  font-weight: 600;
-  margin: 0;
-}
-
-.rubric-criterion {
-  padding: 0.5rem;
-  margin-bottom: 0.25rem;
-}
-
-.rubric-criterion-name {
-  font-size: 0.8125rem;
-  font-weight: 500;
-  margin-bottom: 0.25rem;
-}
-
-.rubric-criterion-desc {
-  font-size: 0.6875rem;
-  color: var(--text-muted);
-  margin-bottom: 0.375rem;
-}
-
-.rubric-score-input {
-  width: 3.5rem;
-  text-align: center;
-}
-
-.rubric-score-max {
-  font-size: 0.6875rem;
-  color: var(--text-muted);
-}
+:root:not([data-theme='light']) .flexoki-marker .pin-body { fill: var(--flexoki-paper); }
+:root:not([data-theme='light']) .flexoki-marker .pin-dot  { fill: var(--flexoki-black); }

@@ -6,8 +6,6 @@ import {
   UserGroupIcon,
   FullScreenIcon,
   MinimizeScreenIcon,
-  SidebarLeftIcon,
-  SidebarRightIcon,
   Clock01Icon,
   Note01Icon,
   Task01Icon,
@@ -50,10 +48,6 @@ interface VideoAreaProps {
   modality?: string;
   currentUser?: { _id?: string; id?: string; name?: string; profileImage?: string | null } | null;
   fullscreenRef?: React.RefObject<HTMLDivElement | null>;
-  agendaPanelOpen: boolean;
-  rightPanelOpen: boolean;
-  onToggleAgendaPanel: () => void;
-  onToggleRightPanel: () => void;
   onMeetingEnded?: () => void;
   onTriggerAddActionItem?: () => void;
   onTriggerAddAgendaItem?: () => void;
@@ -189,10 +183,6 @@ export default function VideoArea({
   modality,
   currentUser,
   fullscreenRef,
-  agendaPanelOpen,
-  rightPanelOpen,
-  onToggleAgendaPanel,
-  onToggleRightPanel,
   onMeetingEnded,
   onTriggerAddActionItem,
   onTriggerAddAgendaItem,
@@ -447,13 +437,6 @@ export default function VideoArea({
     <div className="video-area">
       {showToast && <div className={`focus-toast show`}>{showToast}</div>}
       <div className="video-header">
-        {!agendaPanelOpen && (
-          <ShortcutTooltip keys={["mod", "["]} position="right">
-            <button className="video-panel-toggle" onClick={onToggleAgendaPanel}>
-              <Icon icon={SidebarLeftIcon} size={16} />
-            </button>
-          </ShortcutTooltip>
-        )}
         <div style={{ flex: 1, minWidth: 0, display: 'flex', alignItems: 'center', gap: '1rem' }}>
           <div style={{ flex: 1, minWidth: 0 }}>
             <h2 className="video-meeting-title">{meetingTitle || "No Active Meeting"}</h2>
@@ -471,7 +454,6 @@ export default function VideoArea({
           </div>
           {modality === "Offline" && (
             <div className="focus-header-meta">
-              {/* <span className="badge badge-rec"><span className="rec-dot"></span> Recording</span> */}
               <span className="timer-val">{formatTime(elapsedTime)}</span>
             </div>
           )}
@@ -486,13 +468,6 @@ export default function VideoArea({
             <Icon icon={isFullscreen ? MinimizeScreenIcon : FullScreenIcon} size={16} />
           </button>
         </ShortcutTooltip>
-        {!rightPanelOpen && (
-          <ShortcutTooltip keys={["mod", "]"]} position="left">
-            <button className="video-panel-toggle" onClick={onToggleRightPanel}>
-              <Icon icon={SidebarRightIcon} size={16} />
-            </button>
-          </ShortcutTooltip>
-        )}
       </div>
 
       <div className="video-container">
@@ -705,26 +680,6 @@ export default function VideoArea({
           border-radius: var(--radius-md);
           overflow: hidden;
         }
-        .video-panel-toggle {
-          flex-shrink: 0;
-          width: 2rem;
-          height: 2rem;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          background: var(--bg-card);
-          border: 0.0625rem solid var(--border);
-          border-radius: var(--radius-sm);
-          color: var(--text-muted);
-          cursor: pointer;
-          transition: background 0.2s, color 0.2s, border-color 0.2s;
-          padding: 0;
-        }
-        .video-panel-toggle:hover {
-          background: var(--bg-hover);
-          color: var(--primary);
-          border-color: var(--border-hover);
-        }
         .video-header {
           display: flex;
           align-items: center;
@@ -755,7 +710,6 @@ export default function VideoArea({
         .video-placeholder {
           width: 100%;
           height: 100%;
-          border-radius: var(--radius-lg);
           overflow: hidden;
         }
         .video-offline-message {
@@ -940,6 +894,7 @@ export default function VideoArea({
           font-weight: 500;
           color: #fff;
           backdrop-filter: blur(4px);
+          z-index: 3;
         }
         .self-badge {
           position: absolute;
@@ -952,6 +907,7 @@ export default function VideoArea({
           font-weight: 700;
           color: white;
           letter-spacing: 0.03125rem;
+          z-index: 3;
         }
         .host-badge {
           position: absolute;
@@ -964,6 +920,7 @@ export default function VideoArea({
           font-weight: 700;
           color: white;
           letter-spacing: 0.03125rem;
+          z-index: 3;
         }
 
         /* Offline Focus Mode Styles */
