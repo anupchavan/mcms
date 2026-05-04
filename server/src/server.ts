@@ -471,17 +471,64 @@ function newLiveDraftId(): string {
   return `live-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
 }
 
-function ensureLiveDraftId(session: any) {
-  if (!session.liveDraftId) session.liveDraftId = newLiveDraftId();
+// ── Per-speaker aggregator state ───────────────────────────────
+// Each session keeps one aggregator AND one liveDraftId per speaker so that
+// overlapping speakers don't force a flush on each other. Flushes happen only
+// when Deepgram signals utterance end, paragraph rules trigger, or the
+// session/socket ends.
+
+function getSpeakerAgg(session: any, speakerName: string): TranscriptAgg | null {
+  if (!session.aggregators) return null;
+  return session.aggregators.get(speakerName) || null;
+}
+
+function setSpeakerAgg(
+  session: any,
+  speakerName: string,
+  agg: TranscriptAgg | null,
+) {
+  if (!session.aggregators) session.aggregators = new Map();
+  if (agg) session.aggregators.set(speakerName, agg);
+  else session.aggregators.delete(speakerName);
+}
+
+function ensureLiveDraftIdForSpeaker(
+  session: any,
+  speakerName: string,
+): string {
+  if (!session.liveDraftIds) session.liveDraftIds = new Map();
+  let id = session.liveDraftIds.get(speakerName);
+  if (!id) {
+    id = newLiveDraftId();
+    session.liveDraftIds.set(speakerName, id);
+  }
+  return id;
+}
+
+function consumeLiveDraftIdForSpeaker(
+  session: any,
+  speakerName: string,
+): string {
+  if (!session.liveDraftIds) session.liveDraftIds = new Map();
+  let id = session.liveDraftIds.get(speakerName);
+  if (!id) {
+    id = newLiveDraftId();
+  }
+  session.liveDraftIds.delete(speakerName);
+  return id;
 }
 
 // live UI: stream partial text on every STT chunk (Google Meet–style). Archive still uses paragraph flushes only.
-function broadcastInterimTranscript(meetingId: string, session: any) {
-  const agg = session.aggregator as TranscriptAgg | null;
+function broadcastInterimTranscript(
+  meetingId: string,
+  session: any,
+  speakerName: string,
+) {
+  const agg = getSpeakerAgg(session, speakerName);
   if (!agg || !String(agg.text).trim()) return;
-  ensureLiveDraftId(session);
+  const id = ensureLiveDraftIdForSpeaker(session, speakerName);
   broadcastTranscriptSegment(meetingId, {
-    id: session.liveDraftId,
+    id,
     meetingId,
     speaker: agg.speaker,
     speakerImage: agg.speakerImage,
@@ -622,10 +669,9 @@ function flushAggToClients(
 ) {
   const text = agg.text.trim();
   if (!text) return;
-  const id =
-    session.liveDraftId ||
-    `t-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-  session.liveDraftId = null;
+  // Use the in-flight live draft id for this speaker so the UI atomically
+  // replaces the interim bubble with the final segment (same id).
+  const id = consumeLiveDraftIdForSpeaker(session, agg.speaker);
   const segment = {
     id,
     meetingId,
@@ -673,19 +719,22 @@ function flushAggToClients(
   // processRealtimeActions(meetingId, agg);
 }
 
-// split transcript into paragraphs
-function applyParagraphRules(meetingId: string, session: any) {
-  let agg = session.aggregator as TranscriptAgg | null;
+// split transcript into paragraphs (operates on a single speaker's aggregator)
+function applyParagraphRules(
+  meetingId: string,
+  session: any,
+  speakerName: string,
+) {
+  let agg = getSpeakerAgg(session, speakerName);
   if (!agg || !agg.text.trim()) return;
 
-  //
   while (agg && agg.text.length >= MAX_PARAGRAPH_CHARS) {
     const split = splitAtParagraphBoundary(agg.text, MAX_PARAGRAPH_CHARS);
     if (!split) break;
     flushAggToClients(meetingId, { ...agg, text: split.flush }, session);
     const nextStart = getElapsedMs(meetingRecordingClock, meetingId);
     if (!split.rest) {
-      session.aggregator = null;
+      setSpeakerAgg(session, speakerName, null);
       clearStreamBuffersForSpeaker(session, agg.speaker);
       return;
     }
@@ -697,27 +746,41 @@ function applyParagraphRules(meetingId: string, session: any) {
       agendaItemId: activeAgendaItems.get(meetingId) || null,
       languageCode: agg.languageCode,
     };
-    session.aggregator = agg;
+    setSpeakerAgg(session, speakerName, agg);
     setStreamBuffersForSpeaker(session, agg.speaker, split.rest);
   }
 
-  agg = session.aggregator;
+  agg = getSpeakerAgg(session, speakerName);
   if (agg && shouldFlushOnSentenceEnd(agg.text)) {
     flushAggToClients(meetingId, agg, session);
-    session.aggregator = null;
+    setSpeakerAgg(session, speakerName, null);
     clearStreamBuffersForSpeaker(session, agg.speaker);
   }
 }
 
-function flushSessionAggregator(meetingId: string, session: any) {
-  const agg = session?.aggregator as TranscriptAgg | null;
+function flushSpeakerAggregator(
+  meetingId: string,
+  session: any,
+  speakerName: string,
+) {
+  const agg = getSpeakerAgg(session, speakerName);
   if (!agg || !agg.text.trim()) {
-    if (session) session.aggregator = null;
+    setSpeakerAgg(session, speakerName, null);
+    if (session?.liveDraftIds) session.liveDraftIds.delete(speakerName);
     return;
   }
   flushAggToClients(meetingId, agg, session);
-  session.aggregator = null;
+  setSpeakerAgg(session, speakerName, null);
   clearStreamBuffersForSpeaker(session, agg.speaker);
+}
+
+function flushSessionAggregator(meetingId: string, session: any) {
+  if (!session?.aggregators) return;
+  // Snapshot keys first since flushSpeakerAggregator mutates the map.
+  const speakers = Array.from(session.aggregators.keys()) as string[];
+  for (const speakerName of speakers) {
+    flushSpeakerAggregator(meetingId, session, speakerName);
+  }
 }
 
 function ingestSarvamTranscript(
@@ -740,47 +803,25 @@ function ingestSarvamTranscript(
   const elapsed = getElapsedMs(meetingRecordingClock, meetingId);
   const agendaItemId = activeAgendaItems.get(meetingId) || null;
 
-  let agg = session.aggregator as TranscriptAgg | null;
+  let agg = getSpeakerAgg(session, speakerName);
 
   if (!agg) {
-    session.aggregator = {
+    setSpeakerAgg(session, speakerName, {
       speaker: speakerName,
       speakerImage,
       text: merged,
       segmentStartElapsedMs: elapsed,
       agendaItemId,
       languageCode,
-    };
-    applyParagraphRules(meetingId, session);
-    broadcastInterimTranscript(meetingId, session);
-    return;
+    });
+  } else {
+    agg.text = merged;
+    agg.languageCode = languageCode || agg.languageCode;
+    agg.agendaItemId = agendaItemId ?? agg.agendaItemId;
+    setSpeakerAgg(session, speakerName, agg);
   }
-
-  if (agg.speaker !== speakerName) {
-    flushAggToClients(meetingId, agg, session);
-    clearStreamBuffersForSpeaker(session, agg.speaker);
-    for (const [, ent] of session.speakers) {
-      if (ent.name !== speakerName) ent.streamBuffer = "";
-    }
-    session.aggregator = {
-      speaker: speakerName,
-      speakerImage,
-      text: merged,
-      segmentStartElapsedMs: elapsed,
-      agendaItemId,
-      languageCode: languageCode || agg.languageCode,
-    };
-    applyParagraphRules(meetingId, session);
-    broadcastInterimTranscript(meetingId, session);
-    return;
-  }
-
-  agg.text = merged;
-  agg.languageCode = languageCode || agg.languageCode;
-  agg.agendaItemId = agendaItemId ?? agg.agendaItemId;
-  session.aggregator = agg;
-  applyParagraphRules(meetingId, session);
-  broadcastInterimTranscript(meetingId, session);
+  applyParagraphRules(meetingId, session, speakerName);
+  broadcastInterimTranscript(meetingId, session, speakerName);
 }
 
 // create Sarvam WebSocket connection
@@ -876,16 +917,10 @@ function ingestDeepgramInterim(
   const agendaItemId = activeAgendaItems.get(meetingId) || null;
   const committed = (spEntry.streamBuffer || "").trim();
 
-  // If aggregator is on a different speaker, flush them before starting ours.
-  let agg = session.aggregator as TranscriptAgg | null;
-  if (agg && agg.speaker !== speakerName) {
-    flushAggToClients(meetingId, agg, session);
-    clearStreamBuffersForSpeaker(session, agg.speaker);
-    agg = null;
-  }
-
+  // Per-speaker aggregator: overlapping speakers don't trample each other.
+  let agg = getSpeakerAgg(session, speakerName);
   if (!agg) {
-    session.aggregator = {
+    agg = {
       speaker: speakerName,
       speakerImage,
       text: committed ? `${committed} ${partialText}`.trim() : partialText,
@@ -897,12 +932,12 @@ function ingestDeepgramInterim(
     agg.text = committed ? `${committed} ${partialText}`.trim() : partialText;
     agg.languageCode = languageCode || agg.languageCode;
     agg.agendaItemId = agendaItemId ?? agg.agendaItemId;
-    session.aggregator = agg;
   }
+  setSpeakerAgg(session, speakerName, agg);
 
   // Don't run paragraph rules on interims — we don't want to persist a
   // half-finished sentence. Just stream the live UI update.
-  broadcastInterimTranscript(meetingId, session);
+  broadcastInterimTranscript(meetingId, session, speakerName);
 }
 
 function ingestDeepgramFinal(
@@ -930,14 +965,9 @@ function ingestDeepgramFinal(
       : finalText;
     setStreamBuffersForSpeaker(session, speakerName, nextCommitted);
 
-    let agg = session.aggregator as TranscriptAgg | null;
-    if (agg && agg.speaker !== speakerName) {
-      flushAggToClients(meetingId, agg, session);
-      clearStreamBuffersForSpeaker(session, agg.speaker);
-      agg = null;
-    }
+    let agg = getSpeakerAgg(session, speakerName);
     if (!agg) {
-      session.aggregator = {
+      agg = {
         speaker: speakerName,
         speakerImage,
         text: nextCommitted,
@@ -949,14 +979,22 @@ function ingestDeepgramFinal(
       agg.text = nextCommitted;
       agg.languageCode = languageCode || agg.languageCode;
       agg.agendaItemId = agendaItemId ?? agg.agendaItemId;
-      session.aggregator = agg;
     }
-    applyParagraphRules(meetingId, session);
-    broadcastInterimTranscript(meetingId, session);
+    setSpeakerAgg(session, speakerName, agg);
+    applyParagraphRules(meetingId, session, speakerName);
+    broadcastInterimTranscript(meetingId, session, speakerName);
   }
 
   if (utteranceEnd) {
-    flushSessionAggregator(meetingId, session);
+    // #region agent log
+    const otherActive = Array.from(
+      (session.aggregators as Map<string, TranscriptAgg>)?.keys() || [],
+    ).filter((s) => s !== speakerName);
+    console.log(
+      `[dbg:dg-final] flushing speaker=${speakerName} | otherActiveSpeakers=${JSON.stringify(otherActive)}`,
+    );
+    // #endregion
+    flushSpeakerAggregator(meetingId, session, speakerName);
     clearStreamBuffersForSpeaker(session, speakerName);
   }
 }
@@ -1289,10 +1327,7 @@ io.on("connection", (socket: any) => {
     const session = transcriptionSessions.get(meetingId);
     if (session && session.speakers.has(socket.id)) {
       const sp = session.speakers.get(socket.id);
-      const agg = session.aggregator;
-      if (agg && sp && sp.name === agg.speaker) {
-        flushSessionAggregator(meetingId, session);
-      }
+      if (sp?.name) flushSpeakerAggregator(meetingId, session, sp.name);
       if (typeof sp.closeStt === "function") {
         sp.closeStt();
       } else if (sp.ws && sp.ws.readyState === WebSocket.OPEN) {
@@ -1325,8 +1360,10 @@ io.on("connection", (socket: any) => {
     transcriptionSessions.set(meetingId, {
       active: true,
       speakers,
-      aggregator: null,
-      liveDraftId: null,
+      // Per-speaker aggregator + live draft id so overlapping speakers don't
+      // force-flush each other's interim transcripts.
+      aggregators: new Map(),
+      liveDraftIds: new Map(),
     });
     io.to(`meeting:${meetingId}`).emit("transcription_started", { meetingId });
   });
@@ -2105,10 +2142,7 @@ io.on("connection", (socket: any) => {
       const session = transcriptionSessions.get(meetingId);
       if (session && session.speakers.has(socketId)) {
         const sp = session.speakers.get(socketId);
-        const agg = session.aggregator;
-        if (agg && sp && sp.name === agg.speaker) {
-          flushSessionAggregator(meetingId, session);
-        }
+        if (sp?.name) flushSpeakerAggregator(meetingId, session, sp.name);
         if (typeof sp.closeStt === "function") {
           sp.closeStt();
         } else if (sp.ws && sp.ws.readyState === WebSocket.OPEN) {
