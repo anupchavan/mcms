@@ -941,6 +941,11 @@ export default function ArchiveDetailView({ meetingId, fetchWithAuth }: ArchiveD
 function ParticipantAvatar({ participant, size = 24 }: { participant: ArchiveParticipant; size?: number }) {
     const url = avatarUrlFromPath(participant.profileImage ?? null);
     const initials = (participant.name || participant.email || "?")[0].toUpperCase();
+    // #region agent log
+    useEffect(() => {
+        fetch('http://127.0.0.1:7513/ingest/2ed74124-70ef-436a-a5af-14e493d12d53',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'119c19'},body:JSON.stringify({sessionId:'119c19',location:'ArchiveDetailView.tsx:ParticipantAvatar',message:'Participant avatar debug',data:{name:participant.name,email:participant.email,profileImage:participant.profileImage,resolvedUrl:url,showingFallback:!url,initials},hypothesisId:'H2',timestamp:Date.now()})}).catch(()=>{});
+    }, [participant.profileImage, url]);
+    // #endregion
     return (
         <span
             className="archive-detail-avatar"
@@ -948,7 +953,9 @@ function ParticipantAvatar({ participant, size = 24 }: { participant: ArchivePar
             title={participant.name || participant.email || "Participant"}
         >
             {url
-                ? <img src={url} alt={participant.name || ""} className="archive-detail-avatar-img" />
+                ? <img src={url} alt={participant.name || ""} className="archive-detail-avatar-img"
+                    onError={() => { /* #region agent log */ fetch('http://127.0.0.1:7513/ingest/2ed74124-70ef-436a-a5af-14e493d12d53',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'119c19'},body:JSON.stringify({sessionId:'119c19',location:'ArchiveDetailView.tsx:ParticipantAvatar.img.onError',message:'Participant avatar img failed to load',data:{src:url,name:participant.name},hypothesisId:'H3',timestamp:Date.now()})}).catch(()=>{}); /* #endregion */ }}
+                  />
                 : <span>{initials}</span>
             }
         </span>

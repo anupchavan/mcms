@@ -56,6 +56,9 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
                     });
                     if (res.ok) {
                         const freshData = await res.json();
+                        // #region agent log
+                        fetch('http://127.0.0.1:7513/ingest/2ed74124-70ef-436a-a5af-14e493d12d53',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'119c19'},body:JSON.stringify({sessionId:'119c19',location:'AuthContext.tsx:loadUser',message:'/auth/me response profileImage',data:{profileImage:freshData.profileImage,hasProfileImage:!!freshData.profileImage,apiBase:API_BASE},hypothesisId:'H2',timestamp:Date.now()})}).catch(()=>{});
+                        // #endregion
                         const updated = { ...parsed, ...freshData };
                         localStorage.setItem('mcms_userInfo', JSON.stringify(updated));
                         setUser(updated);
