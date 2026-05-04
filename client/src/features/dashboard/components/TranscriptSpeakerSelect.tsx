@@ -11,9 +11,8 @@ import {
     ArrowDown01Icon,
     ArrowUp01Icon,
     Search01Icon,
-    UserIcon,
 } from "@hugeicons/core-free-icons";
-import { avatarUrlFromPath } from "../../../shared/avatarUrl";
+import { UserAvatar } from "../../../shared/components/UserAvatar";
 
 export type TranscriptSpeakerOption = {
     value: string;
@@ -22,45 +21,28 @@ export type TranscriptSpeakerOption = {
 };
 
 function StackDisc({ opt }: { opt: TranscriptSpeakerOption | null }) {
-    const [broken, setBroken] = useState(false);
-    const url = opt ? avatarUrlFromPath(opt.profileImage ?? null) : null;
-    if (opt && url && !broken) {
+    if (!opt) {
         return (
-            <span className="archive-filter-stack-disc archive-filter-stack-disc--photo">
-                <img src={url} alt="" referrerPolicy="no-referrer" onError={() => setBroken(true)} />
+            <span className="archive-filter-stack-disc" aria-hidden>
+                <UserAvatar name="?" size={18} style={{ border: 'none', borderRadius: '50%' }} />
             </span>
         );
     }
     return (
-        <span className="archive-filter-stack-disc archive-filter-stack-disc--person-fallback" aria-hidden>
-            <Icon icon={UserIcon} size={11} className="archive-filter-stack-disc-user-icon" />
+        <span className="archive-filter-stack-disc" aria-hidden>
+            <UserAvatar
+                name={opt.label}
+                profileImage={opt.profileImage}
+                userId={opt.value}
+                size={18}
+                style={{ border: 'none', borderRadius: '50%' }}
+            />
         </span>
     );
 }
 
-function RowAvatar({ imgUrl, label }: { imgUrl: string | null; label: string }) {
-    const [photoBroken, setPhotoBroken] = useState(false);
-    useEffect(() => {
-        setPhotoBroken(false);
-    }, [imgUrl]);
-    const showPhoto = imgUrl && !photoBroken;
-    if (showPhoto) {
-        return (
-            <span className="archive-multi-select-avatar archive-multi-select-avatar--photo">
-                <img
-                    src={imgUrl}
-                    alt=""
-                    referrerPolicy="no-referrer"
-                    onError={() => setPhotoBroken(true)}
-                />
-            </span>
-        );
-    }
-    return (
-        <span className="archive-multi-select-avatar archive-multi-select-avatar--person-fallback" aria-hidden>
-            <Icon icon={UserIcon} size={12} className="archive-multi-select-avatar-user-icon" />
-        </span>
-    );
+function RowAvatar({ opt }: { opt: TranscriptSpeakerOption }) {
+    return <UserAvatar name={opt.label} profileImage={opt.profileImage} userId={opt.value} size={16} />;
 }
 
 /** Single-select speaker control; same visual language as archive search People multi-select, narrower. */
@@ -239,9 +221,6 @@ export function TranscriptSpeakerSelect({
                             filtered.map((opt, idx) => {
                                 const sel = opt.value === value;
                                 const kbdHi = highlightIndex === idx;
-                                const imgUrl = opt.value
-                                    ? avatarUrlFromPath(opt.profileImage ?? null)
-                                    : null;
                                 return (
                                     <button
                                         key={`${opt.value}-${opt.label}`}
@@ -256,7 +235,7 @@ export function TranscriptSpeakerSelect({
                                             pick(opt.value);
                                         }}
                                     >
-                                        <RowAvatar imgUrl={imgUrl} label={opt.label} />
+                                        <RowAvatar opt={opt} />
                                         <span className="archive-multi-select-name">{opt.label}</span>
                                     </button>
                                 );

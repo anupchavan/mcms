@@ -4,6 +4,9 @@ import useKeyboardShortcuts from "../../../hooks/useKeyboardShortcuts";
 import useElementSize from "../../../hooks/useElementSize";
 import { computeGalleryLayout, computeStageLayout } from "../utils/videoGridLayout";
 import Icon from "../../../shared/components/Icon";
+import { useTheme } from "../../../hooks/useTheme";
+import { getAvatarHue, getAvatarCssVars, getInitials } from "../../../shared/utils/avatarColor";
+import { UserAvatar } from "../../../shared/components/UserAvatar";
 import {
   UserGroupIcon,
   FullScreenIcon,
@@ -35,13 +38,25 @@ interface VideoTileProps {
   stream: MediaStream | null;
   name?: string;
   profileImage?: string | null;
+  /** Stable user id used for deterministic avatar colour. */
+  userId?: string | null;
   muted: boolean;
+  /** When true the participant has their mic muted — shows the muted icon. */
+  audioMuted?: boolean;
+  /**
+   * Directly controls whether the camera is on for this tile.
+   * Use for the local tile: track.enabled=false doesn't fire the mute event,
+   * so stream-based hasVideo detection misses the state change.
+   */
+  cameraOn?: boolean;
   isSelf: boolean;
   /** When true, skip horizontal mirror (screen share must stay left–right correct). */
   isScreenShare?: boolean;
   pinned?: boolean;
   onTogglePin?: (tileId: string) => void;
   speaking?: boolean;
+  /** True when the remote participant's camera track is muted (signalled by LiveKit). */
+  videoMuted?: boolean;
   /** Camera tiles use `cover` to reduce letterboxing; screen share uses `contain`. */
   videoObjectFit?: "contain" | "cover";
   /** Layout slot: gallery grid, main stage (screen share), or sidebar filmstrip. */
@@ -91,12 +106,29 @@ interface VideoAreaProps {
   joinMeetingActionRef?: MutableRefObject<(() => Promise<void>) | null>;
 }
 
+/** Inline SVG mic-off icon used in the muted badge. */
+function MicOffIcon({ size = 14 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+      <line x1="1" y1="1" x2="23" y2="23" />
+      <path d="M9 9v3a3 3 0 0 0 5.12 2.12M15 9.34V4a3 3 0 0 0-5.94-.6" />
+      <path d="M17 16.95A7 7 0 0 1 5 12v-2m14 0v2a7 7 0 0 1-.11 1.23" />
+      <line x1="12" y1="19" x2="12" y2="23" />
+      <line x1="8" y1="23" x2="16" y2="23" />
+    </svg>
+  );
+}
+
 function VideoTile({
   tileId,
   stream,
   name,
   profileImage,
+  userId,
   muted,
+  audioMuted,
+  cameraOn,
+  videoMuted,
   isSelf,
   isScreenShare,
   pinned,
@@ -109,6 +141,13 @@ function VideoTile({
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const videoBackdropRef = useRef<HTMLVideoElement | null>(null);
   const [hasVideo, setHasVideo] = useState<boolean>(false);
+
+  // Theme-aware avatar colours
+  const isDark = useTheme() !== 'light';
+  const hue = getAvatarHue(userId || name || 'user');
+  const { bg: colorBg, border: colorBorder, text: colorText } = getAvatarCssVars(hue, isDark);
+  const initials = getInitials(name || '');
+  const profileImageUrl = profileImage ? `${SERVER_BASE}${profileImage}` : null;
 
   useEffect(() => {
     if (!stream) { setHasVideo(false); return; }
@@ -143,19 +182,11 @@ function VideoTile({
     if (videoRef.current && stream) {
       videoRef.current.srcObject = stream;
     }
-    // The blurred backdrop is purely decorative for camera tiles. For screen
-    // share, attaching the same MediaStream to a second <video> forces the
-    // browser to decode the (potentially 1080p@30) frame twice and pay the
-    // GPU cost of the 24px blur filter — a meaningful hit on lower-end
-    // laptops, and it adds nothing visually because screen-share tiles use
-    // object-fit:contain on a dark surface anyway.
     if (videoBackdropRef.current && stream && !isScreenShare) {
       videoBackdropRef.current.srcObject = stream;
     }
   }, [stream, isScreenShare]);
 
-  // Report intrinsic aspect ratio so the stage layout can frame screen shares
-  // without cropping them (the user explicitly disallowed any screen-share crop).
   useEffect(() => {
     const video = videoRef.current;
     if (!video || !onAspectRatioChange) return;
@@ -173,12 +204,27 @@ function VideoTile({
     };
   }, [tileId, onAspectRatioChange, stream, hasVideo]);
 
-  const initial: string = name?.charAt(0)?.toUpperCase() || "?";
   const videoObjectFit = videoObjectFitProp ?? (isScreenShare ? "contain" : "contain");
-
+  // Self tile: use explicit cameraOn prop (track.enabled=false doesn't fire mute events).
+  // Remote tile: use videoMuted from LiveKit signaling, OR fall back to hasVideo.
+  const noVideo = !isScreenShare && (cameraOn !== undefined ? !cameraOn : (videoMuted || !hasVideo));
   return (
     <div
-      className={`video-tile video-tile--${layoutVariant} ${speaking ? "speaking" : ""} ${pinned ? "pinned" : ""} ${isScreenShare ? "screen-share" : ""}`}
+      className={[
+        'video-tile',
+        `video-tile--${layoutVariant}`,
+        speaking  ? 'speaking'    : '',
+        pinned    ? 'pinned'      : '',
+        isScreenShare ? 'screen-share' : '',
+        noVideo   ? 'no-video'    : '',
+      ].filter(Boolean).join(' ')}
+      style={{
+        '--vt-color-bg':     colorBg,
+        '--vt-color-border': colorBorder,
+        '--vt-color-text':   colorText,
+        // Tile background: flexoki colour when camera off + no profile image
+        background: noVideo && !profileImageUrl ? colorBg : undefined,
+      } as CSSProperties}
     >
       <button
         type="button"
@@ -187,45 +233,68 @@ function VideoTile({
       >
         {pinned ? "Unpin" : "Pin"}
       </button>
+
+      {/* ── Blurred backdrops ── */}
       {!isScreenShare && (
         <video
           ref={videoBackdropRef}
-          autoPlay
-          playsInline
-          muted={true}
-          aria-hidden
+          autoPlay playsInline muted aria-hidden
           className="video-tile-video-backdrop"
           style={isSelf
-            ? { transform: "scaleX(-1)", display: hasVideo ? undefined : "none", objectFit: "cover" as const }
-            : { display: hasVideo ? undefined : "none", objectFit: "cover" as const }
+            ? { transform: "scaleX(-1)", display: noVideo ? "none" : undefined, objectFit: "cover" as const }
+            : { display: noVideo ? "none" : undefined, objectFit: "cover" as const }
           }
         />
       )}
+      {/* Blurred profile image as background when camera off */}
+      {noVideo && profileImageUrl && (
+        <img
+          src={profileImageUrl}
+          alt=""
+          aria-hidden
+          className="video-tile-bg-img"
+        />
+      )}
+
+      {/* ── Live video ── */}
       <video
         ref={videoRef}
-        autoPlay
-        playsInline
+        autoPlay playsInline
         muted={muted}
         className="video-tile-video"
         style={isSelf && !isScreenShare
-          ? { transform: "scaleX(-1)", display: hasVideo ? undefined : "none", objectFit: videoObjectFit }
-          : { display: hasVideo ? undefined : "none", objectFit: videoObjectFit }
+          ? { transform: "scaleX(-1)", display: noVideo ? "none" : undefined, objectFit: videoObjectFit }
+          : { display: noVideo ? "none" : undefined, objectFit: videoObjectFit }
         }
       />
-      {!hasVideo && (
-        <div className="video-tile-avatar">
-          {profileImage ? (
-            <img
-              src={`${SERVER_BASE}${profileImage}`}
-              alt=""
-              className="video-tile-avatar-img"
-              onError={() => { /* #region agent log */ console.log('[DBG-119c19][VideoArea:VideoTile.img.onError][H3] img FAILED to load', {src: `${SERVER_BASE}${profileImage}`, SERVER_BASE}); /* #endregion */ }}
-            />
-          ) : (
-            <span>{initial}</span>
-          )}
+
+      {/* ── No-video avatar ── */}
+      {noVideo && (
+        <div className="video-tile-avatar-wrap">
+          <div
+            className="video-tile-avatar"
+            style={profileImageUrl ? undefined : {
+              background: 'rgba(0,0,0,0.22)',
+              border: `2px solid ${colorBorder}`,
+              color: colorText,
+            }}
+          >
+            {profileImageUrl
+              ? <img src={profileImageUrl} alt="" className="video-tile-avatar-img" />
+              : <span>{initials}</span>
+            }
+          </div>
         </div>
       )}
+
+      {/* ── Mic-muted badge (top-right) ── */}
+      {audioMuted && !isScreenShare && (
+        <div className="video-tile-muted-badge" style={{ color: colorText }}>
+          <MicOffIcon size={13} />
+        </div>
+      )}
+
+      {/* ── Name label ── */}
       <div className="video-tile-name">
         {name || "User"}
         {isSelf && " (You)"}
@@ -372,6 +441,7 @@ export default function VideoArea({
     toggleScreenShare,
     screenShareSystemAudio,
     setScreenShareSystemAudioPref,
+    localSpeaking,
   } = useWebRTC(socket, meetingId, currentUser);
 
   useTranscriptionCapture(socket, meetingId || null, localStream);
@@ -501,6 +571,8 @@ export default function VideoArea({
     });
   }, []);
 
+  const selfUserId = (currentUser as any)?.id || (currentUser as any)?._id || '';
+
   const meetingTiles = useMemo(() => {
     const selfTiles = screenStream
       ? [
@@ -508,21 +580,27 @@ export default function VideoArea({
             id: "self-screen-share",
             stream: screenStream,
             name: currentUser?.name,
+            userId: selfUserId,
             profileImage: currentUser?.profileImage || null,
             muted: true,
+            audioMuted: false,
+            cameraOn: undefined as boolean | undefined,
             isSelf: true,
             isScreenShare: true,
-            speaking: false,
+            speaking: localSpeaking,
           },
           {
             id: "self-camera",
             stream: localStream,
             name: currentUser?.name,
+            userId: selfUserId,
             profileImage: currentUser?.profileImage || null,
             muted: true,
+            audioMuted: !audioEnabled,
+            cameraOn: videoEnabled,
             isSelf: true,
             isScreenShare: false,
-            speaking: false,
+            speaking: localSpeaking,
           },
         ]
       : [
@@ -530,22 +608,29 @@ export default function VideoArea({
             id: "self-camera",
             stream: localStream,
             name: currentUser?.name,
+            userId: selfUserId,
             profileImage: currentUser?.profileImage || null,
             muted: true,
+            audioMuted: !audioEnabled,
+            cameraOn: videoEnabled,
             isSelf: true,
             isScreenShare: false,
-            speaking: false,
+            speaking: localSpeaking,
           },
         ];
     const peerTiles = peers.map((peer) => ({
       id: `peer-${peer.socketId}`,
       stream: peer.stream,
       name: peer.name,
+      userId: peer.userId,
       profileImage: peer.profileImage,
       muted: peer.playRemoteAudio === false,
+      audioMuted: peer.audioMuted ?? false,
+      videoMuted: peer.videoMuted ?? false,
+      cameraOn: undefined as boolean | undefined,
       isSelf: false,
       isScreenShare: peer.isScreenShare,
-      speaking: false,
+      speaking: peer.speaking ?? false,
     }));
     const allTiles = [...selfTiles, ...peerTiles];
     return allTiles.sort((a, b) => {
@@ -555,7 +640,7 @@ export default function VideoArea({
       if (a.isScreenShare !== b.isScreenShare) return a.isScreenShare ? -1 : 1;
       return 0;
     });
-  }, [screenStream, localStream, currentUser?.name, currentUser?.profileImage, peers, pinnedTileIds]);
+  }, [screenStream, localStream, currentUser?.name, currentUser?.profileImage, selfUserId, peers, pinnedTileIds, localSpeaking, audioEnabled, videoEnabled]);
 
   const { screenTiles, cameraTiles, hasAnyScreenShare } = useMemo(() => {
     const screen = meetingTiles.filter((t) => t.isScreenShare);
@@ -802,17 +887,13 @@ export default function VideoArea({
                 {mediaError && (
                   <p style={{ color: "var(--danger)", fontSize: "0.875rem", textAlign: "center", marginBottom: "0.5rem" }}>{mediaError}</p>
                 )}
-                <div className="prejoin-avatar">
-                  {currentUser?.profileImage ? (
-                    <img
-                      src={`${SERVER_BASE}${currentUser.profileImage}`}
-                      alt=""
-                      className="prejoin-avatar-img"
-                    />
-                  ) : (
-                    <span>{currentUser?.name?.charAt(0)?.toUpperCase() || "U"}</span>
-                  )}
-                </div>
+                <UserAvatar
+                  name={currentUser?.name || ''}
+                  profileImage={currentUser?.profileImage}
+                  userId={(currentUser as any)?.id || (currentUser as any)?._id}
+                  size={80}
+                  className="prejoin-avatar"
+                />
                 <h3 className="prejoin-title">{meetingTitle}</h3>
                 <p className="prejoin-subtitle">
                   {mediaError
@@ -874,8 +955,12 @@ export default function VideoArea({
                           tileId={tile.id}
                           stream={tile.stream}
                           name={tile.name}
+                          userId={tile.userId}
                           profileImage={tile.profileImage}
                           muted={tile.muted}
+                          audioMuted={tile.audioMuted}
+                          videoMuted={tile.videoMuted}
+                          cameraOn={tile.cameraOn}
                           isSelf={tile.isSelf}
                           isScreenShare={tile.isScreenShare}
                           speaking={tile.speaking}
@@ -895,8 +980,12 @@ export default function VideoArea({
                             tileId={tile.id}
                             stream={tile.stream}
                             name={tile.name}
+                            userId={tile.userId}
                             profileImage={tile.profileImage}
                             muted={tile.muted}
+                            audioMuted={tile.audioMuted}
+                            videoMuted={tile.videoMuted}
+                            cameraOn={tile.cameraOn}
                             isSelf={tile.isSelf}
                             isScreenShare={tile.isScreenShare}
                             speaking={tile.speaking}
@@ -916,8 +1005,12 @@ export default function VideoArea({
                       tileId={tile.id}
                       stream={tile.stream}
                       name={tile.name}
+                      userId={tile.userId}
                       profileImage={tile.profileImage}
                       muted={tile.muted}
+                      audioMuted={tile.audioMuted}
+                      videoMuted={tile.videoMuted}
+                      cameraOn={tile.cameraOn}
                       isSelf={tile.isSelf}
                       isScreenShare={tile.isScreenShare}
                       speaking={tile.speaking}
@@ -1038,22 +1131,10 @@ export default function VideoArea({
           padding: 3rem 4rem;
         }
         .prejoin-avatar {
-          width: 5rem;
-          height: 5rem;
-          border-radius: 50%;
-          background: var(--primary);
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          font-size: 2rem;
-          font-weight: 700;
-          color: var(--flexoki-paper);
-          overflow: hidden;
-        }
-        .prejoin-avatar-img {
-          width: 100%;
-          height: 100%;
-          object-fit: cover;
+          /* UserAvatar sets its own bg/border/size inline — just ensure it's centred */
+          display: flex !important;
+          align-items: center !important;
+          justify-content: center !important;
         }
         .prejoin-title {
           font-size: 1.125rem;
@@ -1176,6 +1257,7 @@ export default function VideoArea({
         .video-tile {
           position: relative;
           background: var(--bg-elevated);
+          /* Border is always present so speaking glow (box-shadow) never shifts layout */
           border: 0.0625rem solid var(--border);
           border-radius: var(--radius-md);
           display: flex;
@@ -1184,7 +1266,11 @@ export default function VideoArea({
           justify-content: center;
           overflow: hidden;
           animation: slideUp 0.4s ease both;
-          transition: border-color 0.3s;
+          /* Smooth glow transitions — outline is used (not box-shadow) because
+             ancestor overflow:hidden clips box-shadow of children */
+          transition: outline-color 0.2s ease;
+          outline: 3px solid transparent;
+          outline-offset: -4px;
           width: 100%;
           min-height: 0;
         }
@@ -1192,7 +1278,7 @@ export default function VideoArea({
           position: absolute;
           top: 0.5rem;
           left: 0.5rem;
-          z-index: 3;
+          z-index: 5;
           padding: 0.1875rem 0.45rem;
           border: 0.0625rem solid rgba(var(--flexoki-paper-rgb), 0.25);
           border-radius: 999px;
@@ -1209,10 +1295,16 @@ export default function VideoArea({
         .video-tile:hover {
           border-color: var(--border-hover);
         }
+
+        /* Speaking ring: outline — immune to ancestor overflow:hidden, zero layout impact */
         .video-tile.speaking {
-          border-color: var(--primary);
-          box-shadow: 0 0 0 2px color-mix(in srgb, var(--primary) 30%, transparent);
+          outline-color: var(--primary);
         }
+        /* When camera is off, the speaking ring uses the user's Flexoki accent */
+        .video-tile.no-video.speaking {
+          outline-color: var(--vt-color-border);
+        }
+
         .video-tile-video {
           width: 100%;
           height: 100%;
@@ -1231,31 +1323,65 @@ export default function VideoArea({
           opacity: 0.9;
           z-index: 1;
         }
-        /* Screen-share tiles intentionally don't render the blurred
-           backdrop video (saves a full second decode of the share). Use a
-           flat, slightly darker surface so the contained video sits on a
-           clean letterbox instead of the default elevated card colour. */
+        /* Blurred profile image fills the tile when camera is off */
+        .video-tile-bg-img {
+          position: absolute;
+          inset: 0;
+          width: 100%;
+          height: 100%;
+          object-fit: cover;
+          filter: blur(96px) brightness(0.35) saturate(1.4);
+          transform: scale(1.1);
+          z-index: 1;
+          pointer-events: none;
+        }
+        /* Screen-share tiles use a flat, dark letterbox */
         .video-tile.screen-share {
           background: #0a0a0b;
         }
-        .video-tile-avatar {
-          width: 3.5rem;
-          height: 3.5rem;
-          border-radius: 50%;
-          background: var(--primary);
+
+        /* Avatar wrapper (centred in tile when no video) */
+        .video-tile-avatar-wrap {
+          position: relative;
+          z-index: 2;
           display: flex;
           align-items: center;
           justify-content: center;
-          font-size: 1.375rem;
+        }
+        .video-tile-avatar {
+          width: 4rem;
+          height: 4rem;
+          border-radius: 50%;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          font-size: 1.5rem;
           font-weight: 700;
-          color: var(--flexoki-paper);
           overflow: hidden;
+          flex-shrink: 0;
         }
         .video-tile-avatar-img {
           width: 100%;
           height: 100%;
           object-fit: cover;
         }
+
+        /* Mic-muted indicator — top-right, no layout impact */
+        .video-tile-muted-badge {
+          position: absolute;
+          top: 0.5rem;
+          right: 0.5rem;
+          z-index: 5;
+          width: 1.5rem;
+          height: 1.5rem;
+          border-radius: 50%;
+          background: rgba(var(--flexoki-black-rgb), 0.6);
+          backdrop-filter: blur(4px);
+          display: flex;
+          align-items: center;
+          justify-content: center;
+        }
+
         .video-tile-name {
           position: absolute;
           bottom: 0.5rem;

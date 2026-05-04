@@ -27,6 +27,12 @@ export interface PeerState {
     isScreenShare: boolean;
     /** When false, mute this `<video>` so mic/system audio is not played twice (camera + screen tiles). */
     playRemoteAudio?: boolean;
+    /** True when the participant's microphone is muted (as signalled by LiveKit). */
+    audioMuted?: boolean;
+    /** True when LiveKit's VAD reports this participant is actively speaking. */
+    speaking?: boolean;
+    /** True when the participant's camera track is muted (as signalled by LiveKit). */
+    videoMuted?: boolean;
 }
 
 export default function useWebRTC(
@@ -43,6 +49,10 @@ export default function useWebRTC(
     const [screenStream, setScreenStream] = useState<MediaStream | null>(null);
     /** When starting screen share, pass through to `getDisplayMedia` / LiveKit (`audio: …`). */
     const [screenShareSystemAudio, setScreenShareSystemAudio] = useState(false);
+    /** Set of participant identities currently speaking (VAD from LiveKit). */
+    const [activeSpeakerIds, setActiveSpeakerIds] = useState<Set<string>>(new Set());
+    /** Identity of the local participant once connected. */
+    const [localIdentity, setLocalIdentity] = useState<string | null>(null);
 
     const roomRef = useRef<Room | null>(null);
     // Mirror of `localTracks` for use inside cleanups / async paths where the
@@ -63,6 +73,8 @@ export default function useWebRTC(
         const name = participant.name || 'User';
         const hasScreen = !!screenVideoTrack?.mediaStreamTrack;
         const hasCamera = !!cameraVideoTrack?.mediaStreamTrack;
+        const camPub = participant.getTrackPublication(Track.Source.Camera);
+        const camMuted = camPub?.isMuted ?? false;
         const tiles: PeerState[] = [];
 
         if (hasScreen) {
@@ -95,6 +107,7 @@ export default function useWebRTC(
                 stream,
                 isScreenShare: false,
                 playRemoteAudio: !hasScreen,
+                videoMuted: camMuted,
             });
         }
 
@@ -109,6 +122,7 @@ export default function useWebRTC(
                 stream,
                 isScreenShare: false,
                 playRemoteAudio: true,
+                videoMuted: true,
             });
         }
 
@@ -178,8 +192,14 @@ export default function useWebRTC(
     }, []);
 
     const peers = useMemo(() => {
-        return Array.from(participants).flatMap((p) => getParticipantVideoTiles(p));
-    }, [getParticipantVideoTiles, participants]);
+        return Array.from(participants).flatMap((p) => {
+            const tiles = getParticipantVideoTiles(p);
+            const isSpeaking = activeSpeakerIds.has(p.identity);
+            const micPub = p.getTrackPublication(Track.Source.Microphone);
+            const isAudioMuted = micPub ? micPub.isMuted : true;
+            return tiles.map((tile) => ({ ...tile, speaking: isSpeaking, audioMuted: isAudioMuted }));
+        });
+    }, [getParticipantVideoTiles, participants, activeSpeakerIds]);
 
     const localStream = useMemo(() => {
         const stream = new MediaStream();
@@ -277,7 +297,10 @@ export default function useWebRTC(
             const syncRoomState = () => {
                 setParticipants(Array.from(newRoom.remoteParticipants.values()));
                 syncLocalScreenShare(newRoom);
+                setActiveSpeakerIds(new Set(newRoom.activeSpeakers.map((s) => s.identity)));
             };
+
+            setLocalIdentity(newRoom.localParticipant.identity);
 
             newRoom
                 .on(RoomEvent.ParticipantConnected, syncRoomState)
@@ -287,7 +310,12 @@ export default function useWebRTC(
                 .on(RoomEvent.TrackPublished, syncRoomState)
                 .on(RoomEvent.TrackUnpublished, syncRoomState)
                 .on(RoomEvent.LocalTrackPublished, syncRoomState)
-                .on(RoomEvent.LocalTrackUnpublished, syncRoomState);
+                .on(RoomEvent.LocalTrackUnpublished, syncRoomState)
+                .on(RoomEvent.TrackMuted, (_pub, _participant) => { syncRoomState(); })
+                .on(RoomEvent.TrackUnmuted, (_pub, _participant) => { syncRoomState(); })
+                .on(RoomEvent.ActiveSpeakersChanged, (speakers) => {
+                    setActiveSpeakerIds(new Set(speakers.map((s) => s.identity)));
+                });
 
             syncRoomState();
             return true;
@@ -332,6 +360,8 @@ export default function useWebRTC(
         setScreenShareSystemAudio(false);
         setAudioEnabled(true);
         setVideoEnabled(true);
+        setActiveSpeakerIds(new Set());
+        setLocalIdentity(null);
     }, []);
 
     const toggleAudio = useCallback(async () => {
@@ -344,9 +374,12 @@ export default function useWebRTC(
 
     const toggleVideo = useCallback(async () => {
         const enabled = !videoEnabled;
-        localTracks.forEach(t => {
-            if (t.kind === Track.Kind.Video) (t as any).mediaStreamTrack.enabled = enabled;
-        });
+        await Promise.all(localTracks.map(async (t) => {
+            if (t.kind === Track.Kind.Video) {
+                if (enabled) await t.unmute();
+                else await t.mute();
+            }
+        }));
         setVideoEnabled(enabled);
     }, [localTracks, videoEnabled]);
 
@@ -427,6 +460,9 @@ export default function useWebRTC(
         return () => { leaveRoom(); };
     }, [leaveRoom]);
 
+    /** True when LiveKit's VAD detects the local user is currently speaking. */
+    const localSpeaking = localIdentity ? activeSpeakerIds.has(localIdentity) : false;
+
     return {
         localStream,
         peers,
@@ -442,5 +478,6 @@ export default function useWebRTC(
         toggleVideo,
         toggleScreenShare,
         joined: isJoined,
+        localSpeaking,
     };
 }

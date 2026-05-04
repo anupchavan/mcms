@@ -2981,8 +2981,6 @@ input[type="date"].input-field {
   width: 1.125rem;
   height: 1.125rem;
   border-radius: 50%;
-  background: var(--primary);
-  color: var(--flexoki-paper);
   display: flex;
   align-items: center;
   justify-content: center;

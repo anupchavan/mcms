@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import Icon from '../shared/components/Icon';
+import { UserAvatar } from '../shared/components/UserAvatar';
 import {
     Search01Icon,
     Notification01Icon,
@@ -176,11 +177,6 @@ export default function TopBar({ userName, onNewMeeting, theme = 'dark', onToggl
 
     const unreadCount = notifications.filter(n => !n.read).length;
 
-    // #region agent log
-    useEffect(() => {
-        console.log('[DBG-119c19][TopBar][H1] avatar state', {SERVER_BASE, profileImage: user?.profileImage, constructedUrl: user?.profileImage ? `${SERVER_BASE}${user.profileImage}` : null, VITE_API_URL: import.meta.env.VITE_API_URL});
-    }, [user?.profileImage]);
-    // #endregion
 
     useEffect(() => {
         if (!notifToast) return;
@@ -557,14 +553,13 @@ export default function TopBar({ userName, onNewMeeting, theme = 'dark', onToggl
                         onClick={() => setShowUserMenu(!showUserMenu)}
                         style={{ cursor: 'pointer' }}
                     >
-                        <div className="user-avatar">
-                            {user?.profileImage
-                                ? <img src={`${SERVER_BASE}${user.profileImage}`} alt="" className="user-avatar-img"
-                                    onError={() => { /* #region agent log */ console.log('[DBG-119c19][TopBar:img.onError][H3] Avatar img FAILED to load', {src: `${SERVER_BASE}${user?.profileImage}`}); /* #endregion */ }}
-                                  />
-                                : <Icon icon={UserIcon} size={18} />
-                            }
-                        </div>
+                        <UserAvatar
+                            name={user?.name || ''}
+                            profileImage={user?.profileImage}
+                            userId={(user as any)?.id || (user as any)?._id}
+                            size={32}
+                            className="user-avatar"
+                        />
                     </div>
 
                     {showUserMenu && (

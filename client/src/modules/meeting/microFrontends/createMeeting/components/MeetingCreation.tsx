@@ -9,7 +9,6 @@ import {
   Delete02Icon,
   Clock01Icon,
   Search01Icon,
-  UserIcon,
   Copy01Icon,
   Tick01Icon,
   Add01Icon,
@@ -21,7 +20,7 @@ import { useAuth } from "../../../../../stores/AuthContext";
 import { FlexokiMap } from "../../../../../shared/components/map/FlexokiMap";
 import { Suggestion, Slot, MeetingCreationProps, CreatedMeeting, ParticipantUser } from "../interfaces";
 import { buildSuggestions, formatSlotDisplay } from "../hooks/useMeetingSlots.ts";
-import { avatarUrlFromPath } from "../../../../../shared/avatarUrl";
+import { UserAvatar } from "../../../../../shared/components/UserAvatar";
 
 const _raw = import.meta.env.VITE_API_URL || "http://localhost:5001/api";
 const SERVER_BASE = _raw.replace(/(\/api\/?)+$/, "");
@@ -443,19 +442,9 @@ export default function MeetingCreation({
     onClose();
   };
 
-  const renderAvatar = (u: ParticipantUser, size = 10) => {
-    const src = avatarUrlFromPath(u.profileImage);
-    if (src) {
-      return (
-        <img
-          src={src}
-          alt=""
-          className="participant-chip-avatar-img"
-        />
-      );
-    }
-    return <Icon icon={UserIcon} size={size} />;
-  };
+  const renderAvatar = (u: ParticipantUser, size = 18) => (
+    <UserAvatar name={u.name} profileImage={u.profileImage} userId={u._id} size={size} />
+  );
 
   return (
     <div
