@@ -2238,14 +2238,17 @@ app.get("/api/meetings/:id/token", protect, async (req: any, res: any) => {
     const userId = req.user?.id || req.user?._id;
     let userName = req.user?.name || "User";
 
+    let userProfileImage: string | null = null;
     if (usingMongoFlag && User) {
-      const userDoc = await User.findById(userId).select("name");
+      const userDoc = await User.findById(userId).select("name profileImage");
       if (userDoc?.name) userName = userDoc.name;
+      if (userDoc?.profileImage) userProfileImage = userDoc.profileImage;
     } else {
       const memUser = inMemoryUsers.find(
         (u: any) => String(u._id) === String(userId),
       );
       if (memUser?.name) userName = memUser.name;
+      if (memUser?.profileImage) userProfileImage = memUser.profileImage;
     }
 
     // Verify user is a participant of this meeting
@@ -2291,6 +2294,7 @@ app.get("/api/meetings/:id/token", protect, async (req: any, res: any) => {
     const at = new AccessToken(apiKey, apiSecret, {
       identity: userId,
       name: userName,
+      metadata: JSON.stringify({ profileImage: userProfileImage }),
     });
     at.addGrant({ roomJoin: true, room: meetingId });
 
