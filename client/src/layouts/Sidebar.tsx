@@ -2,6 +2,7 @@ import { NavLink, useLocation } from 'react-router-dom';
 import IconWrapper from '../shared/components/Icon';
 import ShortcutTooltip from '../shared/components/ShortcutTooltip';
 import { useAuth } from '../stores/AuthContext';
+import { UserAvatar } from '../shared/components/UserAvatar';
 import {
     DashboardSquare01Icon,
     Task01Icon,
@@ -11,7 +12,6 @@ import {
     Settings01Icon,
 } from '@hugeicons/core-free-icons';
 
-const API_BASE = (import.meta.env.VITE_API_URL || 'http://localhost:5001').replace(/\/api$/, '');
 
 interface SidebarProps {
     collapsed: boolean;
@@ -38,8 +38,6 @@ const mainNavItems: NavItem[] = [
 export default function Sidebar({ collapsed }: SidebarProps) {
     const { user } = useAuth();
     const location = useLocation();
-    const initial = user?.name?.charAt(0)?.toUpperCase() || 'U';
-    const avatarUrl = user?.profileImage ? `${API_BASE}${user.profileImage}` : null;
 
     return (
         <nav className={`sidebar ${collapsed ? 'collapsed' : ''}`}>
@@ -83,12 +81,13 @@ export default function Sidebar({ collapsed }: SidebarProps) {
                         id="nav-settings"
                         className={({ isActive }) => `sidebar-item sidebar-user-item ${isActive ? 'active' : ''}`}
                     >
-                        <div className="sidebar-user-avatar">
-                            {avatarUrl
-                                ? <img src={avatarUrl} alt="" className="sidebar-user-avatar-img" />
-                                : <span className="sidebar-user-avatar-initial">{initial}</span>
-                            }
-                        </div>
+                        <UserAvatar
+                            name={user?.name || ''}
+                            profileImage={user?.profileImage}
+                            userId={(user as any)?.id || (user as any)?._id}
+                            size={28}
+                            className="sidebar-user-avatar"
+                        />
                         <span className={`sidebar-item-label ${collapsed ? 'collapsed' : ''}`}>{user?.name || 'User name'}</span>
                     </NavLink>
                 </ShortcutTooltip>

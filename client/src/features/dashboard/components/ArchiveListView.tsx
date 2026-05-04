@@ -25,6 +25,7 @@ import {
     archiveLoadingMinVisibleMs,
 } from "./archiveHelpers";
 import { avatarUrlFromPath } from "../../../shared/avatarUrl";
+import { UserAvatar } from "../../../shared/components/UserAvatar";
 import { publicMeetingSlug, resolvedInternalMeetingId } from "../../../utils/meetingSlug";
 import { useAuth } from "../../../stores/AuthContext";
 import ShortcutTooltip from "../../../shared/components/ShortcutTooltip";
@@ -1129,21 +1130,18 @@ function hueFromString(s: string) {
 
 function ArchiveMultiSelectRowAvatar({
     variant,
-    imgUrl,
+    profileImage,
+    userId,
     label,
     color,
 }: {
     variant: "tags" | "people";
-    imgUrl: string | null;
+    profileImage?: string | null;
+    userId?: string;
     label: string;
     color?: string;
 }) {
-    const [photoBroken, setPhotoBroken] = useState(false);
     const hue = hueFromString(label || "?");
-
-    useEffect(() => {
-        setPhotoBroken(false);
-    }, [imgUrl]);
 
     if (variant === "tags") {
         const ringColor = color ? `${color}cc` : `hsla(${hue}, 48%, 50%, 0.78)`;
@@ -1157,40 +1155,21 @@ function ArchiveMultiSelectRowAvatar({
         );
     }
 
-    const showPhoto = imgUrl && !photoBroken;
-
-    if (showPhoto) {
-        return (
-            <span className="archive-multi-select-avatar archive-multi-select-avatar--photo">
-                <img
-                    src={imgUrl}
-                    alt=""
-                    referrerPolicy="no-referrer"
-                    onError={() => setPhotoBroken(true)}
-                />
-            </span>
-        );
-    }
     return (
-        <span className="archive-multi-select-avatar archive-multi-select-avatar--person-fallback" aria-hidden>
-            <Icon icon={UserIcon} size={12} className="archive-multi-select-avatar-user-icon" />
-        </span>
+        <UserAvatar name={label} profileImage={profileImage} userId={userId} size={16} />
     );
 }
 
 function ArchiveFilterStackDiscPeople({ opt }: { opt: ArchiveMultiOption }) {
-    const [broken, setBroken] = useState(false);
-    const url = avatarUrlFromPath(opt.profileImage ?? null);
-    if (url && !broken) {
-        return (
-            <span className="archive-filter-stack-disc archive-filter-stack-disc--photo">
-                <img src={url} alt="" referrerPolicy="no-referrer" onError={() => setBroken(true)} />
-            </span>
-        );
-    }
     return (
-        <span className="archive-filter-stack-disc archive-filter-stack-disc--person-fallback" aria-hidden>
-            <Icon icon={UserIcon} size={11} className="archive-filter-stack-disc-user-icon" />
+        <span className="archive-filter-stack-disc" aria-hidden>
+            <UserAvatar
+                name={opt.label}
+                profileImage={opt.profileImage}
+                userId={opt.value}
+                size={18}
+                style={{ border: 'none', borderRadius: '50%' }}
+            />
         </span>
     );
 }
@@ -1425,7 +1404,7 @@ const ArchiveMultiSelectDropdown = forwardRef(function ArchiveMultiSelectDropdow
     };
 
     const rowAvatarUrl = (o: ArchiveMultiOption) =>
-        variant === "people" ? avatarUrlFromPath(o.profileImage ?? null) : null;
+        variant === "people" ? (o.profileImage ?? null) : null;
 
     const searchAria = `${label}: search options`;
 
@@ -1515,7 +1494,8 @@ const ArchiveMultiSelectDropdown = forwardRef(function ArchiveMultiSelectDropdow
                                         </span>
                                         <ArchiveMultiSelectRowAvatar
                                             variant={variant}
-                                            imgUrl={rowAvatarUrl(opt)}
+                                            profileImage={rowAvatarUrl(opt)}
+                                            userId={opt.value}
                                             label={opt.label}
                                             color={opt.color}
                                         />

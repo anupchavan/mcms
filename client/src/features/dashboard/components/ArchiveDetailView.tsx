@@ -15,7 +15,7 @@ import {
     ArchiveDetail, ArchiveParticipant, TranscriptSegment, flattenTranscripts,
     formatArchiveDate, groupActionItemsByAgenda, TRANSCRIPT_DEBOUNCE_MS,
 } from "./archiveHelpers";
-import { avatarUrlFromPath } from "../../../shared/avatarUrl";
+import { UserAvatar } from "../../../shared/components/UserAvatar";
 import { useAuth } from "../../../stores/AuthContext";
 import { TranscriptSpeakerSelect } from "./TranscriptSpeakerSelect";
 
@@ -939,26 +939,14 @@ export default function ArchiveDetailView({ meetingId, fetchWithAuth }: ArchiveD
 // ── helpers ──────────────────────────────────────────────────────────────────
 
 function ParticipantAvatar({ participant, size = 24 }: { participant: ArchiveParticipant; size?: number }) {
-    const url = avatarUrlFromPath(participant.profileImage ?? null);
-    const initials = (participant.name || participant.email || "?")[0].toUpperCase();
-    // #region agent log
-    useEffect(() => {
-        console.log('[DBG-119c19][ArchiveDetail:ParticipantAvatar][H2] avatar data', {name: participant.name, email: participant.email, profileImage: participant.profileImage, resolvedUrl: url, showingFallback: !url, initials});
-    }, [participant.profileImage, url]);
-    // #endregion
     return (
-        <span
-            className="archive-detail-avatar"
-            style={{ width: size, height: size, fontSize: size * 0.42 }}
-            title={participant.name || participant.email || "Participant"}
-        >
-            {url
-                ? <img src={url} alt={participant.name || ""} className="archive-detail-avatar-img"
-                    onError={() => { /* #region agent log */ console.log('[DBG-119c19][ArchiveDetail:ParticipantAvatar.img.onError][H3] img FAILED to load', {src: url, name: participant.name}); /* #endregion */ }}
-                  />
-                : <span>{initials}</span>
-            }
-        </span>
+        <UserAvatar
+            name={participant.name || participant.email || "?"}
+            profileImage={participant.profileImage}
+            userId={participant._id}
+            size={size}
+            style={{ flexShrink: 0 }}
+        />
     );
 }
 

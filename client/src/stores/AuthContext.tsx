@@ -56,9 +56,6 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
                     });
                     if (res.ok) {
                         const freshData = await res.json();
-                        // #region agent log
-                        console.log('[DBG-119c19][AuthContext:loadUser][H2] /auth/me response', {profileImage: freshData.profileImage, hasProfileImage: !!freshData.profileImage, apiBase: API_BASE});
-                        // #endregion
                         const updated = { ...parsed, ...freshData };
                         localStorage.setItem('mcms_userInfo', JSON.stringify(updated));
                         setUser(updated);
