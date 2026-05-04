@@ -1,0 +1,3 @@
+[Log] [dbg:track-sub] – "69f8db27536c8927f2aa9222" – "| kind:" – "audio" – "| source:" – "microphone" (index-DJKL-rQL.js, line 298)
+[Log] [dbg:room-connected] identity: – "69f39782efda3fd17287c502" – "| remoteCount:" – 1 – "| canPlaybackAudio:" – true (index-DJKL-rQL.js, line 298)
+[Log] [dbg:audio-attach] OK – "69f8db27536c8927f2aa9222" – "| paused:" – false – "| muted:" – false – "| vol:" – 1 (index-DJKL-rQL.js, line 298)

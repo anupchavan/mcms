@@ -50,6 +50,8 @@ export default function useWebRTC(
     const [localTracks, setLocalTracks] = useState<LocalTrack[]>([]);
     const [localStreamVersion, setLocalStreamVersion] = useState(0);
     const [screenStream, setScreenStream] = useState<MediaStream | null>(null);
+    /** Re-entry guard: prevents concurrent joinRoom() calls from corrupting engine state. */
+    const joinInProgressRef = useRef(false);
     /** When starting screen share, pass through to `getDisplayMedia` / LiveKit (`audio: …`). */
     const [screenShareSystemAudio, setScreenShareSystemAudio] = useState(false);
     /** Set of participant identities currently speaking (VAD from LiveKit). */
@@ -220,6 +222,16 @@ export default function useWebRTC(
 
     const joinRoom = useCallback(async (): Promise<boolean> => {
         if (!meetingId || isJoined) return false;
+        // #region agent log
+        console.log('[dbg:join-attempt] meetingId:', meetingId, '| isJoined:', isJoined, '| inProgress:', joinInProgressRef.current, '| roomRef:', !!roomRef.current);
+        // #endregion
+        if (joinInProgressRef.current) {
+            // #region agent log
+            console.log('[dbg:join-blocked] another join is already in progress — skipping');
+            // #endregion
+            return false;
+        }
+        joinInProgressRef.current = true;
         setMediaError(null);
 
         // 1) Prompt for camera + mic FIRST so the browser permission dialog
@@ -318,11 +330,18 @@ export default function useWebRTC(
                     el.style.display = 'none';
                     document.body.appendChild(el);
                     // #region agent log
+                    const startTime = el.currentTime;
                     el.play().then(() => {
-                        console.log('[dbg:audio-attach] OK', participant.identity, '| paused:', el.paused, '| muted:', el.muted, '| vol:', el.volume);
+                        console.log('[dbg:audio-attach] OK', participant.identity, '| paused:', el.paused, '| muted:', el.muted, '| vol:', el.volume, '| readyState:', el.readyState, '| currentTime:', el.currentTime);
                     }).catch((e) => {
                         console.log('[dbg:audio-attach] play() FAILED', participant.identity, '| err:', e?.message ?? String(e));
                     });
+                    // After 3s, verify audio is actually flowing (currentTime advanced)
+                    setTimeout(() => {
+                        const advanced = el.currentTime - startTime;
+                        const isInDom = document.body.contains(el);
+                        console.log('[dbg:audio-flow]', participant.identity, '| advanced:', advanced.toFixed(2), 's | inDom:', isInDom, '| paused:', el.paused, '| readyState:', el.readyState, '| srcObject:', !!el.srcObject);
+                    }, 3000);
                     // #endregion
                 }
             };
@@ -383,10 +402,19 @@ export default function useWebRTC(
             });
 
             // #region agent log
-            console.log('[dbg:room-connected] identity:', newRoom.localParticipant.identity, '| remoteCount:', newRoom.remoteParticipants.size, '| canPlaybackAudio:', newRoom.canPlaybackAudio);
+            const remoteSnapshot: any[] = [];
+            newRoom.remoteParticipants.forEach((p) => {
+                const pubs: any[] = [];
+                p.trackPublications.forEach((pub) => {
+                    pubs.push({ src: pub.source, kind: pub.kind, sid: pub.trackSid, sub: pub.isSubscribed, hasTrack: !!pub.track, muted: pub.isMuted });
+                });
+                remoteSnapshot.push({ id: p.identity, pubs });
+            });
+            console.log('[dbg:room-connected] identity:', newRoom.localParticipant.identity, '| remoteCount:', newRoom.remoteParticipants.size, '| canPlaybackAudio:', newRoom.canPlaybackAudio, '| remoteSnapshot:', JSON.stringify(remoteSnapshot));
             // #endregion
 
             syncRoomState();
+            joinInProgressRef.current = false;
             return true;
         } catch (err: any) {
             console.error('LiveKit join error:', err);
@@ -397,11 +425,16 @@ export default function useWebRTC(
             localTracksRef.current = [];
             setLocalTracks([]);
             roomRef.current = null;
+            joinInProgressRef.current = false;
             return false;
         }
     }, [meetingId, isJoined, acquireLocalTracks, syncLocalScreenShare]);
 
     const leaveRoom = useCallback(async () => {
+        // #region agent log
+        console.log('[dbg:leave-room] roomRef:', !!roomRef.current, '| inProgress:', joinInProgressRef.current);
+        // #endregion
+        joinInProgressRef.current = false;
         // 1) Stop our locally-created camera + mic tracks IMMEDIATELY so the
         //    green macOS camera dot / mic indicator turn off without waiting
         //    on the LiveKit disconnect handshake. `LocalTrack.stop()` ends the
