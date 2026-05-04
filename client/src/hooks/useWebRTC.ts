@@ -3,6 +3,8 @@ import {
     Room,
     RoomEvent,
     RemoteParticipant,
+    RemoteTrack,
+    RemoteTrackPublication,
     Track,
     LocalTrack,
     createLocalTracks,
@@ -298,10 +300,44 @@ export default function useWebRTC(
             setIsJoined(true);
 
             // Resume LiveKit's AudioContext so remote audio tracks play.
-            // This call is outside the original user-gesture context (due to awaits
-            // above), but the browser will allow it if the page was recently activated.
-            // The VideoArea join handler also unlocks the AudioContext preemptively.
             newRoom.startAudio().catch(() => {/* will be retried on user click */});
+
+            // Manually attach remote audio tracks to <audio> elements.
+            // LiveKit subscribes automatically but does NOT play audio without attach().
+            const handleTrackSubscribed = (
+                track: RemoteTrack,
+                publication: RemoteTrackPublication,
+                participant: RemoteParticipant,
+            ) => {
+                // #region agent log
+                console.log('[dbg:track-sub]', participant.identity, '| kind:', track.kind, '| source:', publication.source);
+                // #endregion
+                if (track.kind === Track.Kind.Audio) {
+                    const el = track.attach();
+                    el.setAttribute('data-lk-audio', participant.identity + ':' + publication.trackSid);
+                    el.style.display = 'none';
+                    document.body.appendChild(el);
+                    // #region agent log
+                    el.play().then(() => {
+                        console.log('[dbg:audio-attach] OK', participant.identity, '| paused:', el.paused, '| muted:', el.muted, '| vol:', el.volume);
+                    }).catch((e) => {
+                        console.log('[dbg:audio-attach] play() FAILED', participant.identity, '| err:', e?.message ?? String(e));
+                    });
+                    // #endregion
+                }
+            };
+            const handleTrackUnsubscribed = (
+                track: RemoteTrack,
+                publication: RemoteTrackPublication,
+                participant: RemoteParticipant,
+            ) => {
+                if (track.kind === Track.Kind.Audio) {
+                    track.detach().forEach((el) => el.remove());
+                    // #region agent log
+                    console.log('[dbg:track-unsub]', participant.identity, '| sid:', publication.trackSid);
+                    // #endregion
+                }
+            };
 
             for (const track of tracksToPublish) {
                 await newRoom.localParticipant.publishTrack(track);
@@ -318,8 +354,14 @@ export default function useWebRTC(
             newRoom
                 .on(RoomEvent.ParticipantConnected, syncRoomState)
                 .on(RoomEvent.ParticipantDisconnected, syncRoomState)
-                .on(RoomEvent.TrackSubscribed, syncRoomState)
-                .on(RoomEvent.TrackUnsubscribed, syncRoomState)
+                .on(RoomEvent.TrackSubscribed, (track, publication, participant) => {
+                    handleTrackSubscribed(track, publication, participant);
+                    syncRoomState();
+                })
+                .on(RoomEvent.TrackUnsubscribed, (track, publication, participant) => {
+                    handleTrackUnsubscribed(track, publication, participant);
+                    syncRoomState();
+                })
                 .on(RoomEvent.TrackPublished, syncRoomState)
                 .on(RoomEvent.TrackUnpublished, syncRoomState)
                 .on(RoomEvent.LocalTrackPublished, syncRoomState)
@@ -329,6 +371,20 @@ export default function useWebRTC(
                 .on(RoomEvent.ActiveSpeakersChanged, (speakers) => {
                     setActiveSpeakerIds(new Set(speakers.map((s) => s.identity)));
                 });
+
+            // Attach any audio tracks already subscribed before our listener was wired.
+            // (Possible if the connection completes very quickly with existing peers.)
+            newRoom.remoteParticipants.forEach((participant) => {
+                participant.audioTrackPublications.forEach((pub) => {
+                    if (pub.track && pub.isSubscribed) {
+                        handleTrackSubscribed(pub.track, pub, participant);
+                    }
+                });
+            });
+
+            // #region agent log
+            console.log('[dbg:room-connected] identity:', newRoom.localParticipant.identity, '| remoteCount:', newRoom.remoteParticipants.size, '| canPlaybackAudio:', newRoom.canPlaybackAudio);
+            // #endregion
 
             syncRoomState();
             return true;
