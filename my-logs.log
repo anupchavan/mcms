@@ -1,3 +1,27 @@
-[Log] [dbg:track-sub] – "69f8db27536c8927f2aa9222" – "| kind:" – "audio" – "| source:" – "microphone" (index-DJKL-rQL.js, line 298)
-[Log] [dbg:room-connected] identity: – "69f39782efda3fd17287c502" – "| remoteCount:" – 1 – "| canPlaybackAudio:" – true (index-DJKL-rQL.js, line 298)
-[Log] [dbg:audio-attach] OK – "69f8db27536c8927f2aa9222" – "| paused:" – false – "| muted:" – false – "| vol:" – 1 (index-DJKL-rQL.js, line 298)
+[Log] [dbg:join-attempt] meetingId: – "69f8f2ab0dea30f372e43b76" – "| isJoined:" – false – "| inProgress:" – false – "| roomRef:" – false (index-CJly_xl6.js, line 298)
+[Log] [dbg:room-connected] identity: – "69f39782efda3fd17287c502" – "| remoteCount:" – 0 – "| canPlaybackAudio:" – true – "| remoteSnapshot:" – "[]" (index-CJly_xl6.js, line 298)
+[Log] [dbg:track-sub] – "69f7500d8caed05931b08757" – "| kind:" – "audio" – "| source:" – "microphone" (index-CJly_xl6.js, line 298)
+[Log] [dbg:track-sub] – "69f7500d8caed05931b08757" – "| kind:" – "video" – "| source:" – "camera" (index-CJly_xl6.js, line 298)
+[Log] [dbg:audio-attach] OK – "69f7500d8caed05931b08757" – "| paused:" – false – "| muted:" – false – "| vol:" – 1 – "| readyState:" – 4 – "| currentTime:" – 0.0003954999992856756 (index-CJly_xl6.js, line 298)
+[Log] [dbg:audio-flow] – "69f7500d8caed05931b08757" – "| advanced:" – "3.00" – "s | inDom:" – true – "| paused:" – false – "| readyState:" – 4 – "| srcObject:" – true (index-CJly_xl6.js, line 298)
+
+
+---
+after reload:
+[Info] Successfully preconnected to https://tiles.openfreemap.org/
+[Log] [dbg:join-attempt] meetingId: – "69f8f2ab0dea30f372e43b76" – "| isJoined:" – false – "| inProgress:" – false – "| roomRef:" – false (index-CJly_xl6.js, line 298)
+[Log] [dbg:track-sub] – "69f7500d8caed05931b08757" – "| kind:" – "audio" – "| source:" – "microphone" (index-CJly_xl6.js, line 298)
+[Log] [dbg:room-connected] identity: – "69f39782efda3fd17287c502" – "| remoteCount:" – 1 – "| canPlaybackAudio:" – true – "| remoteSnapshot:" – "[{\"id\":\"69f7500d8caed05931b08757\",\"pubs\":[{\"src\":\"microphone\",\"kind\":\"audio\",\"sid\":\"TR_AMBcRMa265hnVg\",\"sub\":true,\"hasTrack\":true,\"muted\":fa…" (index-CJly_xl6.js, line 298)
+"[{\"id\":\"69f7500d8caed05931b08757\",\"pubs\":[{\"src\":\"microphone\",\"kind\":\"audio\",\"sid\":\"TR_AMBcRMa265hnVg\",\"sub\":true,\"hasTrack\":true,\"muted\":false},{\"src\":\"camera\",\"kind\":\"video\",\"sid\":\"TR_VCJdmyqy3PHCgf\",\"sub\":true,\"hasTrack\":true,\"muted\":false}]}]"
+[Log] [dbg:audio-attach] OK – "69f7500d8caed05931b08757" – "| paused:" – false – "| muted:" – false – "| vol:" – 1 – "| readyState:" – 4 – "| currentTime:" – 0.00018941666712635197 (index-CJly_xl6.js, line 298)
+[Log] [dbg:audio-flow] – "69f7500d8caed05931b08757" – "| advanced:" – "3.00" – "s | inDom:" – true – "| paused:" – false – "| readyState:" – 4 – "| srcObject:" – true (index-CJly_xl6.js, line 298)
+[Log] [dbg:track-unsub] – "69f7500d8caed05931b08757" – "| sid:" – "TR_AMBcRMa265hnVg" (index-CJly_xl6.js, line 298)
+[Log] [dbg:track-sub] – "69f7500d8caed05931b08757" – "| kind:" – "audio" – "| source:" – "microphone" (index-CJly_xl6.js, line 298)
+[Log] [dbg:track-sub] – "69f7500d8caed05931b08757" – "| kind:" – "video" – "| source:" – "camera" (index-CJly_xl6.js, line 298)
+[Log] [dbg:audio-attach] OK – "69f7500d8caed05931b08757" – "| paused:" – false – "| muted:" – false – "| vol:" – 1 – "| readyState:" – 4 – "| currentTime:" – 0.0014562499964085873 (index-CJly_xl6.js, line 298)
+[Log] [dbg:audio-flow] – "69f7500d8caed05931b08757" – "| advanced:" – "3.00" – "s | inDom:" – true – "| paused:" – false – "| readyState:" – 4 – "| srcObject:" – true (index-CJly_xl6.js, line 298)
+[Info] publishing track – Object (index-CJly_xl6.js, line 298)
+Object
+[Info] forcing contentHint to motion for screenshare with SVC codecs – Object (index-CJly_xl6.js, line 298)
+Object
+[Error] Failed to load resource: the server responded with a status of 404 () (transcription-worklet.js, line 0)

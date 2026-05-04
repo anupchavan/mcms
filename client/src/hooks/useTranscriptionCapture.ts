@@ -112,8 +112,13 @@ export default function useTranscriptionCapture(
             const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
             audioContextRef.current = audioCtx;
 
-            // Load the worklet processor. Vite serves /public/* at root.
-            await audioCtx.audioWorklet.addModule('/transcription-worklet.js');
+            // Load the worklet processor. Files in /public/ are served at the
+            // app's base path (e.g. `/mcms/` in production, `/` in dev).
+            // Hardcoding `/transcription-worklet.js` 404s when the app is mounted
+            // under a sub-path on the server.
+            await audioCtx.audioWorklet.addModule(
+                `${import.meta.env.BASE_URL}transcription-worklet.js`
+            );
 
             const audioOnlyStream = new MediaStream([audioTrack]);
             const source = audioCtx.createMediaStreamSource(audioOnlyStream);
