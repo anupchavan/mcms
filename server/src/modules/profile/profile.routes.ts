@@ -1,29 +1,14 @@
 import express from 'express';
-import path from 'path';
-import fs from 'fs';
 import multer from 'multer';
 import bcrypt from 'bcryptjs';
 const router = express.Router();
 
 export = function ({ User, Meeting, protect, usingMongo, inMemoryUsers }: any) {
 
-    // At runtime, __dirname is `server/dist/modules/profile`. Three levels up
-    // reaches `server/`; matches the static mount in server.ts:
-    //   app.use("/uploads", express.static(path.join(__dirname, "..", "uploads")));
-    // Without `recursive: true`, multer would 500 with ENOENT on a fresh
-    // checkout where `server/uploads/avatars/` hasn't been created yet.
-    const avatarsDir = path.join(__dirname, '..', '..', '..', 'uploads', 'avatars');
-    fs.mkdirSync(avatarsDir, { recursive: true });
-
-    const avatarStorage = multer.diskStorage({
-        destination: (_req: any, _file: any, cb: any) => cb(null, avatarsDir),
-        filename: (req: any, file: any, cb: any) => {
-            const ext = path.extname(file.originalname);
-            cb(null, `${req.user.id}-${Date.now()}${ext}`);
-        },
-    });
+    // Store uploads in memory so they can be persisted to MongoDB.
+    // This avoids relying on the ephemeral local filesystem (e.g. Render free tier).
     const avatarUpload = multer({
-        storage: avatarStorage,
+        storage: multer.memoryStorage(),
         limits: { fileSize: 5 * 1024 * 1024 },
         fileFilter: (_req: any, file: any, cb: any) => {
             if (/^image\/(jpeg|png|gif|webp)$/.test(file.mimetype)) return cb(null, true);
@@ -139,6 +124,20 @@ export = function ({ User, Meeting, protect, usingMongo, inMemoryUsers }: any) {
         }
     });
 
+    // Serve avatar image stored in MongoDB — no filesystem required.
+    router.get('/avatar/:userId', async (req: any, res: any) => {
+        try {
+            if (!usingMongo() || !User) return res.status(404).send('Not found');
+            const user = await User.findById(req.params.userId).select('+profileImageBuffer profileImageMimeType');
+            if (!user?.profileImageBuffer) return res.status(404).send('Not found');
+            res.set('Content-Type', user.profileImageMimeType || 'image/jpeg');
+            res.set('Cache-Control', 'public, max-age=31536000, immutable');
+            return res.send(user.profileImageBuffer);
+        } catch {
+            return res.status(404).send('Not found');
+        }
+    });
+
     router.post('/avatar', protect, (req: any, res: any) => {
         avatarUpload.single('avatar')(req, res, async (err: any) => {
             if (err) {
@@ -149,14 +148,20 @@ export = function ({ User, Meeting, protect, usingMongo, inMemoryUsers }: any) {
             }
             if (!req.file) return res.status(400).json({ message: 'No file uploaded' });
             try {
-                const profileImage = `/uploads/avatars/${req.file.filename}`;
+                const profileImage = `/api/profile/avatar/${req.user.id}`;
                 if (usingMongo() && User) {
-                    const prev = await User.findById(req.user.id).select('profileImage');
-                    if (prev?.profileImage) fs.unlink(path.join(__dirname, '..', '..', prev.profileImage), () => {});
-                    await User.findByIdAndUpdate(req.user.id, { profileImage });
+                    await User.findByIdAndUpdate(req.user.id, {
+                        profileImage,
+                        profileImageBuffer: req.file.buffer,
+                        profileImageMimeType: req.file.mimetype,
+                    });
                 } else {
                     const user = inMemoryUsers.find((u: any) => u._id === req.user.id);
-                    if (user) user.profileImage = profileImage;
+                    if (user) {
+                        user.profileImage = profileImage;
+                        user.profileImageBuffer = req.file.buffer;
+                        user.profileImageMimeType = req.file.mimetype;
+                    }
                 }
                 res.json({ profileImage });
             } catch (error: any) {
@@ -168,14 +173,18 @@ export = function ({ User, Meeting, protect, usingMongo, inMemoryUsers }: any) {
     router.delete('/avatar', protect, async (req: any, res: any) => {
         try {
             if (usingMongo() && User) {
-                const user = await User.findById(req.user.id).select('profileImage');
-                if (user?.profileImage) {
-                    fs.unlink(path.join(__dirname, '..', '..', user.profileImage), () => {});
-                    await User.findByIdAndUpdate(req.user.id, { profileImage: null });
-                }
+                await User.findByIdAndUpdate(req.user.id, {
+                    profileImage: null,
+                    profileImageBuffer: null,
+                    profileImageMimeType: null,
+                });
             } else {
                 const user = inMemoryUsers.find((u: any) => u._id === req.user.id);
-                if (user) user.profileImage = null;
+                if (user) {
+                    user.profileImage = null;
+                    user.profileImageBuffer = null;
+                    user.profileImageMimeType = null;
+                }
             }
             res.json({ message: 'Avatar removed' });
         } catch (error: any) {
@@ -192,7 +201,6 @@ export = function ({ User, Meeting, protect, usingMongo, inMemoryUsers }: any) {
                 if (!user) return res.status(404).json({ message: 'User not found' });
                 const isMatch = await user.matchPassword(password);
                 if (!isMatch) return res.status(401).json({ message: 'Incorrect password' });
-                if (user.profileImage) fs.unlink(path.join(__dirname, '..', '..', user.profileImage), () => {});
                 await User.findByIdAndDelete(req.user.id);
                 return res.json({ message: 'Account deleted' });
             }

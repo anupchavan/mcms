@@ -20,6 +20,15 @@ const userSchema = new mongoose.Schema({
         type: String,
         default: null,
     },
+    profileImageBuffer: {
+        type: Buffer,
+        default: null,
+        select: false,
+    },
+    profileImageMimeType: {
+        type: String,
+        default: null,
+    },
     personalRoomId: {
         type: String,
         unique: true,
