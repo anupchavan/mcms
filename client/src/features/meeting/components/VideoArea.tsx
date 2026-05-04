@@ -211,10 +211,12 @@ function VideoTile({
 
   // #region agent log
   useEffect(() => {
-    console.log('[dbg:novideo]', tileId, '| noVideo:', noVideo, '| cameraOn:', cameraOn, '| videoMuted:', videoMuted, '| hasVideo:', hasVideo, '| videoPaused:', videoRef.current?.paused, '| muted:', muted);
+    console.log('[dbg:novideo]', tileId, '| noVideo:', noVideo, '| cameraOn:', cameraOn, '| videoMuted:', videoMuted, '| hasVideo:', hasVideo, '| videoPaused:', videoRef.current?.paused, '| muted:', muted, '| domMuted:', videoRef.current?.muted, '| vol:', videoRef.current?.volume);
     if (!noVideo && videoRef.current?.paused) {
       console.log('[dbg:cam-reenable] video is paused after show — calling play()', tileId);
-      videoRef.current.play().catch(e => console.log('[dbg:cam-reenable] play() error:', e));
+      videoRef.current.play().then(() => {
+        console.log('[dbg:cam-reenable] play() resolved | domMuted:', videoRef.current?.muted, '| vol:', videoRef.current?.volume);
+      }).catch(e => console.log('[dbg:cam-reenable] play() error:', e));
     }
   });
   // #endregion

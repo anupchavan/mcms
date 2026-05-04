@@ -46,6 +46,7 @@ export default function useWebRTC(
     const [mediaError, setMediaError] = useState<string | null>(null);
     const [isJoined, setIsJoined] = useState(false);
     const [localTracks, setLocalTracks] = useState<LocalTrack[]>([]);
+    const [localStreamVersion, setLocalStreamVersion] = useState(0);
     const [screenStream, setScreenStream] = useState<MediaStream | null>(null);
     /** When starting screen share, pass through to `getDisplayMedia` / LiveKit (`audio: …`). */
     const [screenShareSystemAudio, setScreenShareSystemAudio] = useState(false);
@@ -71,12 +72,17 @@ export default function useWebRTC(
 
         const identity = participant.identity;
         const name = participant.name || 'User';
+        let profileImage: string | null = null;
+        try {
+            const meta = participant.metadata ? JSON.parse(participant.metadata) : null;
+            profileImage = meta?.profileImage ?? null;
+        } catch { /* ignore malformed metadata */ }
         const hasScreen = !!screenVideoTrack?.mediaStreamTrack;
         const hasCamera = !!cameraVideoTrack?.mediaStreamTrack;
         const camPub = participant.getTrackPublication(Track.Source.Camera);
         const camMuted = camPub?.isMuted ?? false;
         // #region agent log
-        console.log('[dbg:tiles] building for', identity, '| metadata:', participant.metadata, '| micTrack:', !!microphoneTrack, '| micMST:', !!microphoneTrack?.mediaStreamTrack, '| camTrack:', !!cameraVideoTrack, '| camMST:', !!cameraVideoTrack?.mediaStreamTrack);
+        console.log('[dbg:tiles] building for', identity, '| metadata:', participant.metadata, '| profileImage:', profileImage, '| micTrack:', !!microphoneTrack, '| micMST:', !!microphoneTrack?.mediaStreamTrack, '| camTrack:', !!cameraVideoTrack, '| camMST:', !!cameraVideoTrack?.mediaStreamTrack);
         // #endregion
         const tiles: PeerState[] = [];
 
@@ -89,7 +95,7 @@ export default function useWebRTC(
                 socketId: `${identity}__screen`,
                 userId: identity,
                 name,
-                profileImage: null,
+                profileImage,
                 stream,
                 isScreenShare: true,
                 playRemoteAudio: true,
@@ -104,13 +110,13 @@ export default function useWebRTC(
                 stream.addTrack(microphoneTrack!.mediaStreamTrack!);
             }
             // #region agent log
-            console.log('[dbg:audio] camera tile for', identity, '| addAudio:', addAudio, '| playRemoteAudio:', !hasScreen, '| streamAudioTracks:', stream.getAudioTracks().length);
+            console.log('[dbg:audio] camera tile for', identity, '| addAudio:', addAudio, '| playRemoteAudio:', !hasScreen, '| streamAudioTracks:', stream.getAudioTracks().length, '| profileImage:', profileImage);
             // #endregion
             tiles.push({
                 socketId: `${identity}__camera`,
                 userId: identity,
                 name,
-                profileImage: null,
+                profileImage,
                 stream,
                 isScreenShare: false,
                 playRemoteAudio: !hasScreen,
@@ -125,7 +131,7 @@ export default function useWebRTC(
                 socketId: `${identity}__camera`,
                 userId: identity,
                 name,
-                profileImage: null,
+                profileImage,
                 stream,
                 isScreenShare: false,
                 playRemoteAudio: true,
@@ -215,7 +221,9 @@ export default function useWebRTC(
             if (t.mediaStreamTrack) stream.addTrack(t.mediaStreamTrack);
         });
         return stream;
-    }, [localTracks]);
+    // localStreamVersion forces a rebuild when unmute() creates a new MediaStreamTrack
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [localTracks, localStreamVersion]);
 
     const joinRoom = useCallback(async (): Promise<boolean> => {
         if (!meetingId || isJoined) return false;
@@ -393,6 +401,7 @@ export default function useWebRTC(
                 const trackIdAfter = t.mediaStreamTrack?.id;
                 console.log('[dbg:toggle-video] enabled:', enabled, '| trackId before:', trackIdBefore, '| trackId after:', trackIdAfter, '| same:', trackIdBefore === trackIdAfter, '| trackEnabled:', t.mediaStreamTrack?.enabled, '| trackState:', t.mediaStreamTrack?.readyState);
                 // #endregion
+                if (enabled && trackIdBefore !== trackIdAfter) setLocalStreamVersion(v => v + 1);
             }
         }));
         setVideoEnabled(enabled);
