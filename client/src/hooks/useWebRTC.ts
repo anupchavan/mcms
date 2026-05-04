@@ -75,9 +75,6 @@ export default function useWebRTC(
         const hasCamera = !!cameraVideoTrack?.mediaStreamTrack;
         const camPub = participant.getTrackPublication(Track.Source.Camera);
         const camMuted = camPub?.isMuted ?? false;
-        // #region agent log
-        console.log('[dbg:getParticipantVideoTiles] new streams for', identity, 'hasCamera:', hasCamera, 'hasScreen:', hasScreen);
-        // #endregion
         const tiles: PeerState[] = [];
 
         if (hasScreen) {
@@ -195,9 +192,6 @@ export default function useWebRTC(
     }, []);
 
     const peers = useMemo(() => {
-        // #region agent log
-        console.log('[dbg:peers-memo POST-FIX] rebuilding — participants:', participants.length);
-        // #endregion
         return Array.from(participants).flatMap((p) => {
             const tiles = getParticipantVideoTiles(p);
             const micPub = p.getTrackPublication(Track.Source.Microphone);
@@ -321,9 +315,6 @@ export default function useWebRTC(
                 .on(RoomEvent.TrackMuted, (_pub, _participant) => { syncRoomState(); })
                 .on(RoomEvent.TrackUnmuted, (_pub, _participant) => { syncRoomState(); })
                 .on(RoomEvent.ActiveSpeakersChanged, (speakers) => {
-                    // #region agent log
-                    console.log('[dbg:ActiveSpeakersChanged]', speakers.length, 'speakers:', speakers.map(s=>s.identity));
-                    // #endregion
                     setActiveSpeakerIds(new Set(speakers.map((s) => s.identity)));
                 });
 
