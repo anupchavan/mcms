@@ -209,17 +209,13 @@ function VideoTile({
   // Remote tile: use videoMuted from LiveKit signaling, OR fall back to hasVideo.
   const noVideo = !isScreenShare && (cameraOn !== undefined ? !cameraOn : (videoMuted || !hasVideo));
 
-  // #region agent log
+  // When a video element transitions from hidden (noVideo) to visible, the browser
+  // may leave it paused. Call play() to resume rendering.
   useEffect(() => {
-    console.log('[dbg:novideo]', tileId, '| noVideo:', noVideo, '| cameraOn:', cameraOn, '| videoMuted:', videoMuted, '| hasVideo:', hasVideo, '| videoPaused:', videoRef.current?.paused, '| muted:', muted, '| domMuted:', videoRef.current?.muted, '| vol:', videoRef.current?.volume);
     if (!noVideo && videoRef.current?.paused) {
-      console.log('[dbg:cam-reenable] video is paused after show — calling play()', tileId);
-      videoRef.current.play().then(() => {
-        console.log('[dbg:cam-reenable] play() resolved | domMuted:', videoRef.current?.muted, '| vol:', videoRef.current?.volume);
-      }).catch(e => console.log('[dbg:cam-reenable] play() error:', e));
+      videoRef.current.play().catch(() => {/* autoplay policy: ignored, LiveKit handles audio */});
     }
   });
-  // #endregion
   return (
     <div
       className={[
@@ -454,6 +450,7 @@ export default function VideoArea({
     setScreenShareSystemAudioPref,
     localSpeaking,
     activeSpeakerIds,
+    startRoomAudio,
   } = useWebRTC(socket, meetingId, currentUser);
 
   useTranscriptionCapture(socket, meetingId || null, localStream);
@@ -481,9 +478,16 @@ export default function VideoArea({
 
   const handleJoin = useCallback(async () => {
     if (!canJoin) return;
+    // Unlock the browser's AudioContext NOW, while the user gesture is active.
+    // LiveKit needs this to play remote audio tracks via its own <audio> elements.
+    try {
+      const tmpCtx = new (window.AudioContext || (window as any).webkitAudioContext)();
+      tmpCtx.resume().then(() => tmpCtx.close()).catch(() => {});
+    } catch { /* unsupported */ }
+    startRoomAudio();
     const success = await joinRoom();
     if (success) setHasJoined(true);
-  }, [joinRoom, canJoin]);
+  }, [joinRoom, canJoin, startRoomAudio]);
 
   useEffect(() => {
     if (!joinMeetingActionRef) return;
@@ -597,6 +601,7 @@ export default function VideoArea({
             muted: true,
             audioMuted: false,
             cameraOn: undefined as boolean | undefined,
+            videoMuted: undefined as boolean | undefined,
             isSelf: true,
             isScreenShare: true,
             speaking: localSpeaking,
@@ -610,6 +615,7 @@ export default function VideoArea({
             muted: true,
             audioMuted: !audioEnabled,
             cameraOn: videoEnabled,
+            videoMuted: undefined as boolean | undefined,
             isSelf: true,
             isScreenShare: false,
             speaking: localSpeaking,
@@ -625,6 +631,7 @@ export default function VideoArea({
             muted: true,
             audioMuted: !audioEnabled,
             cameraOn: videoEnabled,
+            videoMuted: undefined as boolean | undefined,
             isSelf: true,
             isScreenShare: false,
             speaking: localSpeaking,
