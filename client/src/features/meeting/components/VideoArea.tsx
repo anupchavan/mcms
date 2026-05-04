@@ -219,7 +219,7 @@ function VideoTile({
               src={`${SERVER_BASE}${profileImage}`}
               alt=""
               className="video-tile-avatar-img"
-              onError={() => { /* #region agent log */ fetch('http://127.0.0.1:7513/ingest/2ed74124-70ef-436a-a5af-14e493d12d53',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'119c19'},body:JSON.stringify({sessionId:'119c19',location:'VideoArea.tsx:VideoTile.img.onError',message:'Video tile avatar img failed to load',data:{src:`${SERVER_BASE}${profileImage}`,SERVER_BASE},hypothesisId:'H3',timestamp:Date.now()})}).catch(()=>{}); /* #endregion */ }}
+              onError={() => { /* #region agent log */ console.log('[DBG-119c19][VideoArea:VideoTile.img.onError][H3] img FAILED to load', {src: `${SERVER_BASE}${profileImage}`, SERVER_BASE}); /* #endregion */ }}
             />
           ) : (
             <span>{initial}</span>
