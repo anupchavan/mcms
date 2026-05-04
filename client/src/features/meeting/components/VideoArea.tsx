@@ -179,6 +179,9 @@ function VideoTile({
   }, [stream]);
 
   useEffect(() => {
+    // #region agent log
+    console.log('[dbg:stream-effect] srcObject assign — tile:', tileId, 'streamId:', stream?.id, 'isSelf:', isSelf);
+    // #endregion
     if (videoRef.current && stream) {
       videoRef.current.srcObject = stream;
     }
