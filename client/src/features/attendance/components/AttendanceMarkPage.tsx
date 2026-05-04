@@ -86,7 +86,12 @@ export default function AttendanceMarkPage({ meetingId, token }: AttendanceMarkP
                 ? 'Attendance Failed'
                 : 'Sign In Required';
 
-    const accent = state === 'success' ? '#22c55e' : state === 'loading' ? '#f59e0b' : '#ef4444';
+    const accent =
+        state === 'success'
+            ? 'var(--flexoki-green-600)'
+            : state === 'loading'
+              ? 'var(--flexoki-yellow-600)'
+              : 'var(--danger)';
 
     return (
         <div style={{
@@ -94,18 +99,18 @@ export default function AttendanceMarkPage({ meetingId, token }: AttendanceMarkP
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
-            background: 'radial-gradient(circle at top, rgba(59,130,246,0.18), transparent 38%), linear-gradient(180deg, #0f172a 0%, #111827 100%)',
+            background: 'radial-gradient(circle at top, rgba(var(--flexoki-blue-600-rgb), 0.18), transparent 38%), linear-gradient(180deg, var(--flexoki-black) 0%, var(--flexoki-900) 100%)',
             padding: '24px',
         }}>
             <div style={{
                 width: '100%',
                 maxWidth: '440px',
-                background: 'rgba(17, 24, 39, 0.92)',
-                border: '1px solid rgba(148, 163, 184, 0.2)',
+                background: 'rgba(var(--flexoki-950-rgb), 0.92)',
+                border: '1px solid rgba(var(--flexoki-400-rgb), 0.2)',
                 borderRadius: '24px',
                 padding: '32px',
-                color: '#f8fafc',
-                boxShadow: '0 24px 60px rgba(15, 23, 42, 0.45)',
+                color: 'var(--flexoki-paper)',
+                boxShadow: '0 24px 60px rgba(var(--flexoki-black-rgb), 0.45)',
                 textAlign: 'center',
             }}>
                 <div style={{
@@ -119,18 +124,18 @@ export default function AttendanceMarkPage({ meetingId, token }: AttendanceMarkP
                     justifyContent: 'center',
                     fontSize: '28px',
                     fontWeight: 700,
-                    color: '#fff',
+                    color: 'var(--flexoki-paper)',
                 }}>
                     {state === 'success' ? '✓' : state === 'loading' ? '…' : '!'}
                 </div>
 
                 <h1 style={{ margin: 0, fontSize: '28px', lineHeight: 1.1 }}>{title}</h1>
-                <p style={{ margin: '12px 0 0', color: '#cbd5e1', fontSize: '15px', lineHeight: 1.6 }}>
+                <p style={{ margin: '12px 0 0', color: 'var(--flexoki-300)', fontSize: '15px', lineHeight: 1.6 }}>
                     {message}
                 </p>
 
                 {!user?.token && (
-                    <p style={{ margin: '18px 0 0', color: '#94a3b8', fontSize: '13px', lineHeight: 1.6 }}>
+                    <p style={{ margin: '18px 0 0', color: 'var(--flexoki-500)', fontSize: '13px', lineHeight: 1.6 }}>
                         Once you sign in, this page will automatically finish the attendance check-in.
                     </p>
                 )}

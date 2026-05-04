@@ -79,26 +79,26 @@ export default function QROverlay({ onClose, meetingTitle, meetingId }: QROverla
     };
 
     return (
-        <div className="qr-overlay" onClick={onClose} style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', zIndex: 10000 }}>
-            <div onClick={(e) => e.stopPropagation()} style={{ position: 'relative', display: 'flex', gap: '32px', background: 'var(--bg-primary)', padding: '32px', borderRadius: '16px', maxWidth: '800px', width: '90%', border: '1px solid var(--border)', boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04)' }}>
+        <div className="qr-overlay" onClick={onClose} style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', position: 'fixed', inset: 0, background: 'rgba(var(--flexoki-black-rgb), 0.6)', zIndex: 10000 }}>
+            <div onClick={(e) => e.stopPropagation()} style={{ position: 'relative', display: 'flex', gap: '32px', background: 'var(--bg-primary)', padding: '32px', borderRadius: '16px', maxWidth: '800px', width: '90%', border: '1px solid var(--border)', boxShadow: '0 20px 25px -5px rgba(var(--flexoki-black-rgb), 0.1), 0 10px 10px -5px rgba(var(--flexoki-black-rgb), 0.04)' }}>
                 {/* Left Side: QR */}
                 <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '16px', flex: 1 }}>
-                    <div className="qr-box" style={{ background: 'white', padding: '16px', borderRadius: '12px', boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)' }}>
+                    <div className="qr-box" style={{ background: 'var(--flexoki-paper)', padding: '16px', borderRadius: '12px', boxShadow: '0 4px 6px -1px rgba(var(--flexoki-black-rgb), 0.1)' }}>
                         {qrUrl ? (
                             <QRCodeSVG
                                 value={qrUrl}
                                 size={200}
                                 level="H"
                                 includeMargin
-                                bgColor="#ffffff"
-                                fgColor="#111827"
+                                bgColor="#FFFCF0"
+                                fgColor="#282726"
                             />
                         ) : error ? (
-                            <div style={{ width: 200, height: 200, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#ef4444', fontSize: '14px', textAlign: 'center', padding: '20px' }}>
+                            <div style={{ width: 200, height: 200, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--danger)', fontSize: '14px', textAlign: 'center', padding: '20px' }}>
                                 {error}
                             </div>
                         ) : (
-                            <div style={{ width: 200, height: 200, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#6b7280' }}>
+                            <div style={{ width: 200, height: 200, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-muted)' }}>
                                 Generating...
                             </div>
                         )}

@@ -815,7 +815,7 @@ export default function ActionItems({ items, sectionTitle = 'Action Items', empt
                 <style>{`
                     .fb-modal-overlay {
                         position: fixed; inset: 0; z-index: 9000;
-                        background: rgba(0,0,0,0.55);
+                        background: rgba(var(--flexoki-black-rgb), 0.55);
                         backdrop-filter: blur(6px);
                         display: flex; align-items: center; justify-content: center;
                         animation: fbOverlayIn 0.2s ease;
@@ -829,7 +829,7 @@ export default function ActionItems({ items, sectionTitle = 'Action Items', empt
                         background: var(--bg-secondary);
                         border: 1px solid var(--border);
                         border-radius: 16px;
-                        box-shadow: 0 24px 64px rgba(0,0,0,0.4), 0 0 0 1px rgba(255,255,255,0.04);
+                        box-shadow: 0 24px 64px rgba(var(--flexoki-black-rgb), 0.4), 0 0 0 1px rgba(var(--ui-shine-rgb), 0.04);
                         animation: fbCardIn 0.25s cubic-bezier(0.34,1.56,0.64,1);
                         overflow: hidden;
                     }
@@ -892,7 +892,7 @@ export default function ActionItems({ items, sectionTitle = 'Action Items', empt
                     .fb-modal-textarea.fb-shake {
                         animation: fbShake 0.4s ease;
                         border-color: var(--accent-rose);
-                        box-shadow: 0 0 0 3px rgba(255,80,80,0.15);
+                        box-shadow: 0 0 0 3px rgba(var(--flexoki-red-400-rgb), 0.15);
                     }
                     @keyframes fbShake {
                         0%,100% { transform: translateX(0); }

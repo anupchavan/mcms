@@ -52,3 +52,7 @@ export const deleteCache = async (key: string): Promise<void> => {
   
   inMemoryCache.delete(key);
 };
+
+export async function invalidateArchiveListCache(): Promise<void> {
+  await deleteCache("archive:top5:v2");
+}

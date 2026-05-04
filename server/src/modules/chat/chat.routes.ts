@@ -43,13 +43,14 @@ export = function ({
 
       if (usingMongo() && ChatMessage && Meeting) {
         const meeting = await Meeting.findOne({
-          $or: [{ _id: paramId }, { shortId: paramId }],
+          $or: [{ _id: paramId }, { id: paramId }, { shortId: paramId }],
         })
           .select("_id pinnedChat")
           .lean();
         const mid = meeting?._id ?? paramId;
+        const pinnedMeetingIdStr = meeting?._id != null ? String(meeting._id) : paramId;
         const pinned = meeting?.pinnedChat
-          ? mapPinnedClient(meeting.pinnedChat, paramId)
+          ? mapPinnedClient(meeting.pinnedChat, pinnedMeetingIdStr)
           : null;
         const docs = await ChatMessage.find({ meetingId: mid }).sort({
           sentAt: 1,
@@ -63,7 +64,7 @@ export = function ({
         const m = inMemoryMeetings.find(
           (mm: any) =>
             String(mm.id || mm._id) === String(paramId) ||
-            String(mm.shortId) === String(paramId),
+            String(mm.shortId ?? '') === String(paramId),
         );
         if (m) {
           const mid = String(m.id || m._id);

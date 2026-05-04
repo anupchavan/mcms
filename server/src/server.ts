@@ -11,6 +11,13 @@ import { AccessToken } from "livekit-server-sdk";
 import { createAdapter } from "@socket.io/redis-adapter";
 import { createClient } from "redis";
 import WebSocket from "ws"; // for sarvam transcription
+import { createDeepgramWS } from "./services/deepgramStream";
+import {
+  inviteSegmentForShareUrl,
+  generateUniqueMeetingInviteSegment,
+} from "./utils/meetingInviteId";
+
+const meetingLookup = require("./modules/meeting/meeting.lookup");
 
 // for transcript aggregation
 import {
@@ -61,9 +68,9 @@ try {
       console.log("MongoDB Connected");
       usingMongoFlag = true;
       try {
-        await backfillMeetingShortIds();
+        await backfillMeetingInviteIds();
       } catch (err: any) {
-        console.error("Failed to backfill meeting shortIds:", err?.message || err);
+        console.error("Failed to backfill meeting ids:", err?.message || err);
       }
     })
     .catch((err: any) => {
@@ -95,28 +102,56 @@ try {
 const usingMongo = () => usingMongoFlag;
 
 /**
- * Lazy backfill: any meeting that pre-dates the `shortId` field gets a fresh
- * unique short identifier. We do this once on Mongo connect so existing
- * archives keep working with the new short URL scheme.
+ * On connect: copy legacy `shortId` → `id` when `id` is missing, unset `shortId`,
+ * then assign a fresh invite segment for any document still lacking `id`.
  */
-async function backfillMeetingShortIds() {
+async function backfillMeetingInviteIds() {
   if (!Meeting) return;
-  const { generateUniqueShortId } = require("./utils/shortId");
-  const cursor = Meeting.find({ $or: [{ shortId: { $exists: false } }, { shortId: null }] }).cursor();
-  let updated = 0;
+  let mongooseMod: { connection?: { readyState?: number } } | null;
+  try {
+    mongooseMod = require("mongoose");
+  } catch {
+    return;
+  }
+  if (mongooseMod.connection?.readyState !== 1) return;
+
+  try {
+    const migrated = await Meeting.collection.updateMany(
+      {
+        $or: [{ id: { $exists: false } }, { id: null }, { id: "" }],
+        shortId: { $exists: true, $nin: [null, ""] },
+      },
+      [{ $set: { id: "$shortId" } }, { $unset: "shortId" }],
+    );
+    if (migrated.modifiedCount > 0) {
+      console.log(
+        `Migrated shortId→id on ${migrated.modifiedCount} meeting document(s)`,
+      );
+    }
+  } catch (err: any) {
+    console.error("Meeting id migration (shortId→id):", err?.message || err);
+  }
+
+  const cursor = Meeting.find({
+    $or: [{ id: { $exists: false } }, { id: null }, { id: "" }],
+  }).cursor();
+  let generated = 0;
   for await (const doc of cursor) {
     try {
-      doc.shortId = await generateUniqueShortId(async (candidate: string) => {
-        const existing = await Meeting.exists({ shortId: candidate });
-        return !!existing;
+      const seg = await generateUniqueMeetingInviteSegment(async (candidate) => {
+        return !!(await Meeting.exists({ id: candidate }));
       });
-      await doc.save();
-      updated += 1;
+      await Meeting.updateOne({ _id: doc._id }, { $set: { id: seg } });
+      generated += 1;
     } catch (err: any) {
-      console.error(`shortId backfill failed for meeting ${doc._id}:`, err?.message || err);
+      console.error(
+        `invite id backfill failed for meeting ${doc._id}:`,
+        err?.message || err,
+      );
     }
   }
-  if (updated > 0) console.log(`Backfilled shortId on ${updated} meeting(s)`);
+  if (generated > 0)
+    console.log(`Generated invite id on ${generated} meeting(s)`);
 }
 
 // ── In-memory fallback store ─────────────────────────────────
@@ -159,13 +194,15 @@ async function isMeetingHostUser(meetingId: string, userId: string) {
   if (!meetingId || !userId) return false;
 
   if (usingMongoFlag && Meeting) {
-    const meeting = await Meeting.findById(meetingId).select("hostId");
+    const meeting = await meetingLookup.findMeetingByAnyId(Meeting, meetingId).select("hostId");
     if (!meeting) return false;
     return String((meeting as any).hostId?._id || (meeting as any).hostId || "") === String(userId);
   }
 
   const meeting = inMemoryMeetings.find(
-    (item: any) => String(item.id || item._id) === String(meetingId),
+    (item: any) =>
+      String(item.id || item._id) === String(meetingId) ||
+      String(item.shortId ?? "") === String(meetingId),
   );
   if (!meeting) return false;
   return String(meeting.hostId?._id || meeting.hostId || "") === String(userId);
@@ -268,9 +305,12 @@ async function sendRsvpEmail(
     const dateStr = slot
       ? `${slot.date} at ${slot.time}`
       : `${meeting.date} at ${meeting.time}`;
+    const shareSegUrl =
+      inviteSegmentForShareUrl(meeting.id)
+      ?? inviteSegmentForShareUrl(meeting.shortId);
     const meetingUrl =
-      meeting.modality !== "Offline"
-        ? `${CLIENT_URL.replace(/\/$/, "")}/meetings/${meeting.shortId || meeting._id}`
+      meeting.modality !== "Offline" && shareSegUrl
+        ? `${CLIENT_URL.replace(/\/$/, "")}/meetings/${shareSegUrl}`
         : null;
     const meetingLinkSection = meetingUrl
       ? `<p style="margin:16px 0"><strong>Meeting Link:</strong> <a href="${meetingUrl}" style="color:#6366f1">${meetingUrl}</a></p>`
@@ -805,6 +845,239 @@ function createSarvamWS(
   return ws;
 }
 
+// ── Deepgram path ────────────────────────────────────────────
+//
+// Deepgram streams *interim* (mutable) and *final* transcripts on a
+// short cadence — the Google-Meet-style behaviour we want.
+//
+// We model it onto the same aggregator that Sarvam uses:
+//   - interim message → temporarily set aggregator.text = committed + " " + interim
+//                       and broadcastInterimTranscript (UI replaces by id)
+//   - final  message  → commit phrase to aggregator, run paragraph rules
+//   - utteranceEnd    → flush whole aggregator as a permanent segment
+//
+// `committedText` is the running prefix the user has actually finished saying;
+// the live interim is appended on top without ever being persisted.
+function ingestDeepgramInterim(
+  meetingId: string,
+  socketId: string,
+  speakerName: string,
+  speakerImage: string | null,
+  partialText: string,
+  languageCode: string | null,
+) {
+  const session = transcriptionSessions.get(meetingId);
+  if (!session || !session.active) return;
+
+  const spEntry = session.speakers.get(socketId);
+  if (!spEntry) return;
+
+  const elapsed = getElapsedMs(meetingRecordingClock, meetingId);
+  const agendaItemId = activeAgendaItems.get(meetingId) || null;
+  const committed = (spEntry.streamBuffer || "").trim();
+
+  // If aggregator is on a different speaker, flush them before starting ours.
+  let agg = session.aggregator as TranscriptAgg | null;
+  if (agg && agg.speaker !== speakerName) {
+    flushAggToClients(meetingId, agg, session);
+    clearStreamBuffersForSpeaker(session, agg.speaker);
+    agg = null;
+  }
+
+  if (!agg) {
+    session.aggregator = {
+      speaker: speakerName,
+      speakerImage,
+      text: committed ? `${committed} ${partialText}`.trim() : partialText,
+      segmentStartElapsedMs: elapsed,
+      agendaItemId,
+      languageCode,
+    };
+  } else {
+    agg.text = committed ? `${committed} ${partialText}`.trim() : partialText;
+    agg.languageCode = languageCode || agg.languageCode;
+    agg.agendaItemId = agendaItemId ?? agg.agendaItemId;
+    session.aggregator = agg;
+  }
+
+  // Don't run paragraph rules on interims — we don't want to persist a
+  // half-finished sentence. Just stream the live UI update.
+  broadcastInterimTranscript(meetingId, session);
+}
+
+function ingestDeepgramFinal(
+  meetingId: string,
+  socketId: string,
+  speakerName: string,
+  speakerImage: string | null,
+  finalText: string,
+  languageCode: string | null,
+  utteranceEnd: boolean,
+) {
+  const session = transcriptionSessions.get(meetingId);
+  if (!session || !session.active) return;
+
+  const spEntry = session.speakers.get(socketId);
+  if (!spEntry) return;
+
+  const elapsed = getElapsedMs(meetingRecordingClock, meetingId);
+  const agendaItemId = activeAgendaItems.get(meetingId) || null;
+
+  if (finalText) {
+    const prevCommitted = (spEntry.streamBuffer || "").trim();
+    const nextCommitted = prevCommitted
+      ? `${prevCommitted} ${finalText}`.trim()
+      : finalText;
+    setStreamBuffersForSpeaker(session, speakerName, nextCommitted);
+
+    let agg = session.aggregator as TranscriptAgg | null;
+    if (agg && agg.speaker !== speakerName) {
+      flushAggToClients(meetingId, agg, session);
+      clearStreamBuffersForSpeaker(session, agg.speaker);
+      agg = null;
+    }
+    if (!agg) {
+      session.aggregator = {
+        speaker: speakerName,
+        speakerImage,
+        text: nextCommitted,
+        segmentStartElapsedMs: elapsed,
+        agendaItemId,
+        languageCode,
+      };
+    } else {
+      agg.text = nextCommitted;
+      agg.languageCode = languageCode || agg.languageCode;
+      agg.agendaItemId = agendaItemId ?? agg.agendaItemId;
+      session.aggregator = agg;
+    }
+    applyParagraphRules(meetingId, session);
+    broadcastInterimTranscript(meetingId, session);
+  }
+
+  if (utteranceEnd) {
+    flushSessionAggregator(meetingId, session);
+    clearStreamBuffersForSpeaker(session, speakerName);
+  }
+}
+
+// ── Provider-agnostic speaker session ────────────────────────
+//
+// Returns whatever the speakers map needs to (a) check liveness, (b) ingest
+// audio chunks, (c) close the upstream WS on disconnect/stop.
+//
+// Selecting a provider:
+//   STT_PROVIDER=deepgram  →  Deepgram Nova-3 (recommended, fastest)
+//   STT_PROVIDER=sarvam    →  Legacy Sarvam saaras:v3 (slow but multilingual)
+//   unset                  →  defaults to sarvam if SARVAM_API_KEY is set,
+//                             else deepgram.
+type SpeakerStt = {
+  ws: WebSocket;
+  // Accept the same base64-PCM string the client already sends.
+  sendAudio: (base64Pcm: string) => void;
+  close: () => void;
+  provider: "sarvam" | "deepgram";
+};
+
+function pickSttProvider(): "sarvam" | "deepgram" {
+  const explicit = (process.env.STT_PROVIDER || "").toLowerCase();
+  if (explicit === "deepgram" || explicit === "sarvam") return explicit;
+  if (process.env.DEEPGRAM_API_KEY) return "deepgram";
+  return "sarvam";
+}
+
+function createSpeakerStt(
+  meetingId: string,
+  socketId: string,
+  speakerName: string,
+  speakerImage: string | null,
+): SpeakerStt | null {
+  const provider = pickSttProvider();
+
+  if (provider === "deepgram") {
+    const adapter = createDeepgramWS({
+      apiKey: process.env.DEEPGRAM_API_KEY || "",
+      model: process.env.DEEPGRAM_MODEL || "nova-3",
+      // Set DEEPGRAM_LANGUAGE="" or "multi" for multilingual; "en-US" is
+      // fastest + most accurate when you know it's mostly English.
+      language:
+        process.env.DEEPGRAM_LANGUAGE === undefined
+          ? "en-US"
+          : process.env.DEEPGRAM_LANGUAGE || null,
+      endpointingMs: Number(process.env.DEEPGRAM_ENDPOINTING_MS || 300),
+      utteranceEndMs: Number(process.env.DEEPGRAM_UTTERANCE_END_MS || 1000),
+      onEvent: (ev) => {
+        if (ev.kind === "interim") {
+          ingestDeepgramInterim(
+            meetingId,
+            socketId,
+            speakerName,
+            speakerImage,
+            ev.transcript,
+            ev.languageCode,
+          );
+        } else if (ev.kind === "final") {
+          ingestDeepgramFinal(
+            meetingId,
+            socketId,
+            speakerName,
+            speakerImage,
+            ev.transcript,
+            ev.languageCode,
+            ev.utteranceEnd,
+          );
+        } else if (ev.kind === "error") {
+          console.error(`Deepgram error [${speakerName}]:`, ev.message);
+        } else if (ev.kind === "close") {
+          console.log(
+            `Deepgram WS closed for [${speakerName}] code=${ev.code} reason=${ev.reason}`,
+          );
+        }
+      },
+    });
+    if (!adapter) return null;
+    adapter.ws.on("open", () =>
+      console.log(
+        `Deepgram WS open for [${speakerName}] in meeting ${meetingId}`,
+      ),
+    );
+    return {
+      ws: adapter.ws,
+      provider: "deepgram",
+      sendAudio: (b64: string) => {
+        // Decode base64 PCM16 → Buffer → ws binary frame.
+        try {
+          adapter.sendPcm16(Buffer.from(b64, "base64"));
+        } catch {}
+      },
+      close: () => adapter.close(),
+    };
+  }
+
+  // Sarvam (legacy)
+  const ws = createSarvamWS(meetingId, socketId, speakerName, speakerImage);
+  if (!ws) return null;
+  return {
+    ws,
+    provider: "sarvam",
+    sendAudio: (b64: string) => {
+      if (ws.readyState !== WebSocket.OPEN) return;
+      try {
+        ws.send(
+          JSON.stringify({
+            audio: { data: b64, sample_rate: "16000", encoding: "audio/wav" },
+          }),
+        );
+      } catch {}
+    },
+    close: () => {
+      try {
+        ws.close();
+      } catch {}
+    },
+  };
+}
+
 // ── Socket.io Cluster Adapter (Redis) ────────────────────────
 export let pubClient: ReturnType<typeof createClient> | null = null;
 
@@ -830,7 +1103,11 @@ io.on("connection", (socket: any) => {
   async function resolveMeetingForChatPin(meetingIdParam: string) {
     if (usingMongoFlag && Meeting) {
       return Meeting.findOne({
-        $or: [{ _id: meetingIdParam }, { shortId: meetingIdParam }],
+        $or: [
+          { _id: meetingIdParam },
+          { id: meetingIdParam },
+          { shortId: meetingIdParam },
+        ],
       })
         .select("_id hostId")
         .lean();
@@ -838,7 +1115,7 @@ io.on("connection", (socket: any) => {
     const m = inMemoryMeetings.find(
       (mm: any) =>
         String(mm.id || mm._id) === String(meetingIdParam) ||
-        String(mm.shortId) === String(meetingIdParam),
+        String(mm.shortId ?? "") === String(meetingIdParam),
     );
     if (!m) return null;
     return { _id: m.id || m._id, hostId: m.hostId };
@@ -1016,7 +1293,11 @@ io.on("connection", (socket: any) => {
       if (agg && sp && sp.name === agg.speaker) {
         flushSessionAggregator(meetingId, session);
       }
-      if (sp.ws && sp.ws.readyState === WebSocket.OPEN) sp.ws.close();
+      if (typeof sp.closeStt === "function") {
+        sp.closeStt();
+      } else if (sp.ws && sp.ws.readyState === WebSocket.OPEN) {
+        sp.ws.close();
+      }
       session.speakers.delete(socket.id);
     }
   });
@@ -1030,9 +1311,12 @@ io.on("connection", (socket: any) => {
     resumeClock(meetingRecordingClock, meetingId);
     const speakers = new Map<string, any>();
     for (const [sid, info] of room.entries()) {
-      const ws = createSarvamWS(meetingId, sid, info.name, info.profileImage);
+      const stt = createSpeakerStt(meetingId, sid, info.name, info.profileImage);
       speakers.set(sid, {
-        ws,
+        ws: stt?.ws || null,
+        sendAudio: stt?.sendAudio,
+        closeStt: stt?.close,
+        provider: stt?.provider,
         name: info.name,
         image: info.profileImage,
         streamBuffer: "",
@@ -1053,7 +1337,11 @@ io.on("connection", (socket: any) => {
     if (session) {
       flushSessionAggregator(meetingId, session);
       for (const [, sp] of session.speakers) {
-        if (sp.ws && sp.ws.readyState === WebSocket.OPEN) sp.ws.close();
+        if (typeof sp.closeStt === "function") {
+          sp.closeStt();
+        } else if (sp.ws && sp.ws.readyState === WebSocket.OPEN) {
+          sp.ws.close();
+        }
       }
       session.active = false;
       session.speakers.clear();
@@ -1069,6 +1357,11 @@ io.on("connection", (socket: any) => {
     const speaker = session.speakers.get(socket.id);
     if (!speaker || !speaker.ws || speaker.ws.readyState !== WebSocket.OPEN)
       return;
+    if (typeof speaker.sendAudio === "function") {
+      speaker.sendAudio(data);
+      return;
+    }
+    // Legacy fallback (should not hit when start_transcription wired correctly)
     try {
       speaker.ws.send(
         JSON.stringify({
@@ -1560,6 +1853,15 @@ io.on("connection", (socket: any) => {
                 _id: notif._id,
                 type: notif.type,
                 meetingId,
+                inviteId:
+                  inviteSegmentForShareUrl(meeting.id)
+                  ?? inviteSegmentForShareUrl(meeting.shortId),
+                meetingModality: meeting.modality,
+                meetingScheduledDate:
+                  meeting.confirmedDate || meeting.date,
+                meetingScheduledTime:
+                  meeting.confirmedTime || meeting.time,
+                meetingStatus: meeting.status,
                 message: notif.message,
                 read: false,
                 createdAt: notif.createdAt,
@@ -1700,7 +2002,11 @@ io.on("connection", (socket: any) => {
       if (session) {
         flushSessionAggregator(meetingId, session);
         for (const [, sp] of session.speakers) {
-          if (sp.ws && sp.ws.readyState === WebSocket.OPEN) sp.ws.close();
+          if (typeof sp.closeStt === "function") {
+            sp.closeStt();
+          } else if (sp.ws && sp.ws.readyState === WebSocket.OPEN) {
+            sp.ws.close();
+          }
         }
         transcriptionSessions.delete(meetingId);
       }
@@ -1803,7 +2109,11 @@ io.on("connection", (socket: any) => {
         if (agg && sp && sp.name === agg.speaker) {
           flushSessionAggregator(meetingId, session);
         }
-        if (sp.ws && sp.ws.readyState === WebSocket.OPEN) sp.ws.close();
+        if (typeof sp.closeStt === "function") {
+          sp.closeStt();
+        } else if (sp.ws && sp.ws.readyState === WebSocket.OPEN) {
+          sp.ws.close();
+        }
         session.speakers.delete(socketId);
       }
 
@@ -1812,7 +2122,11 @@ io.on("connection", (socket: any) => {
         if (session) {
           flushSessionAggregator(meetingId, session);
           for (const [, sp] of session.speakers) {
-            if (sp.ws && sp.ws.readyState === WebSocket.OPEN) sp.ws.close();
+            if (typeof sp.closeStt === "function") {
+              sp.closeStt();
+            } else if (sp.ws && sp.ws.readyState === WebSocket.OPEN) {
+              sp.ws.close();
+            }
           }
           transcriptionSessions.delete(meetingId);
         }
@@ -1863,7 +2177,12 @@ cron.schedule("0 * * * *", async () => {
     for (const meeting of meetings) {
       try {
         const brief = await generateBrief(meeting, callAISummarize);
-        const html = formatBriefEmail(brief, meeting.shortId || meeting._id, CLIENT_URL);
+        const html = formatBriefEmail(
+          brief,
+          inviteSegmentForShareUrl(meeting.id)
+          ?? inviteSegmentForShareUrl(meeting.shortId),
+          CLIENT_URL,
+        );
         const transport = await getMailTransporter();
 
         for (const p of meeting.participants) {

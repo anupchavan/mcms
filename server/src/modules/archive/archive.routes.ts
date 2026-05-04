@@ -7,25 +7,43 @@ import MeetingSummary = require('../meeting/meeting-summary.schema');
 import Minutes = require('../minutes/minutes.schema');
 import ResourcePin = require('../pin/pin.schema');
 import Transcript = require('../transcript/transcript.schema');
+import ChatMessage = require('../chat/chat.schema');
+import Poll = require('../poll/poll.schema');
+import Notification = require('../notification/notification.schema');
+import Attendance = require('../attendance/attendance.schema');
+import Rubric = require('../rubric/rubric.schema');
+import RSVP = require('../rsvp/rsvp.schema');
 import { sanitizeTextSearch, escapeRegex } from '../../utils/searchHelpers';
-import { getCache, setCache } from '../../utils/cache';
-import { isShortId } from '../../utils/shortId';
+import { getCache, setCache, invalidateArchiveListCache } from '../../utils/cache';
+import { isMeetingInviteSegment } from '../../utils/meetingInviteId';
 
 export = function ({ User, Meeting, protect, usingMongo, callAISummarize, callAIMeetingSummary, callAIExtractActions, inMemoryMeetingSummaries, inMemoryMeetings, inMemoryAgendas, inMemoryTranscripts, inMemoryActionItems }: any) {
 
-	/**
-	 * Accepts either a meeting `shortId` (`xxxx-xxxx`) or an ObjectId and
-	 * returns the canonical Mongo `_id` string. Returns null when no match.
-	 */
+	/** Public invite segment (`xxxx-xxxx`) or ObjectId → canonical Mongo `_id` string */
 	async function resolveMeetingId(maybeId: string): Promise<string | null> {
 		if (!maybeId) return null;
-		if (isShortId(maybeId)) {
-			const m = await Meeting.findOne({ shortId: maybeId }).select('_id').lean();
+		if (isMeetingInviteSegment(maybeId)) {
+			const m = await Meeting.findOne({ $or: [{ id: maybeId }, { shortId: maybeId }] })
+				.select('_id').lean();
 			return m ? m._id.toString() : null;
 		}
 		if (mongoose.isValidObjectId(maybeId)) return maybeId;
-		const m = await Meeting.findOne({ shortId: maybeId }).select('_id').lean();
+		const m = await Meeting.findOne({ $or: [{ id: maybeId }, { shortId: maybeId }] })
+			.select('_id').lean();
 		return m ? m._id.toString() : null;
+	}
+
+	async function assertCompletedHost(meetingIdParam: string, userId: string) {
+		const mid = await resolveMeetingId(meetingIdParam);
+		if (!mid) return { error: { status: 404, message: 'Meeting not found' } as const };
+		const meeting = await Meeting.findById(mid).select('_id hostId status title');
+		if (!meeting || meeting.status !== 'completed') {
+			return { error: { status: 404, message: 'Meeting not found or not archived' } as const };
+		}
+		if (String(meeting.hostId) !== String(userId)) {
+			return { error: { status: 403, message: 'Only the host can modify this meeting' } as const };
+		}
+		return { meeting, mid };
 	}
 
 	async function meetingIdsMatchingTextSearch(qRaw: string): Promise<mongoose.Types.ObjectId[]> {
@@ -121,24 +139,33 @@ export = function ({ User, Meeting, protect, usingMongo, callAISummarize, callAI
 
 	router.get('/filters', protect, async (req: any, res: any) => {
 		try {
-			if (!usingMongo() || !Meeting) return res.json({ tags: [], people: [] });
+			if (!usingMongo() || !Meeting) return res.json({ tags: [], tagColors: {}, people: [] });
 			const meetings = await Meeting.find({ status: 'completed' })
-				.populate('participants', 'name email')
-				.populate('hostId', 'name email');
+				.populate('participants', 'name email profileImage')
+				.populate('hostId', 'name email profileImage');
 			
 			const tagSet = new Set<string>();
+			const tagColorMap = new Map<string, string>();
 			const peopleMap = new Map<string, any>();
 
 			meetings.forEach((m: any) => {
-				(m.tags || []).forEach((t: string) => tagSet.add(t));
-				if (m.hostId) peopleMap.set(m.hostId._id.toString(), { _id: m.hostId._id, name: m.hostId.name, email: m.hostId.email });
+				const tColors: Record<string, string> = Object.fromEntries((m.tagColors || new Map()));
+				(m.tags || []).forEach((t: string) => {
+					tagSet.add(t);
+					// Keep first color found for each tag (earlier meetings win)
+					if (tColors[t] && !tagColorMap.has(t)) {
+						tagColorMap.set(t, tColors[t]);
+					}
+				});
+				if (m.hostId) peopleMap.set(m.hostId._id.toString(), { _id: m.hostId._id, name: m.hostId.name, email: m.hostId.email, profileImage: m.hostId.profileImage });
 				(m.participants || []).forEach((p: any) => {
-					if (p && p._id) peopleMap.set(p._id.toString(), { _id: p._id, name: p.name, email: p.email });
+					if (p && p._id) peopleMap.set(p._id.toString(), { _id: p._id, name: p.name, email: p.email, profileImage: p.profileImage });
 				});
 			});
 
 			res.json({
 				tags: Array.from(tagSet),
+				tagColors: Object.fromEntries(tagColorMap),
 				people: Array.from(peopleMap.values())
 			});
 		} catch (error: any) {
@@ -148,11 +175,29 @@ export = function ({ User, Meeting, protect, usingMongo, callAISummarize, callAI
 
 	router.get('/', protect, async (req: any, res: any) => {
 		try {
-			const { q, agendaTitle, dateFrom, dateTo, limit, tags, people } = req.query;
+			const { q, agendaTitle, dateFrom, dateTo, tags, people } = req.query;
 
-			// Check cache for top 5 recent archives
-			const isTop5Request = limit === '5' && !q && !agendaTitle && !dateFrom && !dateTo && !tags && !people;
-			const cacheKey = 'archive:top5';
+			const pageRaw = parseInt(String(req.query.page ?? '1'), 10);
+			const page = Number.isFinite(pageRaw) && pageRaw >= 1 ? pageRaw : 1;
+			const limitParsed = parseInt(String(req.query.limit ?? '10'), 10);
+			const allowedLimits = [5, 10, 15, 20];
+			const limitFinal = allowedLimits.includes(limitParsed) ? limitParsed : 10;
+			const skip = (page - 1) * limitFinal;
+
+			const listEnvelope = (meetings: any[], total: number) =>
+				res.json({ meetings, total, page, limit: limitFinal });
+
+			// Cached first page, default filters — limit must be exactly 5
+			const isTop5Request =
+				limitFinal === 5 &&
+				page === 1 &&
+				!q &&
+				!agendaTitle &&
+				!dateFrom &&
+				!dateTo &&
+				!tags &&
+				!people;
+			const cacheKey = 'archive:top5:v2';
 
 			if (isTop5Request) {
 				const cachedData = await getCache(cacheKey);
@@ -166,7 +211,7 @@ export = function ({ User, Meeting, protect, usingMongo, callAISummarize, callAI
 				// In-memory fallback
 				const { q, dateFrom, dateTo } = req.query;
 				let results = inMemoryMeetings.filter((m: any) => m.status === 'completed');
-				
+
 				if (dateFrom || dateTo) {
 					results = results.filter((m: any) => {
 						const mDate = m.confirmedDate || m.date;
@@ -179,22 +224,36 @@ export = function ({ User, Meeting, protect, usingMongo, callAISummarize, callAI
 
 				if (q && String(q).trim().length >= 2) {
 					const qt = String(q).toLowerCase();
-					results = results.filter((m: any) => 
-						m.title?.toLowerCase().includes(qt) || 
-						m.host?.toLowerCase().includes(qt)
+					results = results.filter(
+						(m: any) =>
+							m.title?.toLowerCase().includes(qt) || m.host?.toLowerCase().includes(qt),
 					);
 				}
 
-				return res.json(results.map((m: any) => ({
-					id: m.id || m._id, shortId: m.shortId,
-					title: m.title, modality: m.modality,
-					date: m.confirmedDate || m.date,
-					time: m.confirmedTime || m.time,
-					host: m.host, hostId: m.hostId,
-					participants: m.participants || [],
-					matchedTranscripts: [],
-					matchedAgendaItems: [],
-				})));
+				results.sort((a: any, b: any) => {
+					const ad = new Date(a.confirmedDate || a.date || 0).getTime();
+					const bd = new Date(b.confirmedDate || b.date || 0).getTime();
+					return bd - ad;
+				});
+
+				const totalMem = results.length;
+				const sliced = results.slice(skip, skip + limitFinal);
+				return listEnvelope(
+					sliced.map((m: any) => ({
+						_id: m.id || m._id,
+						id: m.id ?? m.shortId ?? m._id?.toString?.(),
+						title: m.title,
+						modality: m.modality,
+						date: m.confirmedDate || m.date,
+						time: m.confirmedTime || m.time,
+						host: m.host,
+						hostId: m.hostId,
+						participants: m.participants || [],
+						matchedTranscripts: [],
+						matchedAgendaItems: [],
+					})),
+					totalMem,
+				);
 			}
 
 			const meetingFilter: any = { status: 'completed' };
@@ -219,53 +278,58 @@ export = function ({ User, Meeting, protect, usingMongo, callAISummarize, callAI
 			if (tags) {
 				const tagArray = String(tags).split(',').map(t => t.trim()).filter(t => t);
 				if (tagArray.length > 0) {
-					meetingFilter.tags = { $in: tagArray };
+					meetingFilter.tags = { $all: tagArray };
 				}
 			}
 
-			if (people) {
-				const peopleArray = String(people).split(',').map(p => p.trim()).filter(p => p);
-				if (peopleArray.length > 0) {
-					andConditions.push({
-						$or: [
-							{ hostId: { $in: peopleArray } },
-							{ participants: { $in: peopleArray } }
-						]
-					});
-				}
+		if (people) {
+			const peopleArray = String(people).split(',').map(p => p.trim()).filter(p => p);
+			// Each selected person must individually be present (as host OR participant).
+			// One $and condition per person enforces ALL-of, not ANY-of.
+			for (const personId of peopleArray) {
+				andConditions.push({
+					$or: [
+						{ hostId: personId },
+						{ participants: personId }
+					]
+				});
 			}
+		}
 
 			let restrictIds: mongoose.Types.ObjectId[] | null = null;
 
 			if (q && String(q).trim().length >= 2) {
 				restrictIds = await meetingIdsMatchingTextSearch(String(q));
-				if (restrictIds.length === 0) return res.json([]);
+				if (restrictIds.length === 0) return listEnvelope([], 0);
 			}
 
 			if (agendaTitle && String(agendaTitle).trim().length >= 1) {
 				const agendaIds = await meetingIdsMatchingAgendaTitle(String(agendaTitle));
-				if (agendaIds.length === 0) return res.json([]);
+				if (agendaIds.length === 0) return listEnvelope([], 0);
 				restrictIds = restrictIds
 					? restrictIds.filter((id) => agendaIds.some((a) => a.equals(id)))
 					: agendaIds;
-				if (restrictIds.length === 0) return res.json([]);
+				if (restrictIds.length === 0) return listEnvelope([], 0);
 			}
 
 			if (restrictIds) {
 				meetingFilter._id = { $in: restrictIds };
 			}
 
-			if (andConditions.length > 0) {
-				meetingFilter.$and = andConditions;
-			}
+		if (andConditions.length > 0) {
+			meetingFilter.$and = andConditions;
+		}
+
+		const total = await Meeting.countDocuments(meetingFilter);
 
 			const meetings = await Meeting.find(meetingFilter)
 				.sort({ createdAt: -1 })
-				.populate('participants', 'name email')
-				.limit(isTop5Request ? 5 : 50);
+				.skip(skip)
+				.limit(limitFinal)
+				.populate('participants', 'name email');
 
-			const results = [];
-			for (const m of meetings) {
+		const results = [];
+		for (const m of meetings) {
 				const matchedTranscripts = q && String(q).trim().length >= 2
 					? await transcriptSnippetsForMeeting(m._id, String(q))
 					: [];
@@ -286,7 +350,7 @@ export = function ({ User, Meeting, protect, usingMongo, callAISummarize, callAI
 				if (!agendaMatch) continue;
 
 				results.push({
-					id: m._id, shortId: m.shortId, title: m.title, modality: m.modality,
+					_id: m._id, id: (m as any).id ?? (m as any).shortId, title: m.title, modality: m.modality,
 					date: m.confirmedDate || m.date,
 					time: m.confirmedTime || m.time,
 					host: m.host, hostId: m.hostId,
@@ -300,11 +364,106 @@ export = function ({ User, Meeting, protect, usingMongo, callAISummarize, callAI
 				});
 			}
 
+			const payload = { meetings: results, total, page, limit: limitFinal };
+
 			if (isTop5Request) {
-				await setCache(cacheKey, JSON.stringify(results), 300); // 5 minutes TTL
+				await setCache(cacheKey, JSON.stringify(payload), 300); // 5 minutes TTL
 			}
 
-			res.json(results);
+			res.json(payload);
+		} catch (error: any) {
+			res.status(500).json({ message: 'Server error', error: error.message });
+		}
+	});
+
+	/** Host-only: rename completed meeting title (archives list + detail). */
+	router.patch('/meeting/:meetingId/title', protect, async (req: any, res: any) => {
+		try {
+			if (!usingMongo() || !Meeting) {
+				return res.status(501).json({ message: 'Rename is not available in this environment' });
+			}
+			const title = String(req.body?.title ?? '').trim();
+			if (!title) return res.status(400).json({ message: 'Title is required' });
+			if (title.length > 100) return res.status(400).json({ message: 'Title must be at most 100 characters' });
+
+			const got = await assertCompletedHost(req.params.meetingId, req.user.id);
+			if ('error' in got) return res.status(got.error.status).json({ message: got.error.message });
+
+			await Meeting.findByIdAndUpdate(got.mid, { $set: { title } });
+			await invalidateArchiveListCache();
+			return res.json({ title });
+		} catch (error: any) {
+			res.status(500).json({ message: 'Server error', error: error.message });
+		}
+	});
+
+	/** Host-only: delete archived meeting and related data. */
+	router.delete('/meeting/:meetingId', protect, async (req: any, res: any) => {
+		try {
+			if (!usingMongo() || !Meeting) {
+				return res.status(501).json({ message: 'Delete is not available in this environment' });
+			}
+			const got = await assertCompletedHost(req.params.meetingId, req.user.id);
+			if ('error' in got) return res.status(got.error.status).json({ message: got.error.message });
+
+			const mid = got.mid;
+			const midOid = new mongoose.Types.ObjectId(String(mid));
+
+			await Promise.all([
+				Transcript.deleteMany({ meetingId: midOid }),
+				Agenda.deleteOne({ meetingId: midOid }),
+				ActionItem.deleteMany({ meetingId: midOid }),
+				MeetingSummary.deleteMany({ meetingId: midOid }),
+				Minutes.deleteMany({ meetingId: midOid }),
+				ResourcePin.deleteMany({ meetingId: midOid }),
+				ChatMessage.deleteMany({ meetingId: midOid }),
+				Notification.deleteMany({ meetingId: midOid }),
+				Attendance.deleteMany({ meetingId: midOid }),
+				Rubric.deleteMany({ meetingId: midOid }),
+				RSVP.deleteMany({ meetingId: midOid }),
+			]);
+
+			const mdoc = await Meeting.findById(mid).select('pollId').lean();
+			if (mdoc?.pollId && Poll) {
+				await Poll.findByIdAndDelete(mdoc.pollId);
+			}
+
+			if (User) {
+				await User.updateMany({}, { $pull: { archivePinnedMeetingIds: midOid } });
+			}
+
+			await Meeting.findByIdAndDelete(mid);
+			await invalidateArchiveListCache();
+			return res.json({ ok: true });
+		} catch (error: any) {
+			res.status(500).json({ message: 'Server error', error: error.message });
+		}
+	});
+
+	/** Host-only: replace the tags array on a meeting. */
+	router.patch('/:meetingId/tags', protect, async (req: any, res: any) => {
+		try {
+			if (!usingMongo() || !Meeting) return res.status(501).json({ message: 'Not available' });
+			const resolvedId = await resolveMeetingId(req.params.meetingId);
+			if (!resolvedId) return res.status(404).json({ message: 'Meeting not found' });
+			const meeting = await Meeting.findById(resolvedId).select('_id hostId tags');
+			if (!meeting) return res.status(404).json({ message: 'Meeting not found' });
+			const userId = req.user?._id ?? req.user?.id;
+			if (String(meeting.hostId) !== String(userId)) {
+				return res.status(403).json({ message: 'Only the host can edit tags' });
+			}
+			const tags: string[] = (Array.isArray(req.body.tags) ? req.body.tags : [])
+				.map((t: unknown) => String(t).trim())
+				.filter((t: string) => t.length > 0 && t.length <= 50);
+			const rawColors = req.body.tagColors && typeof req.body.tagColors === 'object' ? req.body.tagColors : {};
+			const tagColors: Record<string, string> = {};
+			for (const tag of tags) {
+				if (rawColors[tag] && typeof rawColors[tag] === 'string') {
+					tagColors[tag] = rawColors[tag];
+				}
+			}
+			await Meeting.findByIdAndUpdate(resolvedId, { tags, tagColors });
+			res.json({ tags, tagColors });
 		} catch (error: any) {
 			res.status(500).json({ message: 'Server error', error: error.message });
 		}
@@ -719,7 +878,8 @@ export = function ({ User, Meeting, protect, usingMongo, callAISummarize, callAI
 		try {
 			if (!usingMongo()) {
 				const meeting = inMemoryMeetings.find((m: any) =>
-					(m.id || m._id) === req.params.meetingId || m.shortId === req.params.meetingId,
+					String(m.id || m._id) === String(req.params.meetingId) ||
+					String(m.shortId ?? '') === String(req.params.meetingId),
 				);
 				if (!meeting) return res.status(404).json({ message: 'Meeting not found' });
 
@@ -753,7 +913,8 @@ export = function ({ User, Meeting, protect, usingMongo, callAISummarize, callAI
 
 				return res.json({
 					meeting: {
-						id: meeting.id || meeting._id, title: meeting.title, modality: meeting.modality,
+						_id: meeting._id ?? meeting.id, id: meeting.id ?? meeting.shortId ?? meeting._id,
+						title: meeting.title, modality: meeting.modality,
 						date: meeting.confirmedDate || meeting.date,
 						time: meeting.confirmedTime || meeting.time,
 						host: meeting.host, participants: meeting.participants || [],
@@ -778,8 +939,10 @@ export = function ({ User, Meeting, protect, usingMongo, callAISummarize, callAI
 
 			const resolvedId = await resolveMeetingId(req.params.meetingId);
 			if (!resolvedId) return res.status(404).json({ message: 'Meeting not found' });
-			const meeting = await Meeting.findById(resolvedId).populate('participants', 'name email');
-			if (!meeting) return res.status(404).json({ message: 'Meeting not found' });
+		const meeting = await Meeting.findById(resolvedId)
+			.populate('participants', 'name email profileImage')
+			.populate('hostId', 'name email profileImage');
+		if (!meeting) return res.status(404).json({ message: 'Meeting not found' });
 
 			const agenda = await Agenda.findOne({ meetingId: resolvedId });
 			const transcripts = await Transcript.find({ meetingId: resolvedId }).sort({ startTime: 1, createdAt: 1 });
@@ -803,14 +966,19 @@ export = function ({ User, Meeting, protect, usingMongo, callAISummarize, callAI
 				transcriptFlat.push({ ...seg, agendaKey: key });
 			}
 
-			res.json({
-				meeting: {
-					id: meeting._id, shortId: meeting.shortId,
-					title: meeting.title, modality: meeting.modality,
-					date: meeting.confirmedDate || meeting.date,
-					time: meeting.confirmedTime || meeting.time,
-					host: meeting.host, participants: meeting.participants,
-				},
+		res.json({
+			meeting: {
+				_id: meeting._id, id: (meeting as any).id ?? (meeting as any).shortId,
+				title: meeting.title, modality: meeting.modality,
+				date: meeting.confirmedDate || meeting.date,
+				time: meeting.confirmedTime || meeting.time,
+				host: meeting.host,
+				hostId: meeting.hostId,
+				description: (meeting as any).description || '',
+				tags: (meeting as any).tags || [],
+				tagColors: Object.fromEntries((meeting as any).tagColors || new Map()),
+				participants: meeting.participants,
+			},
 				agendaItems: agenda ? (agenda as any).items : [],
 				transcriptsByAgenda,
 				transcriptFlat,

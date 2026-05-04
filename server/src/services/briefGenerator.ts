@@ -1,5 +1,6 @@
 import Agenda = require('../modules/agenda/agenda.schema');
 import ActionItem = require('../modules/action-item/action-item.schema');
+import { isMeetingInviteSegment } from '../utils/meetingInviteId';
 
 async function generateBrief(meeting: any, callAISummarize: any) {
     const agenda = await Agenda.findOne({ meetingId: meeting._id });
@@ -52,8 +53,12 @@ async function generateBrief(meeting: any, callAISummarize: any) {
     };
 }
 
-function formatBriefEmail(brief: any, meetingId: any, clientUrl: string) {
-    const agendaLink = `${clientUrl.replace(/\/$/, '')}/meetings/${meetingId}`;
+function formatBriefEmail(brief: any, meetingSlugForUrl: string | null | undefined, clientUrl: string) {
+    const seg =
+        typeof meetingSlugForUrl === 'string' && isMeetingInviteSegment(meetingSlugForUrl.trim())
+            ? meetingSlugForUrl.trim()
+            : null;
+    const agendaLink = seg ? `${clientUrl.replace(/\/$/, '')}/meetings/${seg}` : null;
     return `<!DOCTYPE html>
 <html><head><meta charset="utf-8"></head>
 <body style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;max-width:600px;margin:0 auto;padding:20px;color:#1a1a2e">
@@ -73,9 +78,9 @@ function formatBriefEmail(brief: any, meetingId: any, clientUrl: string) {
     ${brief.aiSummary ? `<h3 style="margin:20px 0 8px;color:#4f46e5">AI Summary</h3>
     <p style="font-size:14px">${JSON.stringify(brief.aiSummary)}</p>` : ''}
 
-    <div style="margin-top:24px;text-align:center">
+    ${agendaLink ? `<div style="margin-top:24px;text-align:center">
       <a href="${agendaLink}" style="display:inline-block;padding:10px 28px;background:#6366f1;color:#fff;text-decoration:none;border-radius:8px;font-weight:600">View Agenda</a>
-    </div>
+    </div>` : '<p style="margin-top:24px;text-align:center;color:#6b7280;font-size:13px">Open Concord and use Archives or search to view this meeting.</p>'}
   </div>
 </body></html>`;
 }

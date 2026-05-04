@@ -50,7 +50,7 @@ export default function LocationMapModal({ address, onClose }: LocationMapModalP
         display: "flex",
         alignItems: "center",
         justifyContent: "center",
-        background: "rgba(0,0,0,0.55)",
+        background: "rgba(var(--flexoki-black-rgb), 0.55)",
         backdropFilter: "blur(4px)",
       }}
       onClick={onClose}
@@ -60,7 +60,7 @@ export default function LocationMapModal({ address, onClose }: LocationMapModalP
         style={{
           background: "var(--bg-secondary)",
           borderRadius: "var(--radius-md, 12px)",
-          boxShadow: "var(--shadow-xl, 0 24px 64px rgba(0,0,0,0.5))",
+          boxShadow: "var(--shadow-xl)",
           border: "1px solid var(--border)",
           width: "min(520px, 92vw)",
           overflow: "hidden",

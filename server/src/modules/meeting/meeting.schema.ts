@@ -1,9 +1,10 @@
 import mongoose from 'mongoose';
 import type { Document } from 'mongoose';
-import { generateUniqueShortId } from '../../utils/shortId';
+import { generateUniqueMeetingInviteSegment } from '../../utils/meetingInviteId';
 
 interface IMeeting extends Document {
-	shortId?: string;
+	/** Public URL segment `xxxx-xxxx` (separate from Mongo `_id`). */
+	id?: string;
 	title: string;
 	modality: string;
 	date?: string;
@@ -22,10 +23,12 @@ interface IMeeting extends Document {
 	isPersonalRoom?: boolean;
 	personalRoomId?: string;
 	tags?: string[];
+	tagColors?: Map<string, string>;
+	description?: string;
 	/** Host-pinned chat message snapshot (live meeting). */
 	pinnedChat?: {
-		messageId: mongoose.Types.ObjectId;
-		senderId: mongoose.Types.ObjectId;
+		messageId: mongoose.Schema.Types.ObjectId;
+		senderId: mongoose.Schema.Types.ObjectId;
 		senderName: string;
 		senderImage: string | null;
 		text: string;
@@ -37,11 +40,10 @@ interface IMeeting extends Document {
 
 const meetingSchema = new mongoose.Schema({
 	/**
-	 * Short URL-friendly identifier (`xxxx-xxxx`). Auto-generated on insert
-	 * via the pre-validate hook below. Used for user-facing links like
-	 * `/meetings/abcd-efgh`. Internal references continue to use `_id`.
+	 * Public meeting id (`abcd-efgh`). Auto-generated on validate.
+	 * Uses schema option `id: false` so Mongoose does not reserve the virtual `id` getter (`_id` hex).
 	 */
-	shortId: { type: String, unique: true, sparse: true, index: true },
+	id: { type: String, unique: true, sparse: true, index: true },
 	title: { type: String, required: true, maxlength: 100 },
 	modality: { type: String, default: 'Online' },
 	date: { type: String },
@@ -60,6 +62,8 @@ const meetingSchema = new mongoose.Schema({
 	isPersonalRoom: { type: Boolean, default: false },
 	personalRoomId: { type: String, default: null },
 	tags: [{ type: String }],
+	tagColors: { type: Map, of: String, default: {} },
+	description: { type: String, default: '' },
 	pinnedChat: {
 		type: new mongoose.Schema(
 			{
@@ -75,14 +79,15 @@ const meetingSchema = new mongoose.Schema({
 		default: null,
 	},
 }, {
-	timestamps: true
+	timestamps: true,
+	id: false,
 });
 
 meetingSchema.pre('validate', async function () {
-	if (!this.shortId) {
+	if (!this.id) {
 		const Self = this.constructor as mongoose.Model<any>;
-		this.shortId = await generateUniqueShortId(async (candidate) => {
-			const existing = await Self.exists({ shortId: candidate });
+		this.id = await generateUniqueMeetingInviteSegment(async (candidate) => {
+			const existing = await Self.exists({ id: candidate });
 			return !!existing;
 		});
 	}
@@ -94,7 +99,7 @@ meetingSchema.index({ status: 1, createdAt: -1 });
 meetingSchema.index({ title: 'text' });
 /** Dashboard counts meetings owned by a user. */
 meetingSchema.index({ hostId: 1 });
-/** Dashboard counts meetings a user participates in. */
+/** Dashboard counts meetings participated in by a user. */
 meetingSchema.index({ participants: 1 });
 
 export = mongoose.model('Meeting', meetingSchema);

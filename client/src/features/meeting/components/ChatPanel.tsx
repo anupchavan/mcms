@@ -36,7 +36,7 @@ interface ChatPanelProps {
 const LinkifyContent = ({ text, isSelf }: { text: string; isSelf?: boolean }) => {
   const urlRegex = /(https?:\/\/[^\s]+)/g;
   const parts = text.split(urlRegex);
-  const linkColor = isSelf ? 'rgba(255,255,255,0.92)' : 'var(--primary)';
+  const linkColor = isSelf ? "rgba(var(--flexoki-paper-rgb), 0.92)" : "var(--primary)";
   return (
     <span style={{ wordBreak: 'break-word' }}>
       {parts.map((part, i) => {
@@ -216,7 +216,7 @@ function PresenceRow({ msg }: { msg: ChatMessage }) {
             overflow: 'hidden',
             flexShrink: 0,
             background: 'var(--primary)',
-            color: '#fff',
+            color: "var(--flexoki-paper)",
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
@@ -629,7 +629,7 @@ const ChatPanel: FC<ChatPanelProps> = ({
               background: canSend
                 ? 'var(--primary)'
                 : 'color-mix(in srgb, var(--text-muted) 22%, var(--bg-elevated))',
-              color: canSend ? '#fff' : 'var(--text-muted)',
+              color: canSend ? "var(--flexoki-paper)" : "var(--text-muted)",
               border: 'none',
               display: 'flex',
               alignItems: 'center',

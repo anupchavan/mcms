@@ -8,11 +8,14 @@ import {
 import QROverlay from './QROverlay';
 import ShortcutTooltip from "../../../shared/components/ShortcutTooltip";
 import { useSocket } from "../../../stores/SocketContext";
+import { pathnameHasMongoMeetingSegment, isMeetingShortSlug } from "../../../utils/meetingSlug";
 
 export interface HostControlsProps {
     meetingId?: string;
     meetingTitle?: string;
     meetingUrl?: string;
+    /** Public invite segment `abcd-efgh` — used for clipboard when present (preferred over stale meetingUrl). */
+    inviteId?: string;
     modality?: string;
     audioEnabled: boolean;
     videoEnabled: boolean;
@@ -39,7 +42,7 @@ export interface HostControlsRef {
 }
 
 const HostControls = forwardRef<HostControlsRef, HostControlsProps>(function HostControls({
-    meetingId, meetingTitle, meetingUrl, modality,
+    meetingId, meetingTitle, meetingUrl, inviteId, modality,
     audioEnabled, videoEnabled, screenSharing,
     onToggleAudio, onToggleVideo, onToggleScreenShare,
     screenShareSystemAudio = false,
@@ -131,20 +134,25 @@ const HostControls = forwardRef<HostControlsRef, HostControlsProps>(function Hos
     }, [socket, meetingId, recording, onMeetingEnded]);
 
     const handleCopyLink = useCallback(() => {
-        if (!meetingId) return;
-        let link = meetingUrl || '';
-        if (!link) {
-            const isPersonal = meetingId.startsWith('personal-');
-            const path = isPersonal
-                ? `/rooms/${meetingId.replace('personal-', '')}`
-                : `/meetings/${meetingId}`;
-            link = `${window.location.origin}${path}`;
+        const basename = typeof import.meta.env.BASE_URL === 'string' ? import.meta.env.BASE_URL.replace(/\/$/, '') : '';
+        const originPrefix = `${window.location.origin}${basename}`;
+
+        const slug = typeof inviteId === 'string' ? inviteId.trim() : '';
+        let link = '';
+        if (slug && isMeetingShortSlug(slug)) {
+            link = `${originPrefix}/meetings/${slug}`;
+        } else if (meetingUrl && !pathnameHasMongoMeetingSegment(meetingUrl)) {
+            link = /^https?:\/\//i.test(meetingUrl) ? meetingUrl : `${originPrefix}${meetingUrl.startsWith('/') ? meetingUrl : `/meetings/${meetingUrl}`}`;
+        } else if (meetingId?.startsWith('personal-')) {
+            link = `${originPrefix}/rooms/${meetingId.replace(/^personal-/, '')}`;
         }
+
+        if (!link) return;
         navigator.clipboard.writeText(link).then(() => {
             setCopied(true);
             setTimeout(() => setCopied(false), 2000);
         });
-    }, [meetingId, meetingUrl]);
+    }, [meetingId, meetingUrl, inviteId]);
 
     return (
         <>
@@ -289,15 +297,15 @@ const HostControls = forwardRef<HostControlsRef, HostControlsProps>(function Hos
                         bottom: '88px',
                         left: '50%',
                         transform: 'translateX(-50%)',
-                        background: 'rgba(220, 38, 38, 0.95)',
-                        color: '#fff',
-                        padding: '10px 18px',
-                        borderRadius: '8px',
-                        fontSize: '13px',
+                        background: "rgba(var(--flexoki-red-400-rgb), 0.95)",
+                        color: "var(--flexoki-paper)",
+                        padding: "10px 18px",
+                        borderRadius: "8px",
+                        fontSize: "13px",
                         fontWeight: 500,
-                        maxWidth: '420px',
-                        textAlign: 'center',
-                        boxShadow: '0 4px 16px rgba(0,0,0,0.3)',
+                        maxWidth: "420px",
+                        textAlign: "center",
+                        boxShadow: "0 4px 16px rgba(var(--flexoki-black-rgb), 0.3)",
                         zIndex: 9999,
                         animation: 'fadeIn 0.2s ease',
                     }}

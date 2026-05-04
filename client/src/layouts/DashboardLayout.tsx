@@ -9,6 +9,7 @@ import { LocationMapModal } from "../features/meeting";
 import useKeyboardShortcuts from "../hooks/useKeyboardShortcuts";
 import { useAuth } from "../stores/AuthContext";
 import { useSocket } from "../stores/SocketContext";
+import { publicMeetingSlug, resolvedInternalMeetingId } from "../utils/meetingSlug";
 
 const VITE_API_URL = import.meta.env.VITE_API_URL;
 const API_BASE = VITE_API_URL || "http://localhost:5001/api";
@@ -16,10 +17,10 @@ const API_BASE = VITE_API_URL || "http://localhost:5001/api";
 const VIEW_PATHS = ["/", "/tasks", "/meeting", "/scheduled", "/archives", "/preferences", "/settings"];
 
 export interface AppMeeting {
-    id: string;
+    /** Mongo document id or primary in-memory meeting key — use for `/api/*` and sockets (not public links). */
     _id?: string;
-    /** Short URL-friendly identifier (`xxxx-xxxx`); used in `/meetings/:id` links. */
-    shortId?: string;
+    /** Public invite segment (`xxxx-xxxx`) used in `/meetings/:slug` URLs when present. */
+    id?: string;
     title: string;
     modality?: "Online" | "Offline" | "Hybrid";
     date?: string;
@@ -153,7 +154,7 @@ export default function DashboardLayout() {
         if (!socket) return;
         const handler = ({ meetingId }: { meetingId: string }) => {
             setMeetings(prev => prev.map(m => (
-                String(m.id || m._id) === String(meetingId) ? { ...m, status: "completed" } : m
+                resolvedInternalMeetingId(m) === String(meetingId) ? { ...m, status: "completed" } : m
             )));
             refreshMeetings();
         };
@@ -174,13 +175,16 @@ export default function DashboardLayout() {
             if (res.ok) {
                 const newMeeting = await res.json();
                 setMeetings(prev => [newMeeting, ...prev]);
-                const linkId = (newMeeting.shortId || newMeeting.id || newMeeting._id)?.toString();
-                if (linkId) navigate(`/meetings/${linkId}`);
+                const linkSlug = publicMeetingSlug(newMeeting);
+                if (linkSlug) navigate(`/meetings/${linkSlug}`);
                 return newMeeting;
             }
         } catch (err) { console.error("Failed to create meeting:", err); }
         return null;
     }, [fetchWithAuth, navigate]);
+
+    const toggleTheme = useCallback(() => setTheme(prev => prev === "dark" ? "light" : "dark"), []);
+    const toggleSidebar = useCallback(() => setSidebarCollapsed(prev => !prev), []);
 
     const toggleFullscreen = useCallback(() => {
         const target = document.querySelector(".meeting-layout");
@@ -197,13 +201,13 @@ export default function DashboardLayout() {
                 else el?.focus();
             },
         },
-        { key: "b", mod: true, allowInInput: true, handler: () => setSidebarCollapsed(prev => !prev) },
+        { key: "b", mod: true, allowInInput: true, handler: toggleSidebar },
         { key: "M", shift: true, handler: () => setShowCreateMeeting(true) },
-        { key: "d", handler: () => setTheme(prev => prev === "dark" ? "light" : "dark") },
+        { key: "d", handler: toggleTheme },
         { key: "f", handler: toggleFullscreen },
         { key: "Escape", allowInInput: true, handler: () => { if (pollMeetingId) setPollMeetingId(null); } },
         ...VIEW_PATHS.map((path, i) => ({ key: String(i + 1), handler: () => navigate(path) })),
-    ], [pollMeetingId, toggleFullscreen, navigate]);
+    ], [pollMeetingId, toggleSidebar, toggleTheme, toggleFullscreen, navigate]);
 
     useKeyboardShortcuts(shortcuts);
 
@@ -227,7 +231,7 @@ export default function DashboardLayout() {
         document.title = `${label} — Concord`;
     }, [location.pathname]);
 
-    const context: DashboardLayoutContext = {
+    const context = useMemo<DashboardLayoutContext>(() => ({
         fetchWithAuth,
         meetings,
         refreshMeetings,
@@ -239,18 +243,21 @@ export default function DashboardLayout() {
         openLocationModal,
         openPoll,
         handleCreateMeeting,
-    };
+    }), [
+        fetchWithAuth, meetings, refreshMeetings, dashboardStats, refreshDashboardStats,
+        myActionItems, refreshMyActionItems, openCreateMeetingModal, openLocationModal,
+        openPoll, handleCreateMeeting,
+    ]);
 
     return (
         <div className="app-container">
             <TopBar
-                streak={dashboardStats?.streak || 0}
                 userName={user?.name || dashboardStats?.user || "User"}
                 onNewMeeting={openCreateMeetingModal}
                 theme={theme}
-                onToggleTheme={() => setTheme(prev => prev === "dark" ? "light" : "dark")}
+                onToggleTheme={toggleTheme}
                 sidebarCollapsed={sidebarCollapsed}
-                onSidebarToggle={() => setSidebarCollapsed(prev => !prev)}
+                onSidebarToggle={toggleSidebar}
                 onLogout={logout}
                 onOpenPoll={openPoll}
                 searchInputRef={searchInputRef}

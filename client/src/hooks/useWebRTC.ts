@@ -22,6 +22,8 @@ export interface PeerState {
     profileImage: string | null;
     stream: MediaStream;
     isScreenShare: boolean;
+    /** When false, mute this `<video>` so mic/system audio is not played twice (camera + screen tiles). */
+    playRemoteAudio?: boolean;
 }
 
 export default function useWebRTC(
@@ -47,23 +49,67 @@ export default function useWebRTC(
     const localTracksRef = useRef<LocalTrack[]>([]);
     useEffect(() => { localTracksRef.current = localTracks; }, [localTracks]);
 
-    const getParticipantStream = useCallback((participant: RemoteParticipant) => {
+    /** One or two tiles per remote participant when they present screen + camera. */
+    const getParticipantVideoTiles = useCallback((participant: RemoteParticipant): PeerState[] => {
         const screenVideoTrack = participant.getTrackPublication(Track.Source.ScreenShare)?.track;
         const cameraVideoTrack = participant.getTrackPublication(Track.Source.Camera)?.track;
         const screenAudioTrack = participant.getTrackPublication(Track.Source.ScreenShareAudio)?.track;
         const microphoneTrack = participant.getTrackPublication(Track.Source.Microphone)?.track;
 
-        const stream = new MediaStream();
-        const activeVideoTrack = screenVideoTrack ?? cameraVideoTrack;
-        const activeAudioTrack = screenVideoTrack ? (screenAudioTrack ?? microphoneTrack) : microphoneTrack;
+        const identity = participant.identity;
+        const name = participant.name || 'User';
+        const hasScreen = !!screenVideoTrack?.mediaStreamTrack;
+        const hasCamera = !!cameraVideoTrack?.mediaStreamTrack;
+        const tiles: PeerState[] = [];
 
-        if (activeVideoTrack?.mediaStreamTrack) stream.addTrack(activeVideoTrack.mediaStreamTrack);
-        if (activeAudioTrack?.mediaStreamTrack) stream.addTrack(activeAudioTrack.mediaStreamTrack);
+        if (hasScreen) {
+            const stream = new MediaStream();
+            stream.addTrack(screenVideoTrack!.mediaStreamTrack!);
+            const audio = screenAudioTrack?.mediaStreamTrack ?? microphoneTrack?.mediaStreamTrack;
+            if (audio) stream.addTrack(audio);
+            tiles.push({
+                socketId: `${identity}__screen`,
+                userId: identity,
+                name,
+                profileImage: null,
+                stream,
+                isScreenShare: true,
+                playRemoteAudio: true,
+            });
+        }
 
-        return {
-            stream,
-            isScreenShare: !!screenVideoTrack,
-        };
+        if (hasCamera) {
+            const stream = new MediaStream();
+            stream.addTrack(cameraVideoTrack!.mediaStreamTrack!);
+            if (!hasScreen && microphoneTrack?.mediaStreamTrack) {
+                stream.addTrack(microphoneTrack.mediaStreamTrack);
+            }
+            tiles.push({
+                socketId: `${identity}__camera`,
+                userId: identity,
+                name,
+                profileImage: null,
+                stream,
+                isScreenShare: false,
+                playRemoteAudio: !hasScreen,
+            });
+        }
+
+        if (!hasScreen && !hasCamera && microphoneTrack?.mediaStreamTrack) {
+            const stream = new MediaStream();
+            stream.addTrack(microphoneTrack.mediaStreamTrack);
+            tiles.push({
+                socketId: `${identity}__camera`,
+                userId: identity,
+                name,
+                profileImage: null,
+                stream,
+                isScreenShare: false,
+                playRemoteAudio: true,
+            });
+        }
+
+        return tiles;
     }, []);
 
     const syncLocalScreenShare = useCallback((activeRoom: Room | null) => {
@@ -106,19 +152,8 @@ export default function useWebRTC(
     }, []);
 
     const peers = useMemo(() => {
-        return Array.from(participants).map((p) => {
-            const { stream, isScreenShare } = getParticipantStream(p);
-
-            return {
-                socketId: p.identity,
-                userId: p.identity,
-                name: p.name || 'User',
-                profileImage: null,
-                stream,
-                isScreenShare,
-            };
-        });
-    }, [getParticipantStream, participants]);
+        return Array.from(participants).flatMap((p) => getParticipantVideoTiles(p));
+    }, [getParticipantVideoTiles, participants]);
 
     const localStream = useMemo(() => {
         const stream = new MediaStream();

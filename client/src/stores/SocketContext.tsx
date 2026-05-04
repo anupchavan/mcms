@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useRef, useState, ReactNode } from 'react';
+import { createContext, useContext, useEffect, useMemo, useRef, useState, ReactNode } from 'react';
 import { io, Socket } from 'socket.io-client';
 import { useAuth } from './AuthContext';
 
@@ -51,8 +51,14 @@ export const SocketProvider = ({ children }: SocketProviderProps) => {
         };
     }, [user?.token]);
 
+    const socketValue = useMemo(
+        () => ({ socket: socketRef.current, connected }),
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+        [connected],
+    );
+
     return (
-        <SocketContext.Provider value={{ socket: socketRef.current, connected }}>
+        <SocketContext.Provider value={socketValue}>
             {children}
         </SocketContext.Provider>
     );

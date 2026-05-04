@@ -5,6 +5,7 @@ import * as chrono from "chrono-node";
 import Icon from "../shared/components/Icon";
 import { Search01Icon, Calendar02Icon, Clock01Icon, Location01Icon, UserIcon } from "@hugeicons/core-free-icons";
 import useDashboardContext from "../hooks/useDashboardContext";
+import { publicMeetingSlug, resolvedInternalMeetingId } from "../utils/meetingSlug";
 
 const MEETING_COMPLETION_BUFFER_MINUTES = 10;
 const DEFAULT_MEETING_DURATION_MINUTES = 30;
@@ -129,19 +130,20 @@ export default function ScheduledMeetingsPage() {
     }, [upcomingMeetings, scheduleSearchQuery]);
 
     const goToMeeting = (meeting: any) => {
-        const id = (meeting.shortId || meeting.id || meeting._id)?.toString();
-        if (!id) return;
-        navigate(`/meetings/${id}`);
+        const slug = publicMeetingSlug(meeting);
+        if (!slug) return;
+        navigate(`/meetings/${slug}`);
     };
 
     return (
-        <div style={{ flex: 1, overflow: "auto" }}>
-            <div className="page-header">
-                <h2 style={{ fontSize: "var(--font-size-title3)", fontWeight: 600, marginBottom: "var(--lk-size-2xs)", letterSpacing: "-0.022em" }}>
-                    Scheduled Meetings
-                </h2>
-            </div>
-            <div className="archive-search-bar" style={{ marginBottom: "1.5rem", marginLeft: "var(--lk-size-md)", marginRight: "var(--lk-size-md)" }}>
+        <div className="page-shell">
+            <header className="page-header">
+                <h2 className="page-header-title">Scheduled Meetings</h2>
+                <p className="page-header-description">
+                    Upcoming sessions you can join — search by title, host, or natural-language dates.
+                </p>
+            </header>
+            <div className="archive-search-bar">
                 <div className="archive-search-input-wrap">
                     <Icon icon={Search01Icon} size={14} className="archive-search-icon" />
                     <input
@@ -155,7 +157,7 @@ export default function ScheduledMeetingsPage() {
             <div className="meeting-list">
                 {filteredMeetings.map(meeting => (
                     <div
-                        key={meeting.id}
+                        key={resolvedInternalMeetingId(meeting) ?? meeting.id}
                         className="meeting-card glass-card"
                         onClick={() => goToMeeting(meeting)}
                     >
@@ -163,7 +165,11 @@ export default function ScheduledMeetingsPage() {
                             <button
                                 className="btn btn-sm btn-primary"
                                 style={{ position: "absolute", top: "var(--lk-size-md)", right: "var(--lk-size-md)" }}
-                                onClick={(e) => { e.stopPropagation(); openPoll(meeting.id); }}
+                                onClick={(e) => {
+                                    e.stopPropagation();
+                                    const pid = resolvedInternalMeetingId(meeting);
+                                    if (pid) openPoll(pid);
+                                }}
                             >
                                 Vote
                             </button>
@@ -189,7 +195,7 @@ export default function ScheduledMeetingsPage() {
                     </div>
                 ))}
                 {filteredMeetings.length === 0 && (
-                    <p style={{ color: "var(--text-muted)", fontSize: "0.875rem", padding: "0 var(--lk-size-md)" }}>
+                    <p className="page-muted-note">
                         {scheduleSearchQuery.trim() ? "No meetings match your search." : "No scheduled meetings."}
                     </p>
                 )}
