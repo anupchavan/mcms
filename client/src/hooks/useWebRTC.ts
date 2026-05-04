@@ -75,6 +75,9 @@ export default function useWebRTC(
         const hasCamera = !!cameraVideoTrack?.mediaStreamTrack;
         const camPub = participant.getTrackPublication(Track.Source.Camera);
         const camMuted = camPub?.isMuted ?? false;
+        // #region agent log
+        console.log('[dbg:tiles] building for', identity, '| metadata:', participant.metadata, '| micTrack:', !!microphoneTrack, '| micMST:', !!microphoneTrack?.mediaStreamTrack, '| camTrack:', !!cameraVideoTrack, '| camMST:', !!cameraVideoTrack?.mediaStreamTrack);
+        // #endregion
         const tiles: PeerState[] = [];
 
         if (hasScreen) {
@@ -96,9 +99,13 @@ export default function useWebRTC(
         if (hasCamera) {
             const stream = new MediaStream();
             stream.addTrack(cameraVideoTrack!.mediaStreamTrack!);
-            if (!hasScreen && microphoneTrack?.mediaStreamTrack) {
-                stream.addTrack(microphoneTrack.mediaStreamTrack);
+            const addAudio = !hasScreen && !!microphoneTrack?.mediaStreamTrack;
+            if (addAudio) {
+                stream.addTrack(microphoneTrack!.mediaStreamTrack!);
             }
+            // #region agent log
+            console.log('[dbg:audio] camera tile for', identity, '| addAudio:', addAudio, '| playRemoteAudio:', !hasScreen, '| streamAudioTracks:', stream.getAudioTracks().length);
+            // #endregion
             tiles.push({
                 socketId: `${identity}__camera`,
                 userId: identity,
@@ -377,8 +384,15 @@ export default function useWebRTC(
         const enabled = !videoEnabled;
         await Promise.all(localTracks.map(async (t) => {
             if (t.kind === Track.Kind.Video) {
+                // #region agent log
+                const trackIdBefore = t.mediaStreamTrack?.id;
+                // #endregion
                 if (enabled) await t.unmute();
                 else await t.mute();
+                // #region agent log
+                const trackIdAfter = t.mediaStreamTrack?.id;
+                console.log('[dbg:toggle-video] enabled:', enabled, '| trackId before:', trackIdBefore, '| trackId after:', trackIdAfter, '| same:', trackIdBefore === trackIdAfter, '| trackEnabled:', t.mediaStreamTrack?.enabled, '| trackState:', t.mediaStreamTrack?.readyState);
+                // #endregion
             }
         }));
         setVideoEnabled(enabled);
