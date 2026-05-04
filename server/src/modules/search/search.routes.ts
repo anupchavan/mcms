@@ -94,8 +94,8 @@ export = function ({ Meeting, protect, usingMongo }: any) {
 					: [];
 
 				results.push({
-					id: m._id,
-					shortId: m.shortId,
+					_id: m._id,
+					id: (m as any).id ?? (m as any).shortId,
 					title: m.title,
 					modality: m.modality,
 					date: m.confirmedDate || m.date,

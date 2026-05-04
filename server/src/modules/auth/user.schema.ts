@@ -25,6 +25,11 @@ const userSchema = new mongoose.Schema({
         unique: true,
         sparse: true,
     },
+    /** Meeting `ObjectId` hex order: first = top of archive pin list (client + search filter). */
+    archivePinnedMeetingIds: {
+        type: [{ type: mongoose.Schema.Types.ObjectId, ref: 'Meeting' }],
+        default: [],
+    },
     createdAt: {
         type: Date,
         default: Date.now,

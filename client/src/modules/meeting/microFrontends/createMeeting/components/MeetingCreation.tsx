@@ -826,7 +826,7 @@ export default function MeetingCreation({
                             <button
                               type="button"
                               onClick={() => { setMapPos(null); setMapCenter([78.123, 17.5947]); setLocation(""); }}
-                              style={{ background: "none", border: "none", cursor: "pointer", color: "var(--accent-rose, #f87171)", fontSize: "0.7rem", padding: "0 3px" }}
+                              style={{ background: "none", border: "none", cursor: "pointer", color: "var(--accent-rose)", fontSize: "0.7rem", padding: "0 3px" }}
                             >
                               Clear
                             </button>
@@ -858,7 +858,7 @@ export default function MeetingCreation({
                       style={{
                         position: "fixed", inset: 0, zIndex: 99999,
                         display: mapExpanded ? "flex" : "none", alignItems: "center", justifyContent: "center",
-                        background: "rgba(0,0,0,0.7)", backdropFilter: "blur(6px)",
+                        background: "rgba(var(--flexoki-black-rgb), 0.7)", backdropFilter: "blur(6px)",
                       }}
                       onClick={() => setMapExpanded(false)}
                     >
@@ -869,7 +869,7 @@ export default function MeetingCreation({
                           borderRadius: "var(--radius-md, 12px)", overflow: "hidden",
                           border: "1px solid var(--border)",
                           display: "flex", flexDirection: "column",
-                          boxShadow: "0 24px 64px rgba(0,0,0,0.5)",
+                          boxShadow: "var(--shadow-xl)",
                           background: "var(--bg-secondary)",
                         }}
                       >

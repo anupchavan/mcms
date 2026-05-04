@@ -1,35 +1,29 @@
 import mongoose from 'mongoose';
-import { isShortId } from '../../utils/shortId';
 
 /**
- * Look up a meeting by either its `shortId` (`xxxx-xxxx`) or its Mongo
- * ObjectId. Used by `GET /api/meetings/:id` and the personal-room lookup so
- * old ObjectId-based links keep working alongside the new short URLs.
+ * Look up a meeting by public `id` (`xxxx-xxxx`) or Mongo `_id`.
+ * Older bookmarks may still use ObjectId-shaped URLs.
  */
-export async function findMeetingByAnyId(Meeting: any, id: string) {
-    if (!id) return null;
-    if (isShortId(id)) {
-        return Meeting.findOne({ shortId: id });
+export async function findMeetingByAnyId(Meeting: any, idParam: string) {
+    if (!idParam) return null;
+    if (mongoose.isValidObjectId(idParam)) {
+        return Meeting.findById(idParam);
     }
-    if (mongoose.isValidObjectId(id)) {
-        return Meeting.findById(id);
-    }
-    // Fall back to shortId for unknown formats — handles future ID schemes
-    // without throwing, while still allowing the caller to 404 cleanly.
-    return Meeting.findOne({ shortId: id });
+    return Meeting.findOne({
+        $or: [{ id: idParam }, { shortId: idParam }],
+    });
 }
 
 /**
  * Variant of `findMeetingByAnyId` that lets the caller chain `populate()`
- * by returning the unevaluated query when possible.
+ * when possible.
  */
-export function meetingQueryByAnyId(Meeting: any, id: string) {
-    if (!id) return null;
-    if (isShortId(id)) {
-        return Meeting.findOne({ shortId: id });
+export function meetingQueryByAnyId(Meeting: any, idParam: string) {
+    if (!idParam) return null;
+    if (mongoose.isValidObjectId(idParam)) {
+        return Meeting.findById(idParam);
     }
-    if (mongoose.isValidObjectId(id)) {
-        return Meeting.findById(id);
-    }
-    return Meeting.findOne({ shortId: id });
+    return Meeting.findOne({
+        $or: [{ id: idParam }, { shortId: idParam }],
+    });
 }

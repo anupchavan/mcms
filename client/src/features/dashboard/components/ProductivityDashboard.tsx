@@ -63,18 +63,14 @@ export default function ProductivityDashboard({ stats, userName, personalRoomId 
 
     return (
         <div className="productivity-dashboard">
-            <div className="page-header">
-                <div>
-                    <h2 style={{ fontSize: 'var(--font-size-title3)', fontWeight: 600, marginBottom: 'var(--lk-size-2xs)', letterSpacing: '-0.022em' }}>
-                        Productivity Dashboard
-                    </h2>
-                    <p style={{ fontSize: 'var(--font-size-body)', color: 'var(--text-secondary)', marginBottom: 'calc(var(--lk-size-sm) * var(--font-size-title3)/1rem)' }}>
-                        Welcome back, <strong>{userName || stats.user}</strong>. Here's your meeting intelligence overview.
-                    </p>
-                </div>
-            </div>
+            <header className="page-header">
+                <h2 className="page-header-title">Dashboard</h2>
+                <p className="page-header-description">
+                    Welcome back, <strong>{userName || stats.user}</strong>. Here&apos;s your meeting intelligence overview.
+                </p>
+            </header>
 
-            <div className="tabs" style={{ margin: '0 calc(var(--lk-size-lg) * var(--font-size-title3)/(1rem))' }}>
+            <div className="tabs page-tabs">
                 {TABS.map(tab => (
                     <button
                         key={tab}
@@ -90,7 +86,7 @@ export default function ProductivityDashboard({ stats, userName, personalRoomId 
             {activeTab === 'overview' && (
                 <div className="dashboard-grid">
                     {personalRoomId && (
-                        <div className="stat-card glass-card" style={{ gridColumn: 'span 2', background: 'linear-gradient(145deg, rgba(var(--primary-rgb), 0.1) 0%, rgba(255,255,255,0.03) 100%)', borderColor: 'var(--primary-muted)' }}>
+                        <div className="stat-card glass-card" style={{ gridColumn: 'span 2', background: 'linear-gradient(145deg, rgba(var(--primary-rgb), 0.1) 0%, rgba(var(--ui-shine-rgb), 0.03) 100%)', borderColor: 'var(--primary-muted)' }}>
                             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                                 <div>
                                     <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.25rem' }}>
@@ -100,7 +96,7 @@ export default function ProductivityDashboard({ stats, userName, personalRoomId 
                                     <p style={{ fontSize: '0.8125rem', color: 'var(--text-secondary)' }}>An always-on meeting space. Share this link for instant meetings.</p>
                                 </div>
                                 <div style={{ display: 'flex', gap: '0.5rem' }}>
-                                    <button 
+                                    <button
                                         className="btn btn-secondary btn-sm"
                                         onClick={() => {
                                             const link = `${window.location.origin}/rooms/${personalRoomId}`;
@@ -123,7 +119,7 @@ export default function ProductivityDashboard({ stats, userName, personalRoomId 
                             </div>
                         </div>
                     )}
-                    
+
                     <div className="stat-card glass-card">
                         <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                             <Icon icon={Calendar02Icon} size={18} style={{ color: 'var(--primary)' }} />
@@ -338,13 +334,6 @@ export default function ProductivityDashboard({ stats, userName, personalRoomId 
             )}
 
             <style>{`
-        .productivity-dashboard {
-          height: 100%;
-          overflow-y: auto;
-          padding-bottom: 1.5rem;
-          background: transparent;
-        }
-
         .badges-grid {
           display: grid;
           grid-template-columns: repeat(2, 1fr);
@@ -355,16 +344,16 @@ export default function ProductivityDashboard({ stats, userName, personalRoomId 
           align-items: center;
           gap: 0.75rem;
           padding: 0.625rem 0.875rem;
-          background: rgba(255, 255, 255, 0.03);
+          background: rgba(var(--ui-shine-rgb), 0.03);
           backdrop-filter: blur(8px);
           -webkit-backdrop-filter: blur(8px);
-          border: 0.0625rem solid rgba(255, 255, 255, 0.05);
+          border: 0.0625rem solid rgba(var(--ui-shine-rgb), 0.05);
           border-radius: var(--radius-sm);
           transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
         }
         .badge-item:hover {
-          background: rgba(255, 255, 255, 0.08);
-          border-color: rgba(255, 255, 255, 0.15);
+          background: rgba(var(--ui-shine-rgb), 0.08);
+          border-color: rgba(var(--ui-shine-rgb), 0.15);
           transform: translateY(-2px);
         }
         .badge-icon { font-size: 1.5rem; }
@@ -373,7 +362,7 @@ export default function ProductivityDashboard({ stats, userName, personalRoomId 
         .sentiment-bars { display: flex; flex-direction: column; gap: 0.625rem; }
         .sentiment-bar-row { display: flex; align-items: center; gap: 0.625rem; }
         .sentiment-track {
-          flex: 1; height: 0.5rem; background: rgba(255,255,255,0.06);
+          flex: 1; height: 0.5rem; background: rgba(var(--ui-shine-rgb), 0.06);
           border-radius: 0.25rem; overflow: hidden;
         }
         .sentiment-fill {
@@ -384,11 +373,11 @@ export default function ProductivityDashboard({ stats, userName, personalRoomId 
         .attendance-week { display: flex; align-items: center; gap: 0.75rem; }
         .attendance-label { font-size: 0.75rem; color: var(--text-muted); width: 1.875rem; }
         .attendance-bar-track {
-          flex: 1; height: 1rem; background: rgba(255,255,255,0.04);
+          flex: 1; height: 1rem; background: rgba(var(--ui-shine-rgb), 0.04);
           border-radius: 0.5rem; overflow: hidden;
         }
         .attendance-bar-fill {
-          height: 100%; background: var(--primary);
+          height: 100%; background: var(--color-tx-normal);
           border-radius: 0.5rem; transition: width 0.6s ease;
         }
         .attendance-value { font-size: 0.75rem; font-weight: 600; width: 2.5rem; }
@@ -398,7 +387,7 @@ export default function ProductivityDashboard({ stats, userName, personalRoomId 
         .engagement-metric { text-align: center; }
         .engagement-circle {
           width: 5rem; height: 5rem; border-radius: 50%;
-          background: conic-gradient(var(--primary) var(--pct), rgba(255,255,255,0.06) var(--pct));
+          background: conic-gradient(var(--primary) var(--pct), rgba(var(--ui-shine-rgb), 0.06) var(--pct));
           display: flex; align-items: center; justify-content: center;
           font-size: 1rem; font-weight: 700; position: relative;
         }
@@ -412,16 +401,16 @@ export default function ProductivityDashboard({ stats, userName, personalRoomId 
           display: flex;
           gap: 0.75rem;
           padding: 0.75rem;
-          background: rgba(255, 255, 255, 0.03);
+          background: rgba(var(--ui-shine-rgb), 0.03);
           backdrop-filter: blur(8px);
           -webkit-backdrop-filter: blur(8px);
           border-radius: var(--radius-sm);
-          border: 0.0625rem solid rgba(255, 255, 255, 0.05);
+          border: 0.0625rem solid rgba(var(--ui-shine-rgb), 0.05);
           transition: all 0.3s ease;
         }
         .recommendation-item:hover {
-          background: rgba(255, 255, 255, 0.06);
-          border-color: rgba(255, 255, 255, 0.1);
+          background: rgba(var(--ui-shine-rgb), 0.06);
+          border-color: rgba(var(--ui-shine-rgb), 0.1);
         }
         .rec-emoji { font-size: 1.25rem; flex-shrink: 0; }
         .recommendation-item p {

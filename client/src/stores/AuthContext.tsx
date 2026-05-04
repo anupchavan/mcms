@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+import { createContext, useContext, useState, useEffect, useCallback, useMemo, ReactNode } from 'react';
 
 const VITE_API_URL = import.meta.env.VITE_API_URL;
 const API_BASE = VITE_API_URL || 'http://localhost:5001/api';
@@ -11,6 +11,8 @@ export interface User {
     _id?: string;
     profileImage?: string;
     personalRoomId?: string;
+    /** Mongo meeting ids in pin order (first = top). */
+    archivePinnedMeetingIds?: string[];
     [key: string]: unknown;
 }
 
@@ -71,7 +73,7 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
         loadUser();
     }, []);
 
-    const login = async (email: string, password: string): Promise<AuthResult> => {
+    const login = useCallback(async (email: string, password: string): Promise<AuthResult> => {
         try {
             const res = await fetch(`${API_BASE}/auth/login`, {
                 method: 'POST',
@@ -88,9 +90,9 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
         } catch (error) {
             return { success: false, message: (error as Error).message };
         }
-    };
+    }, []);
 
-    const register = async (name: string, email: string, password: string): Promise<AuthResult> => {
+    const register = useCallback(async (name: string, email: string, password: string): Promise<AuthResult> => {
         try {
             const res = await fetch(`${API_BASE}/auth/register`, {
                 method: 'POST',
@@ -107,23 +109,28 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
         } catch (error) {
             return { success: false, message: (error as Error).message };
         }
-    };
+    }, []);
 
-    const updateUser = (updates: Partial<User>): void => {
+    const updateUser = useCallback((updates: Partial<User>): void => {
         setUser(prev => {
             const updated = { ...prev, ...updates };
             localStorage.setItem('mcms_userInfo', JSON.stringify(updated));
             return updated as User | null;
         });
-    };
+    }, []);
 
-    const logout = (): void => {
+    const logout = useCallback((): void => {
         localStorage.removeItem('mcms_userInfo');
         setUser(null);
-    };
+    }, []);
+
+    const authValue = useMemo(
+        () => ({ user, login, register, logout, updateUser, loading }),
+        [user, login, register, logout, updateUser, loading],
+    );
 
     return (
-        <AuthContext.Provider value={{ user, login, register, logout, updateUser, loading }}>
+        <AuthContext.Provider value={authValue}>
             {!loading && children}
         </AuthContext.Provider>
     );

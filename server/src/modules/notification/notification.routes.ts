@@ -8,7 +8,7 @@ export = function ({ Notification, protect, usingMongo }: any) {
             if (!usingMongo() || !Notification) return res.json([]);
             const notifs = await Notification.find({ userId: req.user.id })
                 .sort({ createdAt: -1 }).limit(50)
-                .populate('meetingId', 'title');
+                .populate('meetingId', 'title id modality confirmedDate confirmedTime date time status durationMinutes');
             res.json(notifs);
         } catch (error: any) {
             res.status(500).json({ message: 'Server error', error: error.message });

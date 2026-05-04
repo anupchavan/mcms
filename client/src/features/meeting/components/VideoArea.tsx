@@ -1,6 +1,8 @@
 import { useCallback, useState, useEffect, useRef, useMemo, type MutableRefObject, type CSSProperties } from "react";
 import HostControls, { type HostControlsRef } from "./HostControls";
 import useKeyboardShortcuts from "../../../hooks/useKeyboardShortcuts";
+import useElementSize from "../../../hooks/useElementSize";
+import { computeGalleryLayout, computeStageLayout } from "../utils/videoGridLayout";
 import Icon from "../../../shared/components/Icon";
 import {
   UserGroupIcon,
@@ -44,12 +46,17 @@ interface VideoTileProps {
   videoObjectFit?: "contain" | "cover";
   /** Layout slot: gallery grid, main stage (screen share), or sidebar filmstrip. */
   layoutVariant?: "gallery" | "stage" | "filmstrip";
+  /** Reports native (intrinsic) video aspect ratio when known. Used by the stage
+   *  layout to size around the screen-share without cropping it. */
+  onAspectRatioChange?: (tileId: string, aspectRatio: number) => void;
 }
 
 interface VideoAreaProps {
   meetingId?: string;
   meetingTitle?: string;
   meetingUrl?: string;
+  /** Public invite slug for links copied from meeting controls (`xxxx-xxxx`). */
+  inviteId?: string | null;
   participants?: Array<{ _id?: string; id?: string; name?: string; profileImage?: string | null }>;
   modality?: string;
   currentUser?: { _id?: string; id?: string; name?: string; profileImage?: string | null } | null;
@@ -97,6 +104,7 @@ function VideoTile({
   speaking,
   videoObjectFit: videoObjectFitProp,
   layoutVariant = "gallery",
+  onAspectRatioChange,
 }: VideoTileProps) {
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const videoBackdropRef = useRef<HTMLVideoElement | null>(null);
@@ -139,6 +147,25 @@ function VideoTile({
       videoBackdropRef.current.srcObject = stream;
     }
   }, [stream]);
+
+  // Report intrinsic aspect ratio so the stage layout can frame screen shares
+  // without cropping them (the user explicitly disallowed any screen-share crop).
+  useEffect(() => {
+    const video = videoRef.current;
+    if (!video || !onAspectRatioChange) return;
+    const report = () => {
+      const w = video.videoWidth;
+      const h = video.videoHeight;
+      if (w > 0 && h > 0) onAspectRatioChange(tileId, w / h);
+    };
+    report();
+    video.addEventListener('loadedmetadata', report);
+    video.addEventListener('resize', report);
+    return () => {
+      video.removeEventListener('loadedmetadata', report);
+      video.removeEventListener('resize', report);
+    };
+  }, [tileId, onAspectRatioChange, stream, hasVideo]);
 
   const initial: string = name?.charAt(0)?.toUpperCase() || "?";
   const videoObjectFit = videoObjectFitProp ?? (isScreenShare ? "contain" : "contain");
@@ -203,6 +230,7 @@ export default function VideoArea({
   meetingId,
   meetingTitle,
   meetingUrl,
+  inviteId,
   participants,
   modality,
   currentUser,
@@ -344,8 +372,12 @@ export default function VideoArea({
     if (currentUser) {
       list.push({ _id: (currentUser as any).id || (currentUser as any)._id, name: currentUser.name || "You" });
     }
-    peers.forEach(p => {
+    const seenPeer = new Set<string>();
+    peers.forEach((p) => {
+      const uid = p.userId || "";
+      if (!uid || seenPeer.has(uid)) return;
       if (p.userId !== (currentUser as any)?.id && p.userId !== (currentUser as any)?._id) {
+        seenPeer.add(uid);
         list.push({ _id: p.userId, name: p.name });
       }
     });
@@ -433,16 +465,22 @@ export default function VideoArea({
     if (currentUser) {
       list.push({ _id: (currentUser as any).id || (currentUser as any)._id, name: currentUser.name || "You" });
     }
-    peers.forEach(p => {
-      // Avoid duplicates if currentUser is also in peers for some reason
+    const seenPeer = new Set<string>();
+    peers.forEach((p) => {
+      const uid = p.userId || "";
+      if (!uid || seenPeer.has(uid)) return;
       if (p.userId !== (currentUser as any)?.id && p.userId !== (currentUser as any)?._id) {
+        seenPeer.add(uid);
         list.push({ _id: p.userId, name: p.name });
       }
     });
     return list;
   }, [currentUser, peers]);
 
-  const totalParticipants = 1 + peers.length;
+  const totalParticipants = useMemo(() => {
+    const peerUserIds = new Set(peers.map((p) => p.userId).filter(Boolean));
+    return 1 + peerUserIds.size;
+  }, [peers]);
   const [pinnedTileIds, setPinnedTileIds] = useState<Set<string>>(new Set());
 
   const togglePin = useCallback((tileId: string) => {
@@ -455,27 +493,52 @@ export default function VideoArea({
   }, []);
 
   const meetingTiles = useMemo(() => {
-    const selfTile = {
-      id: screenStream ? "self-screen-share" : "self-camera",
-      stream: screenStream || localStream,
-      name: currentUser?.name,
-      profileImage: currentUser?.profileImage || null,
-      muted: true,
-      isSelf: true,
-      isScreenShare: !!screenStream,
-      speaking: false,
-    };
+    const selfTiles = screenStream
+      ? [
+          {
+            id: "self-screen-share",
+            stream: screenStream,
+            name: currentUser?.name,
+            profileImage: currentUser?.profileImage || null,
+            muted: true,
+            isSelf: true,
+            isScreenShare: true,
+            speaking: false,
+          },
+          {
+            id: "self-camera",
+            stream: localStream,
+            name: currentUser?.name,
+            profileImage: currentUser?.profileImage || null,
+            muted: true,
+            isSelf: true,
+            isScreenShare: false,
+            speaking: false,
+          },
+        ]
+      : [
+          {
+            id: "self-camera",
+            stream: localStream,
+            name: currentUser?.name,
+            profileImage: currentUser?.profileImage || null,
+            muted: true,
+            isSelf: true,
+            isScreenShare: false,
+            speaking: false,
+          },
+        ];
     const peerTiles = peers.map((peer) => ({
       id: `peer-${peer.socketId}`,
       stream: peer.stream,
       name: peer.name,
       profileImage: peer.profileImage,
-      muted: false,
+      muted: peer.playRemoteAudio === false,
       isSelf: false,
       isScreenShare: peer.isScreenShare,
       speaking: false,
     }));
-    const allTiles = [selfTile, ...peerTiles];
+    const allTiles = [...selfTiles, ...peerTiles];
     return allTiles.sort((a, b) => {
       const aPinned = pinnedTileIds.has(a.id);
       const bPinned = pinnedTileIds.has(b.id);
@@ -495,13 +558,72 @@ export default function VideoArea({
     };
   }, [meetingTiles]);
 
-  const galleryColCount = useMemo(() => {
-    const n = meetingTiles.length;
-    if (n <= 1) return 1;
-    if (n <= 4) return 2;
-    if (n <= 9) return 3;
-    return 4;
-  }, [meetingTiles.length]);
+  // Live size of the video region — drives the dynamic grid math below.
+  // ResizeObserver fires whenever the dock toggles a side panel or the window
+  // resizes, so layouts adapt without us listening to those events directly.
+  const layoutRef = useRef<HTMLDivElement | null>(null);
+  const layoutSize = useElementSize(layoutRef);
+
+  // Screen-share intrinsic aspect, indexed by tile id. Lets the stage layout
+  // contain (not crop) the actual share regardless of the source's aspect.
+  const [screenAspects, setScreenAspects] = useState<Record<string, number>>({});
+  const handleScreenAspect = useCallback((tileId: string, ratio: number) => {
+    setScreenAspects((prev) => {
+      const existing = prev[tileId];
+      // 0.5% epsilon so 16:9 streams don't churn state every frame.
+      if (existing && Math.abs(existing - ratio) / ratio < 0.005) return prev;
+      return { ...prev, [tileId]: ratio };
+    });
+  }, []);
+  // Garbage-collect aspect ratios for tiles that have left the call.
+  useEffect(() => {
+    setScreenAspects((prev) => {
+      const validIds = new Set(screenTiles.map((t) => t.id));
+      let changed = false;
+      const next: Record<string, number> = {};
+      for (const [id, val] of Object.entries(prev)) {
+        if (validIds.has(id)) next[id] = val;
+        else changed = true;
+      }
+      return changed ? next : prev;
+    });
+  }, [screenTiles]);
+
+  // Pick the screen aspect to drive layout math: the first known aspect for
+  // the primary screen share. Defaults to 16:9 until metadata loads.
+  const primaryScreenAspect = useMemo(() => {
+    for (const tile of screenTiles) {
+      const a = screenAspects[tile.id];
+      if (a && Number.isFinite(a) && a > 0) return a;
+    }
+    return 16 / 9;
+  }, [screenTiles, screenAspects]);
+
+  // Compute the actual grid layout for the current container size + tile mix.
+  const galleryLayout = useMemo(() => {
+    if (hasAnyScreenShare) return null;
+    return computeGalleryLayout(layoutSize.width, layoutSize.height, meetingTiles.length);
+  }, [hasAnyScreenShare, layoutSize.width, layoutSize.height, meetingTiles.length]);
+
+  // Sqrt fallback used while the ResizeObserver hasn't reported a size yet —
+  // ensures the very first render of a freshly opened meeting already shows
+  // a sensible grid (e.g. 1×2 for two people) instead of a 1×1 stack.
+  const galleryFallbackCols = Math.max(1, Math.ceil(Math.sqrt(meetingTiles.length)));
+  const galleryFallbackRows = Math.max(
+    1,
+    Math.ceil(meetingTiles.length / galleryFallbackCols),
+  );
+
+  const stageLayout = useMemo(() => {
+    if (!hasAnyScreenShare) return null;
+    const layout = computeStageLayout(
+      layoutSize.width,
+      layoutSize.height,
+      cameraTiles.length,
+      primaryScreenAspect,
+    );
+    return layout;
+  }, [hasAnyScreenShare, layoutSize.width, layoutSize.height, cameraTiles.length, primaryScreenAspect]);
 
   return (
     <div className="video-area">
@@ -669,7 +791,7 @@ export default function VideoArea({
             <div className="video-prejoin">
               <div className="prejoin-card">
                 {mediaError && (
-                  <p style={{ color: 'var(--danger, #ef4444)', fontSize: '0.875rem', textAlign: 'center', marginBottom: '0.5rem' }}>{mediaError}</p>
+                  <p style={{ color: "var(--danger)", fontSize: "0.875rem", textAlign: "center", marginBottom: "0.5rem" }}>{mediaError}</p>
                 )}
                 <div className="prejoin-avatar">
                   {currentUser?.profileImage ? (
@@ -698,20 +820,40 @@ export default function VideoArea({
           ) : (
             <>
               {mediaError && (
-                <div style={{ padding: '0.5rem 1rem', fontSize: '0.75rem', color: '#f59e0b', background: 'rgba(245,158,11,0.1)', borderRadius: '0.375rem', marginBottom: '0.375rem', textAlign: 'center' }}>
+                <div style={{ padding: "0.5rem 1rem", fontSize: "0.75rem", color: "var(--flexoki-yellow-600)", background: "rgba(var(--flexoki-yellow-400-rgb), 0.1)", borderRadius: "0.375rem", marginBottom: "0.375rem", textAlign: "center" }}>
                   {mediaError}
                 </div>
               )}
               <div
+                ref={layoutRef}
                 className={
                   hasAnyScreenShare
-                    ? "video-layout video-layout--stage"
-                    : `video-layout video-layout--gallery video-layout--count-${meetingTiles.length}`
+                    ? `video-layout video-layout--stage video-layout--filmstrip-${stageLayout?.filmstripPlacement ?? "right"}`
+                    : "video-layout video-layout--gallery"
                 }
                 style={
                   hasAnyScreenShare
-                    ? undefined
-                    : ({ "--video-gallery-cols": String(galleryColCount) } as CSSProperties)
+                    ? ({
+                        // Lay out stage + filmstrip with explicit pixel sizes
+                        // so the screen share gets every pixel it can while
+                        // the filmstrip stays exactly large enough.
+                        "--filmstrip-size":
+                          stageLayout?.filmstripPlacement === "none"
+                            ? "0px"
+                            : `${Math.round(stageLayout?.filmstripSize ?? 0)}px`,
+                      } as CSSProperties)
+                    : ({
+                        // Explicit grid built from the area-maximising layout
+                        // math — tiles fill the cell so no whitespace bands.
+                        // Falls back to a sqrt-shaped grid if measurement is
+                        // not in yet (so no first-frame 1×1 stacking).
+                        "--video-gallery-cols": String(
+                          galleryLayout?.cols ?? galleryFallbackCols,
+                        ),
+                        "--video-gallery-rows": String(
+                          galleryLayout?.rows ?? galleryFallbackRows,
+                        ),
+                      } as CSSProperties)
                 }
               >
                 {hasAnyScreenShare ? (
@@ -732,10 +874,11 @@ export default function VideoArea({
                           onTogglePin={togglePin}
                           videoObjectFit="contain"
                           layoutVariant="stage"
+                          onAspectRatioChange={handleScreenAspect}
                         />
                       ))}
                     </div>
-                    {cameraTiles.length > 0 ? (
+                    {cameraTiles.length > 0 && stageLayout?.filmstripPlacement !== "none" ? (
                       <div className="video-layout-filmstrip">
                         {cameraTiles.map((tile) => (
                           <VideoTile
@@ -787,6 +930,7 @@ export default function VideoArea({
         meetingId={meetingId}
         meetingTitle={meetingTitle}
         meetingUrl={meetingUrl}
+        inviteId={inviteId ?? undefined}
         modality={modality}
         audioEnabled={audioEnabled}
         videoEnabled={videoEnabled}
@@ -894,7 +1038,7 @@ export default function VideoArea({
           justify-content: center;
           font-size: 2rem;
           font-weight: 700;
-          color: white;
+          color: var(--flexoki-paper);
           overflow: hidden;
         }
         .prejoin-avatar-img {
@@ -924,30 +1068,53 @@ export default function VideoArea({
           min-width: 1rem;
           height: 1rem;
           padding: 0 0.25rem;
-          background: color-mix(in srgb, var(--primary) 25%, rgba(255,255,255,0.25));
-          border: 0.0625rem solid color-mix(in srgb, var(--primary) 70%, rgba(255,255,255,0.5));
-          color: rgba(255,255,255,0.95);
-          box-shadow: 0 0.0625rem 0 rgba(0,0,0,0.15);
+          background: color-mix(in srgb, var(--color-bg-secondary) 25%, rgba(var(--flexoki-paper-rgb), 0.25));
+          border: 0.0625rem solid color-mix(in srgb, var(--primary-dark) 70%, rgba(var(--flexoki-paper-rgb), 0.5));
+          color: rgba(var(--flexoki-paper-rgb), 0.95);
+          box-shadow: 0 0.0625rem 0 rgba(var(--flexoki-black-rgb), 0.15);
         }
 
-        /* Meet-style layout: primary stage + filmstrip while sharing; adaptive gallery otherwise */
+        /* Dynamic, area-maximising layout. Cell sizes are computed at runtime
+           by computeGalleryLayout / computeStageLayout (videoGridLayout.ts) and
+           applied via CSS custom properties + grid-template-* inline styles. */
         .video-layout {
           width: 100%;
           height: 100%;
           min-height: 0;
           box-sizing: border-box;
-        }
-        .video-layout--stage {
-          display: flex;
-          flex-direction: row;
-          flex-wrap: nowrap;
-          align-items: stretch;
           gap: 0.5rem;
-          padding: 0.125rem 0.25rem 0.125rem 0.125rem;
-          overflow: hidden;
+          display: grid;
+        }
+        /* Gallery: explicit rows × cols from the layout solver. Tiles stretch
+           to fill the cell, so cameras (object-fit: cover) crop to fit
+           — the trade-off the user signed off on for max area. */
+        .video-layout--gallery {
+          grid-template-columns: repeat(var(--video-gallery-cols, 1), minmax(0, 1fr));
+          grid-template-rows: repeat(var(--video-gallery-rows, 1), minmax(0, 1fr));
+          padding: 0;
+        }
+        .video-tile--gallery {
+          width: 100%;
+          height: 100%;
+          min-height: 0;
+        }
+        /* Stage: filmstrip on right or bottom, sized via --filmstrip-size. */
+        .video-layout--stage {
+          padding: 0;
+        }
+        .video-layout--filmstrip-right {
+          grid-template-columns: minmax(0, 1fr) var(--filmstrip-size, 0px);
+          grid-template-rows: minmax(0, 1fr);
+        }
+        .video-layout--filmstrip-bottom {
+          grid-template-columns: minmax(0, 1fr);
+          grid-template-rows: minmax(0, 1fr) var(--filmstrip-size, 0px);
+        }
+        .video-layout--filmstrip-none {
+          grid-template-columns: minmax(0, 1fr);
+          grid-template-rows: minmax(0, 1fr);
         }
         .video-layout-main {
-          flex: 1 1 0;
           min-width: 0;
           min-height: 0;
           display: flex;
@@ -955,16 +1122,27 @@ export default function VideoArea({
           gap: 0.5rem;
           overflow: hidden;
         }
+        /* Filmstrip uses flexbox so each tile can keep its own 16:9 aspect.
+           Tiles stack along the long axis and scroll if they overflow — they
+           never get stretched into 96×800 strips just to "fill" the slot. */
         .video-layout-filmstrip {
-          flex: 0 0 clamp(11rem, 22vw, 19rem);
-          width: clamp(11rem, 22vw, 19rem);
+          min-width: 0;
           min-height: 0;
           display: flex;
-          flex-direction: column;
           gap: 0.5rem;
+        }
+        .video-layout--filmstrip-right .video-layout-filmstrip {
+          flex-direction: column;
+          align-items: stretch;
           overflow-x: hidden;
           overflow-y: auto;
-          padding-right: 0.125rem;
+        }
+        .video-layout--filmstrip-bottom .video-layout-filmstrip {
+          flex-direction: row;
+          align-items: stretch;
+          justify-content: center;
+          overflow-x: auto;
+          overflow-y: hidden;
         }
         .video-tile--stage {
           flex: 1 1 0;
@@ -972,67 +1150,18 @@ export default function VideoArea({
           width: 100%;
           max-height: 100%;
         }
-        .video-tile--filmstrip {
+        /* Each filmstrip tile keeps a 16:9 frame regardless of how many cameras
+           are in the call — the tile sizes itself to the cross dimension of the
+           filmstrip and lets aspect-ratio do the rest. */
+        .video-layout--filmstrip-right .video-tile--filmstrip {
+          width: 100%;
+          aspect-ratio: 16 / 9;
           flex: 0 0 auto;
-          width: 100%;
-          aspect-ratio: 16 / 9;
-          min-height: 0;
-          max-height: min(40vh, 260px);
         }
-        .video-layout--gallery {
-          display: grid;
-          grid-template-columns: repeat(var(--video-gallery-cols, 2), minmax(0, 1fr));
-          grid-auto-rows: auto;
-          gap: 0.5rem;
+        .video-layout--filmstrip-bottom .video-tile--filmstrip {
           height: 100%;
-          min-height: 0;
-          overflow-y: auto;
-          align-content: center;
-          justify-items: stretch;
-          padding: 0.25rem;
-        }
-        .video-layout--gallery.video-layout--count-1 {
-          display: flex;
-          align-items: center;
-          justify-content: center;
-        }
-        .video-layout--gallery.video-layout--count-1 .video-tile--gallery {
-          width: min(96%, 70rem);
-          max-width: 100%;
-          max-height: min(82vh, calc(100% - 1rem));
           aspect-ratio: 16 / 9;
-        }
-        .video-tile--gallery {
-          width: 100%;
-          aspect-ratio: 16 / 9;
-          min-height: 0;
-          max-height: min(48vh, 560px);
-        }
-
-        @media (max-width: 720px) {
-          .video-layout--stage {
-            flex-direction: column;
-            overflow-y: auto;
-            align-items: stretch;
-          }
-          .video-layout-main {
-            flex: 1 1 auto;
-            min-height: 12rem;
-          }
-          .video-layout-filmstrip {
-            flex: 0 0 auto;
-            width: 100%;
-            max-height: 40vh;
-            flex-direction: row;
-            overflow-x: auto;
-            overflow-y: hidden;
-            gap: 0.5rem;
-          }
-          .video-tile--filmstrip {
-            flex: 0 0 auto;
-            width: min(72vw, 16rem);
-            max-height: none;
-          }
+          flex: 0 0 auto;
         }
 
         .video-tile {
@@ -1056,10 +1185,10 @@ export default function VideoArea({
           left: 0.5rem;
           z-index: 3;
           padding: 0.1875rem 0.45rem;
-          border: 0.0625rem solid rgba(255, 255, 255, 0.25);
+          border: 0.0625rem solid rgba(var(--flexoki-paper-rgb), 0.25);
           border-radius: 999px;
-          background: rgba(0, 0, 0, 0.55);
-          color: #fff;
+          background: rgba(var(--flexoki-black-rgb), 0.55);
+          color: var(--flexoki-paper);
           font-size: 0.625rem;
           line-height: 1;
           cursor: pointer;
@@ -1103,7 +1232,7 @@ export default function VideoArea({
           justify-content: center;
           font-size: 1.375rem;
           font-weight: 700;
-          color: white;
+          color: var(--flexoki-paper);
           overflow: hidden;
         }
         .video-tile-avatar-img {
@@ -1116,11 +1245,11 @@ export default function VideoArea({
           bottom: 0.5rem;
           left: 0.5rem;
           padding: 0.1875rem 0.5rem;
-          background: rgba(0, 0, 0, 0.6);
+          background: rgba(var(--flexoki-black-rgb), 0.6);
           border-radius: 0.25rem;
           font-size: 0.75rem;
           font-weight: 500;
-          color: #fff;
+          color: var(--flexoki-paper);
           backdrop-filter: blur(4px);
           z-index: 3;
         }
@@ -1133,7 +1262,7 @@ export default function VideoArea({
           border-radius: 6.25rem;
           font-size: 0.5625rem;
           font-weight: 700;
-          color: white;
+          color: var(--flexoki-paper);
           letter-spacing: 0.03125rem;
           z-index: 3;
         }
@@ -1146,7 +1275,7 @@ export default function VideoArea({
           border-radius: 6.25rem;
           font-size: 0.625rem;
           font-weight: 700;
-          color: white;
+          color: var(--flexoki-paper);
           letter-spacing: 0.03125rem;
           z-index: 3;
         }
@@ -1165,7 +1294,7 @@ export default function VideoArea({
           width: 0.5rem;
           height: 0.5rem;
           border-radius: 50%;
-          background: #ef4444;
+          background: var(--danger);
           transition: background 0.3s;
         }
         .offline-dot.connected {
@@ -1180,8 +1309,8 @@ export default function VideoArea({
           gap: 0.75rem;
         }
         .badge-rec {
-          background: rgba(239, 68, 68, 0.1);
-          color: #ef4444;
+          background: rgba(var(--flexoki-red-400-rgb), 0.1);
+          color: var(--danger);
           font-size: 0.625rem;
           padding: 0.125rem 0.5rem;
           border-radius: 1rem;
@@ -1271,8 +1400,8 @@ export default function VideoArea({
           color: var(--text-muted);
           border: 1px solid var(--border);
         }
-        .focus-ai-num.active { background: var(--primary); color: white; border-color: var(--primary); }
-        .focus-ai-num.completed { background: var(--accent-emerald); color: white; border-color: var(--accent-emerald); }
+        .focus-ai-num.active { background: var(--primary); color: var(--flexoki-paper); border-color: var(--primary); }
+        .focus-ai-num.completed { background: var(--accent-emerald); color: var(--flexoki-paper); border-color: var(--accent-emerald); }
 
         .focus-ai-name { font-size: 0.8125rem; font-weight: 500; }
         .focus-ai-time { font-size: 0.6875rem; color: var(--text-muted); }
@@ -1338,7 +1467,7 @@ export default function VideoArea({
           transition: all 0.2s;
         }
         .focus-note-btn:hover { background: var(--bg-hover); }
-        .focus-note-btn.primary { background: var(--primary); color: white; border-color: var(--primary); }
+        .focus-note-btn.primary { background: var(--primary); color: var(--flexoki-paper); border-color: var(--primary); }
 
         .focus-ctrl-row { display: flex; gap: 0.75rem; }
         .focus-ctrl-btn {
@@ -1356,7 +1485,7 @@ export default function VideoArea({
           font-size: 0.8125rem;
           cursor: pointer;
         }
-        .focus-ctrl-btn.next { background: var(--primary); color: white; border-color: var(--primary); }
+        .focus-ctrl-btn.next { background: var(--primary); color: var(--flexoki-paper); border-color: var(--primary); }
 
         .focus-attendee-row { display: flex; flex-wrap: wrap; gap: 0.5rem; }
         .focus-av-chip {
@@ -1377,7 +1506,7 @@ export default function VideoArea({
           align-items: center;
           justify-content: center;
           font-size: 0.625rem;
-          color: white;
+          color: var(--flexoki-paper);
           font-weight: 700;
         }
         .focus-av-name { font-size: 0.75rem; color: var(--text-primary); }
@@ -1408,13 +1537,13 @@ export default function VideoArea({
         .focus-ac-text { font-size: 0.75rem; line-height: 1.4; color: var(--text-primary); }
 
         .focus-parking-lot {
-          background: rgba(239, 159, 39, 0.05);
-          border: 1px solid rgba(239, 159, 39, 0.2);
+          background: rgba(var(--flexoki-orange-400-rgb), 0.05);
+          border: 1px solid rgba(var(--flexoki-orange-400-rgb), 0.2);
           border-radius: var(--radius-md);
           padding: 0.75rem;
         }
-        .focus-pl-title { font-size: 0.75rem; font-weight: 600; color: #ef9f27; margin-bottom: 0.25rem; }
-        .focus-pl-item { font-size: 0.75rem; padding: 0.25rem 0; border-bottom: 1px solid rgba(239, 159, 39, 0.1); }
+        .focus-pl-title { font-size: 0.75rem; font-weight: 600; color: var(--flexoki-orange-400); margin-bottom: 0.25rem; }
+        .focus-pl-item { font-size: 0.75rem; padding: 0.25rem 0; border-bottom: 1px solid rgba(var(--flexoki-orange-400-rgb), 0.1); }
         .focus-pl-item:last-child { border-bottom: none; }
 
         .focus-sync-banner {

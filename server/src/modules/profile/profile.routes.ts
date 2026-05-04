@@ -5,7 +5,7 @@ import multer from 'multer';
 import bcrypt from 'bcryptjs';
 const router = express.Router();
 
-export = function ({ User, protect, usingMongo, inMemoryUsers }: any) {
+export = function ({ User, Meeting, protect, usingMongo, inMemoryUsers }: any) {
 
     // At runtime, __dirname is `server/dist/modules/profile`. Three levels up
     // reaches `server/`; matches the static mount in server.ts:
@@ -29,6 +29,49 @@ export = function ({ User, protect, usingMongo, inMemoryUsers }: any) {
             if (/^image\/(jpeg|png|gif|webp)$/.test(file.mimetype)) return cb(null, true);
             cb(new Error('Only JPEG, PNG, GIF, and WebP images are allowed'));
         },
+    });
+
+    router.put('/archive-pins', protect, async (req: any, res: any) => {
+        try {
+            const idsRaw = req.body?.meetingIds;
+            if (!Array.isArray(idsRaw)) {
+                return res.status(400).json({ message: 'meetingIds array required' });
+            }
+            const uniq: string[] = [];
+            const seen = new Set<string>();
+            for (const x of idsRaw) {
+                const s = String(x ?? '').trim();
+                if (!s || seen.has(s)) continue;
+                seen.add(s);
+                uniq.push(s);
+                if (uniq.length > 200) return res.status(400).json({ message: 'Too many pinned meetings' });
+            }
+
+            if (usingMongo() && User && Meeting) {
+                const mongoose = require('mongoose');
+                const oids: any[] = [];
+                for (const hex of uniq) {
+                    if (!mongoose.isValidObjectId(hex)) {
+                        return res.status(400).json({ message: `Invalid meeting id: ${hex}` });
+                    }
+                    const exists = await Meeting.exists({ _id: hex, status: 'completed' });
+                    if (!exists) return res.status(400).json({ message: 'Meeting not found or not archived' });
+                    oids.push(new mongoose.Types.ObjectId(hex));
+                }
+                await User.findByIdAndUpdate(req.user.id, { archivePinnedMeetingIds: oids });
+                const fresh = await User.findById(req.user.id).select('archivePinnedMeetingIds').lean();
+                return res.json({
+                    archivePinnedMeetingIds: (fresh?.archivePinnedMeetingIds || []).map((x: any) => String(x)),
+                });
+            }
+
+            const user = inMemoryUsers.find((u: any) => u._id === req.user.id);
+            if (!user) return res.status(404).json({ message: 'User not found' });
+            user.archivePinnedMeetingIds = [...uniq];
+            res.json({ archivePinnedMeetingIds: user.archivePinnedMeetingIds });
+        } catch (error: any) {
+            res.status(500).json({ message: 'Server error', error: error.message });
+        }
     });
 
     router.put('/name', protect, async (req: any, res: any) => {

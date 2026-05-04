@@ -21,10 +21,12 @@ interface ShortcutTooltipProps {
   label?: string;
   position?: 'top' | 'bottom' | 'right' | 'left';
   fullWidth?: boolean;
+  /** When true, shortcuts/hints never appear (e.g. while a menu is open). */
+  disabled?: boolean;
   children: React.ReactNode;
 }
 
-export default function ShortcutTooltip({ keys, label, position = 'bottom', fullWidth, children }: ShortcutTooltipProps) {
+export default function ShortcutTooltip({ keys, label, position = 'bottom', fullWidth, disabled = false, children }: ShortcutTooltipProps) {
   const [visible, setVisible] = useState(false);
   const [coords, setCoords] = useState<{ top: number; left: number } | null>(null);
   const anchorRef = useRef<HTMLDivElement>(null);
@@ -69,7 +71,15 @@ export default function ShortcutTooltip({ keys, label, position = 'bottom', full
     if (visible) computePosition();
   }, [visible, computePosition]);
 
+  useEffect(() => {
+    if (!disabled) return;
+    clearTimeout(timeout.current);
+    setVisible(false);
+    setCoords(null);
+  }, [disabled]);
+
   const show = () => {
+    if (disabled) return;
     clearTimeout(timeout.current);
     timeout.current = setTimeout(() => setVisible(true), 400);
   };

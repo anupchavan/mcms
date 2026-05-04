@@ -29,18 +29,30 @@ async def add_process_time_header(request, call_next):
 
 app.middleware("http")(add_process_time_header)
 
-GROK_API_KEY=os.getenv("GROK_API_KEY")
-GROK_BASE_URL=os.getenv("GROK_BASE_URL", "https://api.x.ai/v1")
-LOCAL_SUMMARY_MODEL=os.getenv(
+LOCAL_SUMMARY_MODEL = os.getenv(
     "LOCAL_SUMMARY_MODEL", "knkarthick/meeting-summary-samsum"
 )
 
+
+def _normalize_openai_compat_base_url(url: str) -> str:
+    """Groq's OpenAI-compatible API lives at /openai/v1, not /v1 (fixes 404 unknown_url)."""
+    raw = (url or "").strip().rstrip("/")
+    if not raw:
+        return "https://api.x.ai/v1"
+    if "api.groq.com" in raw.lower() and "/openai" not in raw.lower():
+        return "https://api.groq.com/openai/v1"
+    return url.strip() or "https://api.x.ai/v1"
+
+
+# Groq (https://console.groq.com) — official `groq` Python SDK, api.groq.com
 GROQ_API_KEY = os.getenv("GROQ_API_KEY")
 GROQ_MODEL = os.getenv("GROQ_MODEL", "llama-3.1-8b-instant")
+
 groq_client = None
 try:
     if GROQ_API_KEY:
-        from groq import Groq # type: ignore
+        from groq import Groq  # type: ignore
+
         groq_client = Groq(api_key=GROQ_API_KEY)
         print("Groq client successfully initialized.")
     else:
@@ -48,28 +60,57 @@ try:
 except ImportError:
     print("Groq module not found.")
 
+# xAI Grok (https://api.x.ai) — OpenAI-compatible HTTP API via `openai` package
 GROK_API_KEY = os.getenv("GROK_API_KEY")
-GROK_BASE_URL = os.getenv("GROK_BASE_URL", "https://api.x.ai/v1")
-AI_MODEL = os.getenv("AI_MODEL", "grok-2-latest")
-openai_client = None # Historically named openai_client but used for Grok (x.ai)
+_GROK_BASE_RAW = os.getenv("GROK_BASE_URL", "https://api.x.ai/v1")
+GROK_BASE_URL = _normalize_openai_compat_base_url(_GROK_BASE_RAW)
+if GROK_BASE_URL != _GROK_BASE_RAW.strip():
+    print(
+        "Adjusted GROK_BASE_URL for Groq OpenAI compatibility "
+        f"(was {_GROK_BASE_RAW!r}, using {GROK_BASE_URL!r}).",
+        flush=True,
+    )
+# AI_MODEL kept as a legacy alias for deployments that still set it
+GROK_MODEL = os.getenv("GROK_MODEL") or os.getenv("AI_MODEL", "grok-2-latest")
+
+
+def _openai_compat_chat_model_for_base(base_url: str, configured_model: str) -> str:
+    """Groq does not host xAI Grok IDs; use GROQ_MODEL when base is Groq."""
+    b = (base_url or "").lower()
+    if "api.groq.com" not in b:
+        return configured_model
+    m = (configured_model or "").strip().lower()
+    if m.startswith("grok"):
+        return GROQ_MODEL
+    return configured_model
+
+grok_openai_client = None
 try:
     if GROK_API_KEY:
-        from openai import OpenAI # type: ignore
-        openai_client = OpenAI(api_key=GROK_API_KEY, base_url=GROK_BASE_URL)
-        print("Grok (OpenAI-compatible) client successfully initialized.")
+        from openai import OpenAI  # type: ignore
+
+        grok_openai_client = OpenAI(api_key=GROK_API_KEY, base_url=GROK_BASE_URL)
+        print("Grok (xAI) client successfully initialized.")
     else:
         print("Grok client not configured (GROK_API_KEY missing).")
 except ImportError:
     print("OpenAI module not found.")
 
+
 def get_preferred_client(task="general"):
-    """Returns (client, model) based on availability and task type."""
-    if task in ["extraction", "summary"]:
-        if groq_client: return groq_client, GROQ_MODEL
-        if openai_client: return openai_client, AI_MODEL
+    """Returns (client, model). Prefer Groq for heavy extraction/summary if configured."""
+    if task in ("extraction", "summary"):
+        if groq_client:
+            return groq_client, GROQ_MODEL
+        if grok_openai_client:
+            _m = _openai_compat_chat_model_for_base(GROK_BASE_URL, GROK_MODEL)
+            return grok_openai_client, _m
     else:
-        if openai_client: return openai_client, AI_MODEL
-        if groq_client: return groq_client, GROQ_MODEL
+        if grok_openai_client:
+            _mg = _openai_compat_chat_model_for_base(GROK_BASE_URL, GROK_MODEL)
+            return grok_openai_client, _mg
+        if groq_client:
+            return groq_client, GROQ_MODEL
     return None, None
 
 last_ai_error = None
@@ -79,7 +120,7 @@ async def root():
     return {
         "status": "online",
         "groq_initialized": groq_client is not None,
-        "grok_initialized": openai_client is not None,
+        "grok_initialized": grok_openai_client is not None,
         "primary_model": get_preferred_client()[1],
         "last_error": last_ai_error
     }
@@ -151,7 +192,7 @@ def pyre_slice(s: str, start: int, stop: int) -> str:
 def should_call_llm(text: str) -> bool:
     text_lower=text.lower()
     triggers=["assign", "assigned", "complete", "finalize", "need to", "should", "must", "will", "can you", "could you", "please", "task"]
-    
+
     if any(trigger in text_lower for trigger in triggers):
         # Basic regex check for capitalized names (e.g., John)
         if re.search(r'\b[A-Z][a-z]+\b', text):
@@ -495,7 +536,7 @@ async def extract_actions(req: ExtractActionsRequest):
             content=str(req.text)
             if context_minutes:
                 content=f"{context_minutes}\n\nFull Meeting Transcript:\n{content}"
-            
+
             response=client.chat.completions.create(
                 model=model,
                 messages=[
@@ -530,7 +571,7 @@ async def extract_actions(req: ExtractActionsRequest):
             last_ai_error = str(e)
             print(f"AI extract-actions error: {e}")
 
-    # Deduplicate Groq
+    # Deduplicate LLM-extracted actions
     if actions:
         seen=set()
         unique_actions: List[Dict[str, Any]]=[]
@@ -540,10 +581,10 @@ async def extract_actions(req: ExtractActionsRequest):
             if key not in seen:
                 seen.add(key)
                 unique_actions.append(a)
-        
+
         return {"actions": [unique_actions[i] for i in range(min(10, len(unique_actions)))]}
 
-    # Fallback if Groq unavailable or returned no actions
+    # Fallback if no LLM client or extraction returned no actions
     action_patterns=[
         r"(?:assign|assigned)\s+(.+?)\s+to\s+(.+?)(?:\.|$)",
         r"(.+?),\s+(?:please|can you|could you)\s+(.+?)(?:\.|$)",
@@ -555,7 +596,7 @@ async def extract_actions(req: ExtractActionsRequest):
     for raw_line in lines:
         speaker_match=re.match(r"^(\w[\w\s.]+?):\s*", raw_line)
         current_speaker=speaker_match.group(1).strip() if speaker_match else None
-        
+
         # Strip speaker from raw_line for better sentence splitting
         if speaker_match:
             speaker_prefix_len = len(speaker_match.group(0))
@@ -574,15 +615,15 @@ async def extract_actions(req: ExtractActionsRequest):
                         title=m0.strip()
                     else:
                         title=str(match).strip()
-                    
+
                     if len(title) > 4 and len(title) < 200:
                         assignee=current_speaker
-                        
+
                         # Special handling for "assign X to Y"
                         assign_match=re.search(r"(?:assign|assigned)\s+(.+?)\s+to\s+(.+?)(?:\.|$)", line, re.IGNORECASE)
                         if assign_match:
                             assignee=assign_match.group(2).strip()
-                        
+
                         # Special handling for "User, please do X"
                         please_match=re.search(r"^(\w[\w\s.]+?),\s+(?:please|can you)\s+(.+?)(?:\.|$)", line, re.IGNORECASE)
                         if please_match:
@@ -591,7 +632,7 @@ async def extract_actions(req: ExtractActionsRequest):
                         # Find the relevant part of the sentence that matches pattern criteria
                         stripped_title_length=min(150, len(title))
                         final_title=pyre_slice(title, 0, stripped_title_length).strip()
-                        
+
                         if final_title:
                             actions.append(
                                 {
@@ -618,7 +659,7 @@ async def extract_actions(req: ExtractActionsRequest):
 async def extract_tags(req: ExtractTagsRequest):
     client, model = get_preferred_client("summary")
     default_tags = ["Meeting", "Discussion", "General"]
-    
+
     if client:
         try:
             response = client.chat.completions.create(

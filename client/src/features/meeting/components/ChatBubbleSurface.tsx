@@ -84,7 +84,7 @@ export const ChatBubbleSurface: FC<ChatBubbleSurfaceProps> = ({ variant, showTai
           padding: isMe ? "0.5rem 0.65rem 0.5rem 0.65rem" : "0.5rem 0.65rem 0.5rem 0.65rem",
           fontSize: "0.875rem",
           lineHeight: 1.4,
-          color: isMe ? "#fff" : "var(--text-primary)",
+          color: isMe ? "var(--flexoki-paper)" : "var(--text-primary)",
         }}
       >
         {showTail && <TailSvg fill={bg} forOthers={!isMe} />}

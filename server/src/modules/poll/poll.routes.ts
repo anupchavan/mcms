@@ -1,4 +1,5 @@
 import express from 'express';
+import { inviteSegmentForShareUrl } from '../../utils/meetingInviteId';
 const router = express.Router();
 
 export = function ({ Meeting, Poll, Notification, protect, usingMongo, emitToUser, sendRsvpEmail, generateICS, CLIENT_URL }: any) {
@@ -9,11 +10,13 @@ export = function ({ Meeting, Poll, Notification, protect, usingMongo, emitToUse
             const poll = await Poll.findOne({ meetingId: req.params.meetingId });
             if (!poll) return res.status(404).json({ message: 'Poll not found' });
 
-            const meeting = await Meeting.findById(req.params.meetingId).select('title modality shortId');
+            const meeting = await Meeting.findById(req.params.meetingId).select('title modality id');
             const base = (CLIENT_URL || 'http://localhost:5173').replace(/\/$/, '');
-            const meetingUrl = meeting?.modality !== 'Offline'
-                ? `${base}/meetings/${meeting?.shortId || req.params.meetingId}`
-                : null;
+            const sharePoll = inviteSegmentForShareUrl(meeting?.id);
+            const meetingUrl =
+                meeting?.modality !== 'Offline' && sharePoll
+                    ? `${base}/meetings/${sharePoll}`
+                    : null;
             res.json({ ...poll.toObject(), meetingTitle: meeting?.title, modality: meeting?.modality, meetingUrl });
         } catch (error: any) {
             res.status(500).json({ message: 'Server error', error: error.message });
@@ -64,8 +67,12 @@ export = function ({ Meeting, Poll, Notification, protect, usingMongo, emitToUse
                     await meeting.save();
 
                     const base = (CLIENT_URL || 'http://localhost:5173').replace(/\/$/, '');
-                    const meetingUrl = meeting.modality !== 'Offline' ? `${base}/meetings/${meeting.shortId || meeting._id}` : null;
-                    const meetingForIcs = { ...meeting.toObject(), meetingUrl };
+                    const shareVote = inviteSegmentForShareUrl(meeting.id);
+                    const meetingUrl =
+                        meeting.modality !== 'Offline' && shareVote
+                            ? `${base}/meetings/${shareVote}`
+                            : null;
+                    const meetingForIcs = { ...meeting.toObject({ virtuals: false }), meetingUrl };
                     const icsBuffer = generateICS(meetingForIcs, winSlot);
                     for (const p of meeting.participants) {
                         sendRsvpEmail(meeting, p, winSlot, icsBuffer);
@@ -77,6 +84,11 @@ export = function ({ Meeting, Poll, Notification, protect, usingMongo, emitToUse
                         emitToUser(p._id, 'notification', {
                             _id: notif._id, type: notif.type,
                             meetingId: meeting._id, meetingTitle: meeting.title,
+                            inviteId: meeting.id,
+                            meetingModality: meeting.modality,
+                            meetingScheduledDate: winSlot.date,
+                            meetingScheduledTime: winSlot.time,
+                            meetingStatus: meeting.status,
                             message: notif.message, read: false, createdAt: notif.createdAt,
                         });
                     }
@@ -89,6 +101,11 @@ export = function ({ Meeting, Poll, Notification, protect, usingMongo, emitToUse
                     emitToUser(meeting.hostId, 'notification', {
                         _id: hostNotif._id, type: hostNotif.type,
                         meetingId: meeting._id, meetingTitle: meeting.title,
+                        inviteId: meeting.id,
+                        meetingModality: meeting.modality,
+                        meetingScheduledDate: winSlot.date,
+                        meetingScheduledTime: winSlot.time,
+                        meetingStatus: meeting.status,
                         message: hostNotif.message, read: false, createdAt: hostNotif.createdAt,
                     });
 
@@ -107,11 +124,15 @@ export = function ({ Meeting, Poll, Notification, protect, usingMongo, emitToUse
             }
 
             const base = (CLIENT_URL || 'http://localhost:5173').replace(/\/$/, '');
-            const meetingUrl = meeting.modality !== 'Offline' ? `${base}/meetings/${meeting.shortId || meeting._id}` : null;
+            const shareRes = inviteSegmentForShareUrl(meeting.id);
+            const meetingUrl =
+                meeting.modality !== 'Offline' && shareRes
+                    ? `${base}/meetings/${shareRes}`
+                    : null;
             res.json({
                 poll: poll.toObject(), resolved,
                 meeting: resolved ? {
-                    id: meeting._id, shortId: meeting.shortId,
+                    _id: meeting._id, id: meeting.id,
                     confirmedDate: meeting.confirmedDate,
                     confirmedTime: meeting.confirmedTime, meetingUrl,
                 } : null,

@@ -15,11 +15,14 @@ export default function TasksPage() {
         : "You have not assigned any tasks to others yet.";
 
     return (
-        <div style={{ flex: 1, overflow: "auto", padding: "1rem" }}>
-            <div className="page-header">
-                <h2 style={{ fontSize: "var(--font-size-title2)", fontWeight: 700, marginBottom: "1.5rem" }}>My Tasks</h2>
-            </div>
-            <div className="tabs" style={{ marginBottom: "1rem" }}>
+        <div className="page-shell">
+            <header className="page-header">
+                <h2 className="page-header-title">My Tasks</h2>
+                <p className="page-header-description">
+                    Action items from your meetings — verify work, track deadlines, and keep commitments visible.
+                </p>
+            </header>
+            <div className="tabs page-tabs">
                 <button
                     className={`tab ${tasksTab === "assignedToMe" ? "active" : ""}`}
                     onClick={() => setTasksTab("assignedToMe")}
@@ -33,13 +36,15 @@ export default function TasksPage() {
                     Assigned By Me
                 </button>
             </div>
-            <ActionItems
-                sectionTitle={activeTaskTitle}
-                emptyMessage={activeTaskEmptyMessage}
-                items={activeTaskItems}
-                fetchWithAuth={fetchWithAuth}
-                onRefresh={refreshMyActionItems}
-            />
+            <div className="tasks-page-main page-body-gutter-x">
+                <ActionItems
+                    sectionTitle={activeTaskTitle}
+                    emptyMessage={activeTaskEmptyMessage}
+                    items={activeTaskItems}
+                    fetchWithAuth={fetchWithAuth}
+                    onRefresh={refreshMyActionItems}
+                />
+            </div>
         </div>
     );
 }

@@ -4,7 +4,6 @@ import Icon from '../shared/components/Icon';
 import {
     Search01Icon,
     Notification01Icon,
-    FireIcon,
     UserIcon,
     Sun03Icon,
     Add01Icon,
@@ -14,11 +13,15 @@ import {
     Tick01Icon,
     Moon02Icon,
     Clock01Icon,
+    Archive03Icon,
+    Copy01Icon,
+    Video01Icon,
 } from '@hugeicons/core-free-icons';
 import { useAuth } from '../stores/AuthContext';
 import { useSocket } from '../stores/SocketContext';
 import Kbd from '../shared/components/Kbd';
 import ShortcutTooltip from '../shared/components/ShortcutTooltip';
+import { publicMeetingSlug, isMeetingShortSlug } from '../utils/meetingSlug';
 
 const _raw = import.meta.env.VITE_API_URL || 'http://localhost:5001/api';
 const SERVER_BASE = _raw.replace(/(\/api\/?)+$/, '');
@@ -27,7 +30,6 @@ const API_BASE = `${SERVER_BASE}/api`;
 const SEARCH_DEBOUNCE_MS = 280;
 
 interface TopBarProps {
-    streak: number;
     userName: string;
     onNewMeeting: () => void;
     theme?: string;
@@ -54,6 +56,93 @@ function SidebarToggleIcon({ collapsed }: { collapsed: boolean }) {
     );
 }
 
+/** Public URL slug for notifications — lowercase `xxxx-xxxx`; never Mongo ObjectId hex. */
+function resolveMeetingSlug(notif: { meetingId?: unknown; inviteId?: string; meetingShortId?: string }): string | null {
+    if (typeof notif.inviteId === 'string' && isMeetingShortSlug(notif.inviteId)) return notif.inviteId.trim();
+    if (typeof notif.meetingShortId === 'string' && isMeetingShortSlug(notif.meetingShortId)) return notif.meetingShortId.trim();
+    const m = notif.meetingId;
+    if (m && typeof m === 'object' && m !== null) {
+        const doc = m as { id?: string; shortId?: string; _id?: unknown };
+        return publicMeetingSlug({
+            id: doc.id,
+            shortId: doc.shortId,
+            _id: doc._id != null ? String(doc._id) : undefined,
+        });
+    }
+    const raw = typeof m === 'string' ? m : '';
+    return publicMeetingSlug({ id: raw || undefined });
+}
+
+function getNavMeetingMongoId(notif: { meetingId?: unknown }): string | null {
+    const mid = notif.meetingId;
+    if (mid && typeof mid === 'object' && '_id' in mid && mid._id != null) return String((mid as { _id: unknown })._id);
+    if (typeof mid === 'string' || typeof mid === 'number') return String(mid);
+    return null;
+}
+
+function appHref(path: string) {
+    const basename = typeof import.meta.env.BASE_URL === 'string' ? import.meta.env.BASE_URL.replace(/\/$/, '') : '';
+    return `${typeof window !== 'undefined' ? window.location.origin : ''}${basename}${path.startsWith('/') ? path : `/${path}`}`;
+}
+
+/** Scheduled start timestamp for join eligibility; uses populated meeting or realtime snapshot fields on the notification. */
+function parseMeetingStartMs(notif: {
+    meetingId?: unknown;
+    meetingScheduledDate?: string | null;
+    meetingScheduledTime?: string | null;
+}): number | null {
+    let dateStr: string | undefined | null;
+    let timeStr: string | undefined | null;
+    const m = notif.meetingId;
+    if (m && typeof m === 'object') {
+        const mt = m as { confirmedDate?: string; confirmedTime?: string; date?: string; time?: string };
+        dateStr = mt.confirmedDate || mt.date;
+        timeStr = mt.confirmedTime || mt.time;
+    }
+    dateStr = dateStr || notif.meetingScheduledDate || null;
+    timeStr = timeStr || notif.meetingScheduledTime || null;
+    if (!dateStr || !timeStr || String(timeStr).trim() === '') return null;
+    const t = String(timeStr).trim();
+    const timeNorm = /^\d{1,2}:\d{2}(:\d{2})?$/.test(t)
+        ? (t.split(':').length === 2 ? `${t}:00` : t)
+        : t;
+    const iso = `${String(dateStr).trim()}T${timeNorm}`;
+    const ms = Date.parse(iso);
+    return Number.isNaN(ms) ? null : ms;
+}
+
+function notificationModality(notif: {
+    meetingId?: unknown;
+    meetingModality?: string;
+}): string | undefined {
+    const m = notif.meetingId;
+    if (m && typeof m === 'object' && 'modality' in m) return (m as { modality?: string }).modality;
+    return notif.meetingModality;
+}
+
+function notificationStatus(notif: { meetingId?: unknown; meetingStatus?: string }): string | undefined {
+    const m = notif.meetingId;
+    if (m && typeof m === 'object' && 'status' in m) return (m as { status?: string }).status;
+    return notif.meetingStatus;
+}
+
+/** Show Join when the scheduled start time is within 15 minutes of now (either direction), or the meeting is in progress. Online/Hybrid only. */
+function notificationJoinEligible(notif: {
+    meetingId?: unknown;
+    meetingScheduledDate?: string | null;
+    meetingScheduledTime?: string | null;
+    meetingModality?: string;
+}) {
+    const modality = notificationModality(notif);
+    if (modality === 'Offline') return false;
+    const st = notificationStatus(notif);
+    if (st === 'completed' || st === 'cancelled') return false;
+    if (st === 'in-progress') return true;
+    const startMs = parseMeetingStartMs(notif);
+    if (startMs == null) return false;
+    return Math.abs(Date.now() - startMs) <= 15 * 60 * 1000;
+}
+
 function timeAgo(dateStr: string) {
     const now = new Date();
     const date = new Date(dateStr);
@@ -67,13 +156,14 @@ function timeAgo(dateStr: string) {
     return `${days}d ago`;
 }
 
-export default function TopBar({ streak, userName, onNewMeeting, theme = 'dark', onToggleTheme, sidebarCollapsed, onSidebarToggle, onLogout, onOpenPoll, searchInputRef }: TopBarProps) {
+export default function TopBar({ userName, onNewMeeting, theme = 'dark', onToggleTheme, sidebarCollapsed, onSidebarToggle, onLogout, onOpenPoll, searchInputRef }: TopBarProps) {
     const { user } = useAuth();
     const { socket } = useSocket();
     const navigate = useNavigate();
     const [showNotif, setShowNotif] = useState(false);
     const [showUserMenu, setShowUserMenu] = useState(false);
     const [notifications, setNotifications] = useState<any[]>([]);
+    const [notifToast, setNotifToast] = useState<string | null>(null);
     const [searchQuery, setSearchQuery] = useState('');
     const [searchResults, setSearchResults] = useState<any[]>([]);
     const [searchLoading, setSearchLoading] = useState(false);
@@ -85,6 +175,12 @@ export default function TopBar({ streak, userName, onNewMeeting, theme = 'dark',
     const searchDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
     const unreadCount = notifications.filter(n => !n.read).length;
+
+    useEffect(() => {
+        if (!notifToast) return;
+        const t = setTimeout(() => setNotifToast(null), 2200);
+        return () => clearTimeout(t);
+    }, [notifToast]);
 
     const runSearch = useCallback(async (q: string) => {
         const trimmed = (q || '').trim();
@@ -173,7 +269,7 @@ export default function TopBar({ streak, userName, onNewMeeting, theme = 'dark',
         return () => document.removeEventListener('mousedown', handleClickOutside);
     }, []);
 
-    const markAllRead = async () => {
+    const markAllRead = useCallback(async () => {
         try {
             await fetch(`${API_BASE}/notifications/read-all`, {
                 method: 'PATCH',
@@ -181,37 +277,35 @@ export default function TopBar({ streak, userName, onNewMeeting, theme = 'dark',
             });
             setNotifications(prev => prev.map(n => ({ ...n, read: true })));
         } catch { /* ignore */ }
-    };
+    }, [user?.token]);
 
-    const handleNotifClick = async (notif: any) => {
-        if (!notif.read) {
-            try {
-                await fetch(`${API_BASE}/notifications/${notif._id}/read`, {
-                    method: 'PATCH',
-                    headers: { Authorization: `Bearer ${user?.token}`, 'Content-Type': 'application/json' },
-                });
-                setNotifications(prev => prev.map(n => n._id === notif._id ? { ...n, read: true } : n));
-            } catch { /* ignore */ }
-        }
-
-        if (notif.type === 'poll_invite' && onOpenPoll) {
-            onOpenPoll(notif.meetingId?._id || notif.meetingId);
-            setShowNotif(false);
-        }
-    };
+    const markNotificationRead = useCallback(async (notif: any) => {
+        if (!notif?._id || notif.read) return;
+        try {
+            await fetch(`${API_BASE}/notifications/${notif._id}/read`, {
+                method: 'PATCH',
+                headers: { Authorization: `Bearer ${user?.token}`, 'Content-Type': 'application/json' },
+            });
+            setNotifications(prev => prev.map(n => n._id === notif._id ? { ...n, read: true } : n));
+        } catch { /* ignore */ }
+    }, [user?.token]);
 
     const getNotifIcon = (type: string) => {
         switch (type) {
             case 'poll_invite': return BarChartIcon;
             case 'meeting_confirmed': return Calendar02Icon;
+            case 'meeting_summary_ready': return Archive03Icon;
             default: return Notification01Icon;
         }
     };
 
+    const notificationRowIconModifier = (type: string) =>
+        type === 'poll_invite' ? 'poll' : type === 'meeting_confirmed' ? 'confirmed' : type === 'meeting_summary_ready' ? 'archive' : '';
+
     const selectSearchResult = useCallback((m: any) => {
-        const linkId = (m.shortId || m.id || m._id)?.toString();
-        if (linkId) {
-            const path = m.status === 'completed' ? `/archives/${linkId}` : `/meetings/${linkId}`;
+        const linkSlug = publicMeetingSlug(m);
+        if (linkSlug) {
+            const path = m.status === 'completed' ? `/archives/${linkSlug}` : `/meetings/${linkSlug}`;
             navigate(path);
         }
         setSearchQuery('');
@@ -317,11 +411,6 @@ export default function TopBar({ streak, userName, onNewMeeting, theme = 'dark',
                     </button>
                 </ShortcutTooltip>
 
-                <div className="streak-badge tooltip" data-tooltip={`${streak} meeting streak!`}>
-                    <Icon icon={FireIcon} size={16} className="streak-icon" />
-                    <span>{streak}</span>
-                </div>
-
                 <div ref={notifRef} style={{ position: 'relative' }}>
                     <ShortcutTooltip keys={['N']}>
                         <button
@@ -331,7 +420,7 @@ export default function TopBar({ streak, userName, onNewMeeting, theme = 'dark',
                             id="btn-notifications"
                         >
                             <Icon icon={Notification01Icon} size={18} />
-                            {unreadCount > 0 && <span className="notif-dot">{unreadCount > 9 ? '9+' : unreadCount}</span>}
+                            {unreadCount > 0 && <span className="notif-dot" aria-hidden />}
                         </button>
                     </ShortcutTooltip>
 
@@ -340,32 +429,116 @@ export default function TopBar({ streak, userName, onNewMeeting, theme = 'dark',
                             <div className="notification-dropdown-header">
                                 <span className="notification-dropdown-title">Notifications</span>
                                 {unreadCount > 0 && (
-                                    <button className="notification-mark-read" onClick={markAllRead}>
+                                    <button type="button" className="notification-mark-read" onClick={markAllRead}>
                                         <Icon icon={Tick01Icon} size={12} />
                                         Mark all read
                                     </button>
                                 )}
                             </div>
+                            {notifToast && (
+                                <div className="notification-dropdown-toast" role="status">
+                                    {notifToast}
+                                </div>
+                            )}
                             <div className="notification-dropdown-body">
                                 {notifications.length === 0 ? (
                                     <div className="notification-empty">No notifications yet</div>
                                 ) : (
-                                    notifications.map(n => (
-                                        <button
-                                            key={n._id}
-                                            className={`notification-item${n.read ? '' : ' unread'}`}
-                                            onClick={() => handleNotifClick(n)}
-                                        >
-                                            <div className={`notification-item-icon ${n.type === 'poll_invite' ? 'poll' : n.type === 'meeting_confirmed' ? 'confirmed' : ''}`}>
-                                                <Icon icon={getNotifIcon(n.type)} size={14} />
+                                    notifications.map((n, idx) => {
+                                        const slug = resolveMeetingSlug(n);
+                                        const pollMongoId = getNavMeetingMongoId(n);
+                                        const iconMod = notificationRowIconModifier(n.type);
+                                        const confirmedJoinEligible = notificationJoinEligible(n);
+
+                                        const pollActions = n.type === 'poll_invite' && pollMongoId && onOpenPoll && (
+                                            <button
+                                                type="button"
+                                                className="notification-item-action"
+                                                onClick={() => {
+                                                    markNotificationRead(n);
+                                                    onOpenPoll(pollMongoId);
+                                                    setShowNotif(false);
+                                                }}
+                                            >
+                                                <Icon icon={BarChartIcon} size={12} />
+                                                Vote on times
+                                            </button>
+                                        );
+
+                                        const confirmedActions = n.type === 'meeting_confirmed' && slug && (
+                                            <>
+                                                <button
+                                                    type="button"
+                                                    className="notification-item-action"
+                                                    onClick={async () => {
+                                                        try {
+                                                            await navigator.clipboard.writeText(appHref(`/meetings/${slug}`));
+                                                            setNotifToast('Meeting link copied');
+                                                            markNotificationRead(n);
+                                                        } catch {
+                                                            /* ignore */
+                                                        }
+                                                    }}
+                                                >
+                                                    <Icon icon={Copy01Icon} size={12} />
+                                                    Copy link
+                                                </button>
+                                                {confirmedJoinEligible && (
+                                                    <button
+                                                        type="button"
+                                                        className="notification-item-action notification-item-action-primary"
+                                                        onClick={() => {
+                                                            markNotificationRead(n);
+                                                            navigate(`/meetings/${slug}`);
+                                                            setShowNotif(false);
+                                                        }}
+                                                    >
+                                                        <Icon icon={Video01Icon} size={12} />
+                                                        Join
+                                                    </button>
+                                                )}
+                                            </>
+                                        );
+
+                                        const archiveActions = n.type === 'meeting_summary_ready' && slug && (
+                                            <button
+                                                type="button"
+                                                className="notification-item-action"
+                                                onClick={() => {
+                                                    markNotificationRead(n);
+                                                    navigate(`/archives/${slug}`);
+                                                    setShowNotif(false);
+                                                }}
+                                            >
+                                                <Icon icon={Archive03Icon} size={12} />
+                                                Open archive
+                                            </button>
+                                        );
+
+                                        const actionRow = pollActions || confirmedActions || archiveActions;
+
+                                        return (
+                                            <div
+                                                key={n._id ?? `nid-${idx}-${String(n.createdAt)}`}
+                                                className={`notification-item${n.read ? '' : ' unread'}`}
+                                                role="listitem"
+                                            >
+                                                <div className="notification-item-row">
+                                                    <div className={`notification-item-icon${iconMod ? ` ${iconMod}` : ''}`}>
+                                                        <Icon icon={getNotifIcon(n.type)} size={14} />
+                                                    </div>
+                                                    <div className="notification-item-content">
+                                                        <p className="notification-item-message">{n.message}</p>
+                                                        <span className="notification-item-time">{timeAgo(n.createdAt)}</span>
+                                                    </div>
+                                                    {!n.read && <span className="notification-unread-dot" aria-hidden />}
+                                                </div>
+                                                {actionRow && (
+                                                    <div className="notification-item-actions">{actionRow}</div>
+                                                )}
                                             </div>
-                                            <div className="notification-item-content">
-                                                <p className="notification-item-message">{n.message}</p>
-                                                <span className="notification-item-time">{timeAgo(n.createdAt)}</span>
-                                            </div>
-                                            {!n.read && <span className="notification-unread-dot" />}
-                                        </button>
-                                    ))
+                                        );
+                                    })
                                 )}
                             </div>
                         </div>

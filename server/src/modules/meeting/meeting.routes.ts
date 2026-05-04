@@ -1,6 +1,10 @@
 import express from 'express';
 import { meetingQueryByAnyId } from './meeting.lookup';
-import { generateShortId } from '../../utils/shortId';
+import {
+    generateMeetingInviteSegment,
+    inviteSegmentForShareUrl,
+} from '../../utils/meetingInviteId';
+
 const router = express.Router();
 
 const MEETING_COMPLETION_BUFFER_MINUTES = 10;
@@ -49,7 +53,6 @@ export = function ({ User, Meeting, Poll, Notification, Agenda, protect, usingMo
             const userId = req.user.id;
             if (usingMongo() && Meeting) {
                 const base = (CLIENT_URL || 'http://localhost:5173').replace(/\/$/, '');
-                // Only return meetings where the user is the host or a participant
                 const dbMeetings = await Meeting.find({
                     isPersonalRoom: { $ne: true },
                     $or: [
@@ -64,25 +67,30 @@ export = function ({ User, Meeting, Poll, Notification, Agenda, protect, usingMo
                         await meeting.save();
                     }));
                 }
-                const formatted = dbMeetings.map((m: any) => ({
-                    id: m._id,
-                    shortId: m.shortId,
-                    title: m.title,
-                    modality: m.modality,
-                    date: m.confirmedDate || m.date,
-                    time: m.confirmedTime || m.time,
-                    durationMinutes: m.durationMinutes,
-                    location: m.location,
-                    host: m.host || 'Unknown',
-                    hostId: m.hostId,
-                    participants: m.participants,
-                    status: m.status,
-                    meetingUrl: m.modality !== 'Offline' ? `${base}/meetings/${m.shortId || m._id}` : null,
-                    pollId: m.pollId,
-                }));
+                const formatted = dbMeetings.map((m: any) => {
+                    const shareSeg = inviteSegmentForShareUrl(m.id);
+                    return {
+                        _id: m._id,
+                        id: m.id ?? undefined,
+                        title: m.title,
+                        modality: m.modality,
+                        date: m.confirmedDate || m.date,
+                        time: m.confirmedTime || m.time,
+                        durationMinutes: m.durationMinutes,
+                        location: m.location,
+                        host: m.host || 'Unknown',
+                        hostId: m.hostId,
+                        participants: m.participants,
+                        status: m.status,
+                        meetingUrl:
+                            m.modality !== 'Offline' && shareSeg
+                                ? `${base}/meetings/${shareSeg}`
+                                : null,
+                        pollId: m.pollId,
+                    };
+                });
                 return res.json(formatted);
             }
-            // In-memory fallback: filter by hostId or participant id
             const visibleMeetings = inMemoryMeetings.filter((meeting: any) => {
                 if (shouldAutoCompleteMeeting(meeting)) meeting.status = 'completed';
                 const isHost = String(meeting.hostId) === String(userId);
@@ -116,23 +124,25 @@ export = function ({ User, Meeting, Poll, Notification, Agenda, protect, usingMo
                 }
 
                 const base = (CLIENT_URL || 'http://localhost:5173').replace(/\/$/, '');
-                const meetingUrl = meeting.modality !== 'Offline'
-                    ? `${base}/meetings/${meeting.shortId || meeting._id}`
+                const shareSeg = inviteSegmentForShareUrl(meeting.id);
+                const meetingUrl = meeting.modality !== 'Offline' && shareSeg
+                    ? `${base}/meetings/${shareSeg}`
                     : (meeting.meetingUrl || null);
 
+                const plain = meeting.toObject({ virtuals: false });
                 return res.json({
-                    ...meeting.toObject(),
-                    id: meeting._id,
-                    shortId: meeting.shortId,
-                    meetingUrl
+                    ...plain,
+                    meetingUrl,
                 });
             }
 
             const meeting = inMemoryMeetings.find((m: any) =>
-                String(m.shortId) === String(id) || String(m.id || m._id) === String(id),
+                String(m.id) === String(id)
+                || String(m._id) === String(id)
+                || String(m.shortId ?? '') === String(id),
             );
             if (!meeting) return res.status(404).json({ message: 'Meeting not found' });
-            
+
             const isHost = String(meeting.hostId) === String(userId);
             const isParticipant = (meeting.participants || []).some((p: any) => String(p._id || p) === String(userId));
             if (!isHost && !isParticipant) {
@@ -191,7 +201,9 @@ export = function ({ User, Meeting, Poll, Notification, Agenda, protect, usingMo
                     });
                 }
                 const base = (CLIENT_URL || 'http://localhost:5173').replace(/\/$/, '');
-                const meetingUrl = modality !== 'Offline' ? `${base}/meetings/${newMeeting.shortId || newMeeting._id}` : null;
+                const seg = inviteSegmentForShareUrl(newMeeting.id);
+                const meetingUrl =
+                    modality !== 'Offline' && seg ? `${base}/meetings/${seg}` : null;
 
                 let pollData: any = null;
 
@@ -214,6 +226,11 @@ export = function ({ User, Meeting, Poll, Notification, Agenda, protect, usingMo
                             emitToUser(pid, 'notification', {
                                 _id: notif._id, type: notif.type,
                                 meetingId: newMeeting._id, meetingTitle: title,
+                                inviteId: newMeeting.id,
+                                meetingModality: modality,
+                                meetingScheduledDate: newMeeting.date,
+                                meetingScheduledTime: newMeeting.time,
+                                meetingStatus: newMeeting.status,
                                 message: notif.message, read: false, createdAt: notif.createdAt,
                             });
                         }
@@ -222,7 +239,7 @@ export = function ({ User, Meeting, Poll, Notification, Agenda, protect, usingMo
 
                 if (isSingleSlot && participants && participants.length > 0) {
                     const participantDocs = await User.find({ _id: { $in: participants } });
-                    const meetingForIcs = { ...newMeeting.toObject(), meetingUrl };
+                    const meetingForIcs = { ...newMeeting.toObject({ virtuals: false }), meetingUrl };
                     const icsBuffer = generateICS(meetingForIcs, timeSlots[0]);
                     for (const p of participantDocs) {
                         sendRsvpEmail(newMeeting, p, timeSlots[0], icsBuffer);
@@ -234,6 +251,11 @@ export = function ({ User, Meeting, Poll, Notification, Agenda, protect, usingMo
                         emitToUser(p._id, 'notification', {
                             _id: notif._id, type: notif.type,
                             meetingId: newMeeting._id, meetingTitle: title,
+                            inviteId: newMeeting.id,
+                            meetingModality: modality,
+                            meetingScheduledDate: timeSlots[0].date,
+                            meetingScheduledTime: timeSlots[0].time,
+                            meetingStatus: newMeeting.status,
                             message: notif.message, read: false, createdAt: notif.createdAt,
                         });
                     }
@@ -242,8 +264,8 @@ export = function ({ User, Meeting, Poll, Notification, Agenda, protect, usingMo
                 const populated = await Meeting.findById(newMeeting._id).populate('participants', 'name email');
 
                 return res.status(201).json({
-                    id: populated._id,
-                    shortId: populated.shortId,
+                    _id: populated._id,
+                    id: populated.id,
                     title: populated.title, modality: populated.modality,
                     date: populated.confirmedDate || populated.date,
                     time: populated.confirmedTime || populated.time,
@@ -256,12 +278,14 @@ export = function ({ User, Meeting, Poll, Notification, Agenda, protect, usingMo
             }
 
             const slot = isSingleSlot ? timeSlots[0] : null;
-            const meetingId = `mtg-${Date.now()}`;
-            const shortId = generateShortId();
+            const mtgDocId = `mtg-${Date.now()}`;
+            const inviteId = generateMeetingInviteSegment();
             const base = (CLIENT_URL || 'http://localhost:5173').replace(/\/$/, '');
-            const meetingUrl = modality !== 'Offline' ? `${base}/meetings/${shortId}` : null;
+            const meetingUrl = modality !== 'Offline' ? `${base}/meetings/${inviteId}` : null;
             const newMeeting = {
-                id: meetingId, shortId, title, modality,
+                _id: mtgDocId,
+                id: inviteId,
+                title, modality,
                 description: description || undefined,
                 durationMinutes: durationMinutes != null ? Number(durationMinutes) : undefined,
                 date: slot?.date, time: slot?.time, location,
@@ -281,7 +305,7 @@ export = function ({ User, Meeting, Poll, Notification, Agenda, protect, usingMo
                     notes: '',
                     order: i,
                 }));
-            if (agendaItems.length > 0) inMemoryAgendas[meetingId] = agendaItems;
+            if (agendaItems.length > 0) inMemoryAgendas[mtgDocId] = agendaItems;
             res.status(201).json(newMeeting);
         } catch (error: any) {
             console.error('Create meeting error:', error);
@@ -296,8 +320,12 @@ export = function ({ User, Meeting, Poll, Notification, Agenda, protect, usingMo
             if (!meeting) return res.status(404).json({ message: 'Meeting not found' });
 
             const base = (CLIENT_URL || 'http://localhost:5173').replace(/\/$/, '');
-            const meetingUrl = meeting.modality !== 'Offline' ? `${base}/meetings/${meeting.shortId || meeting._id}` : null;
-            const meetingForIcs = { ...meeting.toObject(), meetingUrl };
+            const shareSegCal = inviteSegmentForShareUrl(meeting.id);
+            const meetingUrl =
+                meeting.modality !== 'Offline' && shareSegCal
+                    ? `${base}/meetings/${shareSegCal}`
+                    : null;
+            const meetingForIcs = { ...meeting.toObject({ virtuals: false }), meetingUrl };
             const slot = { date: meeting.confirmedDate || meeting.date, time: meeting.confirmedTime || meeting.time };
             const icsBuffer = generateICS(meetingForIcs, slot);
             res.setHeader('Content-Type', 'text/calendar; charset=utf-8');
@@ -347,8 +375,7 @@ export = function ({ User, Meeting, Poll, Notification, Agenda, protect, usingMo
                     virtualMeeting.status = 'in-progress';
                     await virtualMeeting.save();
                 }
-                const returnedObj = virtualMeeting.toObject();
-                returnedObj.id = returnedObj._id.toString();
+                const returnedObj = virtualMeeting.toObject({ virtuals: false });
                 return res.json(returnedObj);
             }
 
@@ -369,7 +396,7 @@ export = function ({ User, Meeting, Poll, Notification, Agenda, protect, usingMo
                 isPersonalRoom: true,
                 personalRoomId: roomId
             };
-            
+
             const exists = inMemoryMeetings.find((m: any) => m.id === meetingId);
             if (!exists) {
                 inMemoryMeetings.push(virtualMeeting);

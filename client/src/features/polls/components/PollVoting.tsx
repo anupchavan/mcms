@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import Icon from '../../../shared/components/Icon';
 import {
     Cancel01Icon,
@@ -9,6 +9,7 @@ import {
 } from '@hugeicons/core-free-icons';
 import { useAuth } from '../../../stores/AuthContext';
 import { useSocket } from '../../../stores/SocketContext';
+import { pathnameHasMongoMeetingSegment } from '../../../utils/meetingSlug';
 
 interface PollSlot {
     date: string;
@@ -46,6 +47,11 @@ export default function PollVoting({ meetingId, onClose }: PollVotingProps) {
     const [submitting, setSubmitting] = useState(false);
     const [linkCopied, setLinkCopied] = useState(false);
     const [error, setError] = useState('');
+
+    const shareableMeetingUrl = useMemo(
+        () => (meetingUrl && !pathnameHasMongoMeetingSegment(meetingUrl) ? meetingUrl : ''),
+        [meetingUrl],
+    );
 
     useEffect(() => {
         if (!meetingId || !user?.token) return;
@@ -119,8 +125,9 @@ export default function PollVoting({ meetingId, onClose }: PollVotingProps) {
     };
 
     const handleCopyLink = async () => {
+        if (!shareableMeetingUrl) return;
         try {
-            await navigator.clipboard.writeText(meetingUrl);
+            await navigator.clipboard.writeText(shareableMeetingUrl);
             setLinkCopied(true);
             setTimeout(() => setLinkCopied(false), 2000);
         } catch { /* ignore */ }
@@ -196,14 +203,14 @@ export default function PollVoting({ meetingId, onClose }: PollVotingProps) {
                             {totalVotes} total vote{totalVotes !== 1 ? 's' : ''}
                         </div>
 
-                        {isResolved && meetingUrl && modality !== 'Offline' && (
+                        {isResolved && shareableMeetingUrl && modality !== 'Offline' && (
                             <div className="jitsi-link-card" style={{ marginTop: '1rem' }}>
                                 <div className="jitsi-link-label">
                                     <Icon icon={Link01Icon} size={14} />
                                     Meeting Link
                                 </div>
                                 <div className="jitsi-link-row">
-                                    <span className="jitsi-link-url">{meetingUrl}</span>
+                                    <span className="jitsi-link-url">{shareableMeetingUrl}</span>
                                     <button className={`btn btn-sm ${linkCopied ? 'btn-success' : 'btn-secondary'}`} onClick={handleCopyLink}>
                                         <Icon icon={linkCopied ? Tick01Icon : Copy01Icon} size={14} />
                                         {linkCopied ? 'Copied' : 'Copy'}

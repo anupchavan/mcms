@@ -1,4 +1,5 @@
 import { useEffect, useRef } from 'react';
+import { avatarUrlFromPath } from '../../../shared/avatarUrl';
 import Icon from '../../../shared/components/Icon';
 import ShortcutTooltip from '../../../shared/components/ShortcutTooltip';
 import { PinIcon, SidebarRightIcon } from '@hugeicons/core-free-icons';
@@ -10,6 +11,9 @@ interface TranscriptEntry {
     text: string;
     timestamp: string;
     languageCode?: string;
+    // True while the line is still being spoken — server marks it on every
+    // interim transcript and clears it when the utterance is finalized.
+    interim?: boolean;
 }
 
 interface Pin {
@@ -29,13 +33,13 @@ interface TranscriptFeedProps {
 }
 
 const BAR_PALETTE = [
-    '#AF3029', // red
-    '#B08C3E', // yellow
-    '#66800B', // green
-    '#2D6B8F', // cyan/blue
-    '#384D54', // teal
-    '#8F5630', // orange
-    '#5E409D', // violet
+    "var(--flexoki-red-600)",
+    "var(--flexoki-yellow-600)",
+    "var(--flexoki-green-600)",
+    "var(--flexoki-blue-600)",
+    "var(--flexoki-cyan-900)",
+    "var(--flexoki-orange-700)",
+    "var(--flexoki-purple-600)",
 ];
 
 function barColorForSpeaker(name: string): string {
@@ -96,6 +100,9 @@ export default function TranscriptFeed({ transcripts, isLive, onClosePanel, onPi
                         {transcripts.map((entry) => {
                             const rowPins = pins.filter(p => p.transcriptTimestamp === entry.timestamp);
                             const speaker = entry.speaker || 'Unknown';
+                            const avatarSrc = entry.speakerImage
+                                ? avatarUrlFromPath(entry.speakerImage)
+                                : null;
                             return (
                                 <div key={String(entry.id)} className="transcript-group">
                                     <div
@@ -107,10 +114,10 @@ export default function TranscriptFeed({ transcripts, isLive, onClosePanel, onPi
                                         <div className="transcript-header">
                                             <div className="transcript-speaker-row">
                                                 <div className="transcript-avatar">
-                                                    {entry.speakerImage ? (
+                                                    {avatarSrc ? (
                                                         <img
                                                             className="transcript-avatar-img"
-                                                            src={entry.speakerImage}
+                                                            src={avatarSrc}
                                                             alt=""
                                                         />
                                                     ) : (
@@ -128,7 +135,12 @@ export default function TranscriptFeed({ transcripts, isLive, onClosePanel, onPi
                                                 </span>
                                             )}
                                         </div>
-                                        <p className="transcript-text">{entry.text}</p>
+                                        <p className="transcript-text">
+                                            {entry.text}
+                                            {entry.interim && (
+                                                <span className="transcript-interim-caret" aria-hidden />
+                                            )}
+                                        </p>
                                         {rowPins.length > 0 && (
                                             <div className="transcript-actions" style={{ flexWrap: 'wrap' }}>
                                                 {rowPins.map(pin => (
