@@ -196,16 +196,17 @@ export default function useWebRTC(
 
     const peers = useMemo(() => {
         // #region agent log
-        console.log('[dbg:peers-memo] rebuilding — participants:', participants.length, 'activeSpeakers:', activeSpeakerIds.size);
+        console.log('[dbg:peers-memo POST-FIX] rebuilding — participants:', participants.length);
         // #endregion
         return Array.from(participants).flatMap((p) => {
             const tiles = getParticipantVideoTiles(p);
-            const isSpeaking = activeSpeakerIds.has(p.identity);
             const micPub = p.getTrackPublication(Track.Source.Microphone);
             const isAudioMuted = micPub ? micPub.isMuted : true;
-            return tiles.map((tile) => ({ ...tile, speaking: isSpeaking, audioMuted: isAudioMuted }));
+            // speaking is intentionally NOT computed here — activeSpeakerIds must
+            // not be a dependency of this memo or every VAD event rebuilds streams
+            return tiles.map((tile) => ({ ...tile, audioMuted: isAudioMuted }));
         });
-    }, [getParticipantVideoTiles, participants, activeSpeakerIds]);
+    }, [getParticipantVideoTiles, participants]);
 
     const localStream = useMemo(() => {
         const stream = new MediaStream();
@@ -488,5 +489,6 @@ export default function useWebRTC(
         toggleScreenShare,
         joined: isJoined,
         localSpeaking,
+        activeSpeakerIds,
     };
 }

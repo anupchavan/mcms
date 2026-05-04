@@ -180,7 +180,7 @@ function VideoTile({
 
   useEffect(() => {
     // #region agent log
-    console.log('[dbg:stream-effect] srcObject assign — tile:', tileId, 'streamId:', stream?.id, 'isSelf:', isSelf);
+    console.log('[dbg:stream-effect POST-FIX] srcObject assign — tile:', tileId, 'streamId:', stream?.id, 'isSelf:', isSelf);
     // #endregion
     if (videoRef.current && stream) {
       videoRef.current.srcObject = stream;
@@ -444,6 +444,7 @@ export default function VideoArea({
     screenShareSystemAudio,
     setScreenShareSystemAudioPref,
     localSpeaking,
+    activeSpeakerIds,
   } = useWebRTC(socket, meetingId, currentUser);
 
   useTranscriptionCapture(socket, meetingId || null, localStream);
@@ -632,7 +633,9 @@ export default function VideoArea({
       cameraOn: undefined as boolean | undefined,
       isSelf: false,
       isScreenShare: peer.isScreenShare,
-      speaking: peer.speaking ?? false,
+      // speaking computed here from activeSpeakerIds — not from peers — so VAD
+      // events never trigger stream reconstruction in getParticipantVideoTiles
+      speaking: activeSpeakerIds.has(peer.userId ?? ''),
     }));
     const allTiles = [...selfTiles, ...peerTiles];
     return allTiles.sort((a, b) => {
@@ -642,7 +645,7 @@ export default function VideoArea({
       if (a.isScreenShare !== b.isScreenShare) return a.isScreenShare ? -1 : 1;
       return 0;
     });
-  }, [screenStream, localStream, currentUser?.name, currentUser?.profileImage, selfUserId, peers, pinnedTileIds, localSpeaking, audioEnabled, videoEnabled]);
+  }, [screenStream, localStream, currentUser?.name, currentUser?.profileImage, selfUserId, peers, pinnedTileIds, localSpeaking, activeSpeakerIds, audioEnabled, videoEnabled]);
 
   const { screenTiles, cameraTiles, hasAnyScreenShare } = useMemo(() => {
     const screen = meetingTiles.filter((t) => t.isScreenShare);
