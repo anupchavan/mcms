@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { Link } from 'react-router-dom';
 import Icon from '../../../shared/components/Icon';
 import {
@@ -10,7 +10,22 @@ import {
     Award01Icon,
     BarChartIcon,
     Calendar02Icon,
+    Mic01Icon,
+    Plant01Icon,
+    StarIcon,
+    ChampionIcon,
+    Target01Icon,
+    BulbIcon,
+    RocketIcon,
 } from '@hugeicons/core-free-icons';
+
+type Badge = {
+    name: string;
+    description: string;
+    iconKey?: string;
+    /** Legacy emoji field — older server payloads may still send this; ignored in favor of iconKey. */
+    icon?: string;
+};
 
 interface DashboardStats {
     totalMeetings: number;
@@ -19,9 +34,8 @@ interface DashboardStats {
     tasksCompleted: number;
     tasksTotal: number;
     weeklyHeatmap: Array<{ day: string; hours: number }>;
-    badges: Array<{ icon: string; name: string; description: string }>;
+    badges: Badge[];
     streak: number;
-    sentimentProfile: { positive: number; neutral: number; negative: number };
     user?: string;
     monthlyAttendance: Array<{ week: string; attended: number; total: number }>;
     speakingTime: number;
@@ -35,6 +49,96 @@ interface ProductivityDashboardProps {
 }
 
 const TABS = ['overview', 'attendance', 'engagement'];
+
+/** Map server-emitted badge iconKey strings to HugeIcons. Unknown keys fall back to a neutral award icon. */
+const BADGE_ICON_MAP: Record<string, typeof Award01Icon> = {
+    sapling: Plant01Icon,
+    trophy: ChampionIcon,
+    flame: FireIcon,
+    star: StarIcon,
+    clock: Clock01Icon,
+    mic: Mic01Icon,
+    target: Target01Icon,
+};
+
+function badgeIcon(b: Badge): typeof Award01Icon {
+    if (b.iconKey && BADGE_ICON_MAP[b.iconKey]) return BADGE_ICON_MAP[b.iconKey];
+    return Award01Icon;
+}
+
+type Recommendation = { id: string; icon: typeof BulbIcon; text: string };
+
+/** Generate up to three data-driven nudges from the user's stats. */
+function buildRecommendations(stats: DashboardStats): Recommendation[] {
+    const recs: Recommendation[] = [];
+
+    const taskRatio = stats.tasksTotal > 0 ? stats.tasksCompleted / stats.tasksTotal : null;
+    const meetingMinutesTotal = Math.max(1, stats.avgMeetingDuration * Math.max(1, stats.totalMeetings));
+    const speakingShare = stats.speakingTime > 0
+        ? Math.round((stats.speakingTime / meetingMinutesTotal) * 100)
+        : 0;
+
+    if (stats.totalMeetings === 0) {
+        recs.push({
+            id: 'no-meetings',
+            icon: RocketIcon,
+            text: "No meetings yet — schedule or join one to start building your meeting intelligence profile.",
+        });
+        return recs;
+    }
+
+    if (taskRatio != null && taskRatio >= 0.85) {
+        recs.push({
+            id: 'task-strong',
+            icon: Target01Icon,
+            text: `Strong task follow-through: you've completed ${Math.round(taskRatio * 100)}% of action items assigned to you.`,
+        });
+    } else if (taskRatio != null && taskRatio < 0.5 && stats.tasksTotal >= 3) {
+        recs.push({
+            id: 'task-weak',
+            icon: Target01Icon,
+            text: `Only ${Math.round(taskRatio * 100)}% of your action items are verified — review the pending ones to keep momentum.`,
+        });
+    }
+
+    if (speakingShare >= 50) {
+        recs.push({
+            id: 'speaking-high',
+            icon: Mic01Icon,
+            text: `You're speaking for an estimated ${speakingShare}% of meeting time — consider opening more floor time for other participants.`,
+        });
+    } else if (stats.speakingTime > 0 && speakingShare > 0 && speakingShare < 10) {
+        recs.push({
+            id: 'speaking-low',
+            icon: Mic01Icon,
+            text: `Your share of voice is around ${speakingShare}% — try contributing more in upcoming discussions.`,
+        });
+    }
+
+    if (stats.streak >= 5) {
+        recs.push({
+            id: 'streak',
+            icon: FireIcon,
+            text: `You're on a ${stats.streak}-meeting punctuality streak — keep it up to unlock the next badge.`,
+        });
+    } else if (stats.punctualityRate < 70 && stats.totalMeetings >= 3) {
+        recs.push({
+            id: 'punctuality-low',
+            icon: Clock01Icon,
+            text: `Your punctuality rate is ${stats.punctualityRate}% — joining a few minutes earlier would push you toward the on-time badge.`,
+        });
+    }
+
+    if (recs.length === 0) {
+        recs.push({
+            id: 'general',
+            icon: BulbIcon,
+            text: "Keep attending and contributing to meetings — recommendations get more specific as you build history.",
+        });
+    }
+
+    return recs.slice(0, 3);
+}
 
 export default function ProductivityDashboard({ stats, userName, personalRoomId }: ProductivityDashboardProps) {
     const [activeTab, setActiveTab] = useState('overview');
@@ -57,9 +161,21 @@ export default function ProductivityDashboard({ stats, userName, personalRoomId 
         return () => window.removeEventListener('keydown', handleTab);
     }, [handleTab]);
 
+    const recommendations = useMemo(
+        () => (stats ? buildRecommendations(stats) : []),
+        [stats],
+    );
+
     if (!stats) return null;
 
-    const maxHours = Math.max(...stats.weeklyHeatmap.map(d => d.hours));
+    const maxHours = Math.max(1, ...stats.weeklyHeatmap.map(d => d.hours));
+    const meetingMinutesTotal = Math.max(1, stats.avgMeetingDuration * Math.max(1, stats.totalMeetings));
+    const speakingSharePct = stats.speakingTime > 0
+        ? Math.min(100, Math.round((stats.speakingTime / meetingMinutesTotal) * 100))
+        : 0;
+    const taskCompletionPct = stats.tasksTotal > 0
+        ? Math.round((stats.tasksCompleted / stats.tasksTotal) * 100)
+        : 0;
 
     return (
         <div className="productivity-dashboard">
@@ -181,7 +297,9 @@ export default function ProductivityDashboard({ stats, userName, personalRoomId 
                         <div className="badges-grid">
                             {stats.badges.map((badge, i) => (
                                 <div key={i} className="badge-item animate-in" style={{ animationDelay: `${i * 0.1}s` }}>
-                                    <span className="badge-icon">{badge.icon}</span>
+                                    <span className="badge-icon">
+                                        <Icon icon={badgeIcon(badge)} size={20} style={{ color: 'var(--accent-amber)' }} />
+                                    </span>
                                     <div>
                                         <div className="badge-name">{badge.name}</div>
                                         <div className="badge-desc">{badge.description}</div>
@@ -204,31 +322,15 @@ export default function ProductivityDashboard({ stats, userName, personalRoomId 
 
                     <div className="stat-card glass-card">
                         <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.75rem' }}>
-                            <Icon icon={UserGroupIcon} size={18} style={{ color: 'var(--accent-violet)' }} />
-                            <span className="stat-label">Sentiment Profile</span>
+                            <Icon icon={Mic01Icon} size={18} style={{ color: 'var(--accent-violet)' }} />
+                            <span className="stat-label">Speaking Time</span>
                         </div>
-                        <div className="sentiment-bars">
-                            <div className="sentiment-bar-row">
-                                <span style={{ color: 'var(--accent-emerald)', fontSize: '0.75rem', width: '4.375rem' }}>Positive</span>
-                                <div className="sentiment-track">
-                                    <div className="sentiment-fill" style={{ width: `${stats.sentimentProfile.positive}%`, background: 'var(--accent-emerald)' }}></div>
-                                </div>
-                                <span style={{ fontSize: '0.75rem', fontWeight: 600 }}>{stats.sentimentProfile.positive}%</span>
-                            </div>
-                            <div className="sentiment-bar-row">
-                                <span style={{ color: 'var(--text-secondary)', fontSize: '0.75rem', width: '4.375rem' }}>Neutral</span>
-                                <div className="sentiment-track">
-                                    <div className="sentiment-fill" style={{ width: `${stats.sentimentProfile.neutral}%`, background: 'var(--text-muted)' }}></div>
-                                </div>
-                                <span style={{ fontSize: '0.75rem', fontWeight: 600 }}>{stats.sentimentProfile.neutral}%</span>
-                            </div>
-                            <div className="sentiment-bar-row">
-                                <span style={{ color: 'var(--accent-rose)', fontSize: '0.75rem', width: '4.375rem' }}>Negative</span>
-                                <div className="sentiment-track">
-                                    <div className="sentiment-fill" style={{ width: `${stats.sentimentProfile.negative}%`, background: 'var(--accent-rose)' }}></div>
-                                </div>
-                                <span style={{ fontSize: '0.75rem', fontWeight: 600 }}>{stats.sentimentProfile.negative}%</span>
-                            </div>
+                        <div style={{ display: 'flex', alignItems: 'baseline', gap: '0.5rem' }}>
+                            <div className="stat-value">{stats.speakingTime}</div>
+                            <span style={{ fontSize: '0.8125rem', color: 'var(--text-muted)' }}>minutes total</span>
+                        </div>
+                        <div style={{ fontSize: '0.6875rem', color: 'var(--text-muted)', marginTop: '0.25rem' }}>
+                            ~{speakingSharePct}% of total meeting time
                         </div>
                     </div>
                 </div>
@@ -248,7 +350,7 @@ export default function ProductivityDashboard({ stats, userName, personalRoomId 
                                     <div className="attendance-bar-track">
                                         <div
                                             className="attendance-bar-fill"
-                                            style={{ width: `${(week.attended / week.total) * 100}%` }}
+                                            style={{ width: `${week.total > 0 ? (week.attended / week.total) * 100 : 0}%` }}
                                         ></div>
                                     </div>
                                     <span className="attendance-value">{week.attended}/{week.total}</span>
@@ -267,7 +369,7 @@ export default function ProductivityDashboard({ stats, userName, personalRoomId 
                                 <div style={{ fontSize: '1.75rem', fontWeight: 700, color: 'var(--primary)' }}>
                                     {stats.speakingTime} min
                                 </div>
-                                <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Avg Speaking Time</div>
+                                <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Total Speaking Time</div>
                             </div>
                             <div style={{ width: '0.0625rem', height: '2.5rem', background: 'var(--border)' }}></div>
                             <div>
@@ -290,8 +392,8 @@ export default function ProductivityDashboard({ stats, userName, personalRoomId 
                         </div>
                         <div className="engagement-metrics">
                             <div className="engagement-metric">
-                                <div className="engagement-circle" style={{ '--pct': `${(stats.tasksCompleted / stats.tasksTotal) * 100}%` } as React.CSSProperties & Record<string, string>}>
-                                    <span>{Math.round((stats.tasksCompleted / stats.tasksTotal) * 100)}%</span>
+                                <div className="engagement-circle" style={{ '--pct': `${taskCompletionPct}%` } as React.CSSProperties & Record<string, string>}>
+                                    <span>{taskCompletionPct}%</span>
                                 </div>
                                 <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '0.5rem' }}>Task Completion</div>
                             </div>
@@ -302,10 +404,10 @@ export default function ProductivityDashboard({ stats, userName, personalRoomId 
                                 <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '0.5rem' }}>Punctuality</div>
                             </div>
                             <div className="engagement-metric">
-                                <div className="engagement-circle" style={{ '--pct': `${stats.sentimentProfile.positive}%` } as React.CSSProperties & Record<string, string>}>
-                                    <span>{stats.sentimentProfile.positive}%</span>
+                                <div className="engagement-circle" style={{ '--pct': `${speakingSharePct}%` } as React.CSSProperties & Record<string, string>}>
+                                    <span>{speakingSharePct}%</span>
                                 </div>
-                                <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '0.5rem' }}>Positive Tone</div>
+                                <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '0.5rem' }}>Share of Voice</div>
                             </div>
                         </div>
                     </div>
@@ -316,18 +418,14 @@ export default function ProductivityDashboard({ stats, userName, personalRoomId 
                             <span className="stat-label">AI-Generated Recommendations</span>
                         </div>
                         <div className="recommendations">
-                            <div className="recommendation-item">
-                                <span className="rec-emoji">💡</span>
-                                <p>Your speaking time is 41% of the average meeting duration — consider allowing more floor time for other participants.</p>
-                            </div>
-                            <div className="recommendation-item">
-                                <span className="rec-emoji">🎯</span>
-                                <p>Excellent task completion rate! You've completed 87.5% of assigned action items on time.</p>
-                            </div>
-                            <div className="recommendation-item">
-                                <span className="rec-emoji">⏰</span>
-                                <p>Your punctuality streak is at 7 meetings — keep it up to earn the "Perfect Month" badge!</p>
-                            </div>
+                            {recommendations.map((r) => (
+                                <div className="recommendation-item" key={r.id}>
+                                    <span className="rec-icon">
+                                        <Icon icon={r.icon} size={18} style={{ color: 'var(--primary)' }} />
+                                    </span>
+                                    <p>{r.text}</p>
+                                </div>
+                            ))}
                         </div>
                     </div>
                 </div>
@@ -356,19 +454,18 @@ export default function ProductivityDashboard({ stats, userName, personalRoomId 
           border-color: rgba(var(--ui-shine-rgb), 0.15);
           transform: translateY(-2px);
         }
-        .badge-icon { font-size: 1.5rem; }
+        .badge-icon {
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          width: 1.75rem;
+          height: 1.75rem;
+          flex-shrink: 0;
+          border-radius: 50%;
+          background: rgba(var(--ui-shine-rgb), 0.04);
+        }
         .badge-name { font-size: 0.8125rem; font-weight: 600; }
         .badge-desc { font-size: 0.6875rem; color: var(--text-muted); }
-        .sentiment-bars { display: flex; flex-direction: column; gap: 0.625rem; }
-        .sentiment-bar-row { display: flex; align-items: center; gap: 0.625rem; }
-        .sentiment-track {
-          flex: 1; height: 0.5rem; background: rgba(var(--ui-shine-rgb), 0.06);
-          border-radius: 0.25rem; overflow: hidden;
-        }
-        .sentiment-fill {
-          height: 100%; border-radius: 0.25rem;
-          transition: width 0.8s ease;
-        }
         .attendance-chart { display: flex; flex-direction: column; gap: 0.75rem; }
         .attendance-week { display: flex; align-items: center; gap: 0.75rem; }
         .attendance-label { font-size: 0.75rem; color: var(--text-muted); width: 1.875rem; }
@@ -387,7 +484,7 @@ export default function ProductivityDashboard({ stats, userName, personalRoomId 
         .engagement-metric { text-align: center; }
         .engagement-circle {
           width: 5rem; height: 5rem; border-radius: 50%;
-          background: conic-gradient(var(--primary) var(--pct), rgba(var(--ui-shine-rgb), 0.06) var(--pct));
+          background: conic-gradient(var(--color-tx-normal) var(--pct), rgba(var(--ui-shine-rgb), 0.06) var(--pct));
           display: flex; align-items: center; justify-content: center;
           font-size: 1rem; font-weight: 700; position: relative;
         }
@@ -407,14 +504,22 @@ export default function ProductivityDashboard({ stats, userName, personalRoomId 
           border-radius: var(--radius-sm);
           border: 0.0625rem solid rgba(var(--ui-shine-rgb), 0.05);
           transition: all 0.3s ease;
+          align-items: flex-start;
         }
         .recommendation-item:hover {
           background: rgba(var(--ui-shine-rgb), 0.06);
           border-color: rgba(var(--ui-shine-rgb), 0.1);
         }
-        .rec-emoji { font-size: 1.25rem; flex-shrink: 0; }
+        .rec-icon {
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          flex-shrink: 0;
+          margin-top: 0.0625rem;
+        }
         .recommendation-item p {
           font-size: 0.8125rem; color: var(--text-secondary); line-height: 1.5;
+          margin: 0;
         }
       `}</style>
         </div>
