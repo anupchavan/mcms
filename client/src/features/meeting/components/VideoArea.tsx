@@ -213,7 +213,6 @@ function VideoTile({
       className={[
         'video-tile',
         `video-tile--${layoutVariant}`,
-        speaking  ? 'speaking'    : '',
         pinned    ? 'pinned'      : '',
         isScreenShare ? 'screen-share' : '',
         noVideo   ? 'no-video'    : '',
@@ -1257,7 +1256,6 @@ export default function VideoArea({
         .video-tile {
           position: relative;
           background: var(--bg-elevated);
-          /* Border is always present so speaking glow (box-shadow) never shifts layout */
           border: 0.0625rem solid var(--border);
           border-radius: var(--radius-md);
           display: flex;
@@ -1266,11 +1264,6 @@ export default function VideoArea({
           justify-content: center;
           overflow: hidden;
           animation: slideUp 0.4s ease both;
-          /* Smooth glow transitions — outline is used (not box-shadow) because
-             ancestor overflow:hidden clips box-shadow of children */
-          transition: outline-color 0.2s ease;
-          outline: 3px solid transparent;
-          outline-offset: -4px;
           width: 100%;
           min-height: 0;
         }
@@ -1294,15 +1287,6 @@ export default function VideoArea({
         }
         .video-tile:hover {
           border-color: var(--border-hover);
-        }
-
-        /* Speaking ring: outline — immune to ancestor overflow:hidden, zero layout impact */
-        .video-tile.speaking {
-          outline-color: var(--primary);
-        }
-        /* When camera is off, the speaking ring uses the user's Flexoki accent */
-        .video-tile.no-video.speaking {
-          outline-color: var(--vt-color-border);
         }
 
         .video-tile-video {
