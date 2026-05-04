@@ -81,16 +81,12 @@ export default function useWebRTC(
         const hasCamera = !!cameraVideoTrack?.mediaStreamTrack;
         const camPub = participant.getTrackPublication(Track.Source.Camera);
         const camMuted = camPub?.isMuted ?? false;
-        // #region agent log
-        console.log('[dbg:tiles] building for', identity, '| metadata:', participant.metadata, '| profileImage:', profileImage, '| micTrack:', !!microphoneTrack, '| micMST:', !!microphoneTrack?.mediaStreamTrack, '| camTrack:', !!cameraVideoTrack, '| camMST:', !!cameraVideoTrack?.mediaStreamTrack);
-        // #endregion
         const tiles: PeerState[] = [];
 
         if (hasScreen) {
+            // Screen share video only — LiveKit handles screen share audio via its own <audio> element
             const stream = new MediaStream();
             stream.addTrack(screenVideoTrack!.mediaStreamTrack!);
-            const audio = screenAudioTrack?.mediaStreamTrack ?? microphoneTrack?.mediaStreamTrack;
-            if (audio) stream.addTrack(audio);
             tiles.push({
                 socketId: `${identity}__screen`,
                 userId: identity,
@@ -98,20 +94,14 @@ export default function useWebRTC(
                 profileImage,
                 stream,
                 isScreenShare: true,
-                playRemoteAudio: true,
+                playRemoteAudio: false,
             });
         }
 
         if (hasCamera) {
+            // Camera video only — LiveKit handles mic audio via its own <audio> element
             const stream = new MediaStream();
             stream.addTrack(cameraVideoTrack!.mediaStreamTrack!);
-            const addAudio = !hasScreen && !!microphoneTrack?.mediaStreamTrack;
-            if (addAudio) {
-                stream.addTrack(microphoneTrack!.mediaStreamTrack!);
-            }
-            // #region agent log
-            console.log('[dbg:audio] camera tile for', identity, '| addAudio:', addAudio, '| playRemoteAudio:', !hasScreen, '| streamAudioTracks:', stream.getAudioTracks().length, '| profileImage:', profileImage);
-            // #endregion
             tiles.push({
                 socketId: `${identity}__camera`,
                 userId: identity,
@@ -119,12 +109,13 @@ export default function useWebRTC(
                 profileImage,
                 stream,
                 isScreenShare: false,
-                playRemoteAudio: !hasScreen,
+                playRemoteAudio: false,
                 videoMuted: camMuted,
             });
         }
 
         if (!hasScreen && !hasCamera && microphoneTrack?.mediaStreamTrack) {
+            // Audio-only tile (no camera) — video element is hidden; LiveKit plays audio
             const stream = new MediaStream();
             stream.addTrack(microphoneTrack.mediaStreamTrack);
             tiles.push({
@@ -134,7 +125,7 @@ export default function useWebRTC(
                 profileImage,
                 stream,
                 isScreenShare: false,
-                playRemoteAudio: true,
+                playRemoteAudio: false,
                 videoMuted: true,
             });
         }
@@ -306,6 +297,12 @@ export default function useWebRTC(
             await newRoom.connect(LIVEKIT_URL, token);
             setIsJoined(true);
 
+            // Resume LiveKit's AudioContext so remote audio tracks play.
+            // This call is outside the original user-gesture context (due to awaits
+            // above), but the browser will allow it if the page was recently activated.
+            // The VideoArea join handler also unlocks the AudioContext preemptively.
+            newRoom.startAudio().catch(() => {/* will be retried on user click */});
+
             for (const track of tracksToPublish) {
                 await newRoom.localParticipant.publishTrack(track);
             }
@@ -392,16 +389,13 @@ export default function useWebRTC(
         const enabled = !videoEnabled;
         await Promise.all(localTracks.map(async (t) => {
             if (t.kind === Track.Kind.Video) {
-                // #region agent log
                 const trackIdBefore = t.mediaStreamTrack?.id;
-                // #endregion
                 if (enabled) await t.unmute();
                 else await t.mute();
-                // #region agent log
-                const trackIdAfter = t.mediaStreamTrack?.id;
-                console.log('[dbg:toggle-video] enabled:', enabled, '| trackId before:', trackIdBefore, '| trackId after:', trackIdAfter, '| same:', trackIdBefore === trackIdAfter, '| trackEnabled:', t.mediaStreamTrack?.enabled, '| trackState:', t.mediaStreamTrack?.readyState);
-                // #endregion
-                if (enabled && trackIdBefore !== trackIdAfter) setLocalStreamVersion(v => v + 1);
+                // unmute() may create a new MediaStreamTrack; bump version to rebuild localStream
+                if (enabled && trackIdBefore !== t.mediaStreamTrack?.id) {
+                    setLocalStreamVersion(v => v + 1);
+                }
             }
         }));
         setVideoEnabled(enabled);
@@ -487,6 +481,11 @@ export default function useWebRTC(
     /** True when LiveKit's VAD detects the local user is currently speaking. */
     const localSpeaking = localIdentity ? activeSpeakerIds.has(localIdentity) : false;
 
+    /** Call from a user-gesture handler to unlock LiveKit's AudioContext for audio playback. */
+    const startRoomAudio = useCallback(() => {
+        roomRef.current?.startAudio().catch(() => {/* ignore if room not yet connected */});
+    }, []);
+
     return {
         localStream,
         peers,
@@ -504,5 +503,6 @@ export default function useWebRTC(
         joined: isJoined,
         localSpeaking,
         activeSpeakerIds,
+        startRoomAudio,
     };
 }
