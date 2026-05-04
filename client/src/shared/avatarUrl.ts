@@ -7,13 +7,13 @@ export function getServerOrigin(): string {
   // Relative `VITE_API_URL` (`/api`) → empty base → use current page origin (Vite proxy / same-host SPA).
   if ((base === "" || !isAbsolute) && typeof window !== "undefined" && window.location?.origin) {
     // #region agent log
-    console.log('[DBG-119c19][avatarUrl:getServerOrigin][H1] FALLBACK to window.origin', {VITE_API_URL: import.meta.env.VITE_API_URL, raw, base, isAbsolute, windowOrigin: window.location.origin});
+    console.log('[DBG-119c19][post-fix][avatarUrl:getServerOrigin][H1] FALLBACK to window.origin', {VITE_API_URL: import.meta.env.VITE_API_URL, raw, base, isAbsolute, windowOrigin: window.location.origin});
     // #endregion
     return window.location.origin.replace(/\/+$/, "");
   }
 
   // #region agent log
-  console.log('[DBG-119c19][avatarUrl:getServerOrigin][H1] Resolved origin', {VITE_API_URL: import.meta.env.VITE_API_URL, raw, base, isAbsolute, result: base !== "" ? base : "http://localhost:5001"});
+  console.log('[DBG-119c19][post-fix][avatarUrl:getServerOrigin][H1] Resolved origin', {VITE_API_URL: import.meta.env.VITE_API_URL, raw, base, isAbsolute, result: base !== "" ? base : "http://localhost:5001"});
   // #endregion
 
   return base !== "" ? base : "http://localhost:5001";
@@ -23,7 +23,7 @@ export function getServerOrigin(): string {
 export function avatarUrlFromPath(path: string | null | undefined): string | null {
   if (!path || typeof path !== "string") {
     // #region agent log
-    console.log('[DBG-119c19][avatarUrl:avatarUrlFromPath][H2] path is null/empty → fallback', {path});
+    console.log('[DBG-119c19][post-fix][avatarUrl:avatarUrlFromPath][H2] path is null/empty → fallback', {path});
     // #endregion
     return null;
   }
@@ -31,7 +31,7 @@ export function avatarUrlFromPath(path: string | null | undefined): string | nul
   const p = path.startsWith("/") ? path : `/${path}`;
   const result = `${getServerOrigin()}${p}`;
   // #region agent log
-  console.log('[DBG-119c19][avatarUrl:avatarUrlFromPath][H1] Constructed URL', {inputPath: path, result});
+  console.log('[DBG-119c19][post-fix][avatarUrl:avatarUrlFromPath][H1] Constructed URL', {inputPath: path, result});
   // #endregion
   return result;
 }
