@@ -222,15 +222,10 @@ export default function useWebRTC(
 
     const joinRoom = useCallback(async (): Promise<boolean> => {
         if (!meetingId || isJoined) return false;
-        // #region agent log
-        console.log('[dbg:join-attempt] meetingId:', meetingId, '| isJoined:', isJoined, '| inProgress:', joinInProgressRef.current, '| roomRef:', !!roomRef.current);
-        // #endregion
-        if (joinInProgressRef.current) {
-            // #region agent log
-            console.log('[dbg:join-blocked] another join is already in progress — skipping');
-            // #endregion
-            return false;
-        }
+        // Re-entry guard: prevents concurrent joinRoom() calls from
+        // corrupting LiveKit engine state during fast double-clicks
+        // or rapid component re-mounts.
+        if (joinInProgressRef.current) return false;
         joinInProgressRef.current = true;
         setMediaError(null);
 
@@ -314,47 +309,28 @@ export default function useWebRTC(
             // Resume LiveKit's AudioContext so remote audio tracks play.
             newRoom.startAudio().catch(() => {/* will be retried on user click */});
 
-            // Manually attach remote audio tracks to <audio> elements.
+            // Manually attach remote audio tracks to hidden <audio> elements.
             // LiveKit subscribes automatically but does NOT play audio without attach().
             const handleTrackSubscribed = (
                 track: RemoteTrack,
                 publication: RemoteTrackPublication,
                 participant: RemoteParticipant,
             ) => {
-                // #region agent log
-                console.log('[dbg:track-sub]', participant.identity, '| kind:', track.kind, '| source:', publication.source);
-                // #endregion
                 if (track.kind === Track.Kind.Audio) {
                     const el = track.attach();
                     el.setAttribute('data-lk-audio', participant.identity + ':' + publication.trackSid);
                     el.style.display = 'none';
                     document.body.appendChild(el);
-                    // #region agent log
-                    const startTime = el.currentTime;
-                    el.play().then(() => {
-                        console.log('[dbg:audio-attach] OK', participant.identity, '| paused:', el.paused, '| muted:', el.muted, '| vol:', el.volume, '| readyState:', el.readyState, '| currentTime:', el.currentTime);
-                    }).catch((e) => {
-                        console.log('[dbg:audio-attach] play() FAILED', participant.identity, '| err:', e?.message ?? String(e));
-                    });
-                    // After 3s, verify audio is actually flowing (currentTime advanced)
-                    setTimeout(() => {
-                        const advanced = el.currentTime - startTime;
-                        const isInDom = document.body.contains(el);
-                        console.log('[dbg:audio-flow]', participant.identity, '| advanced:', advanced.toFixed(2), 's | inDom:', isInDom, '| paused:', el.paused, '| readyState:', el.readyState, '| srcObject:', !!el.srcObject);
-                    }, 3000);
-                    // #endregion
+                    el.play().catch(() => {/* autoplay policy: room.startAudio() will retry on next user gesture */});
                 }
             };
             const handleTrackUnsubscribed = (
                 track: RemoteTrack,
-                publication: RemoteTrackPublication,
-                participant: RemoteParticipant,
+                _publication: RemoteTrackPublication,
+                _participant: RemoteParticipant,
             ) => {
                 if (track.kind === Track.Kind.Audio) {
                     track.detach().forEach((el) => el.remove());
-                    // #region agent log
-                    console.log('[dbg:track-unsub]', participant.identity, '| sid:', publication.trackSid);
-                    // #endregion
                 }
             };
 
@@ -401,18 +377,6 @@ export default function useWebRTC(
                 });
             });
 
-            // #region agent log
-            const remoteSnapshot: any[] = [];
-            newRoom.remoteParticipants.forEach((p) => {
-                const pubs: any[] = [];
-                p.trackPublications.forEach((pub) => {
-                    pubs.push({ src: pub.source, kind: pub.kind, sid: pub.trackSid, sub: pub.isSubscribed, hasTrack: !!pub.track, muted: pub.isMuted });
-                });
-                remoteSnapshot.push({ id: p.identity, pubs });
-            });
-            console.log('[dbg:room-connected] identity:', newRoom.localParticipant.identity, '| remoteCount:', newRoom.remoteParticipants.size, '| canPlaybackAudio:', newRoom.canPlaybackAudio, '| remoteSnapshot:', JSON.stringify(remoteSnapshot));
-            // #endregion
-
             syncRoomState();
             joinInProgressRef.current = false;
             return true;
@@ -431,9 +395,6 @@ export default function useWebRTC(
     }, [meetingId, isJoined, acquireLocalTracks, syncLocalScreenShare]);
 
     const leaveRoom = useCallback(async () => {
-        // #region agent log
-        console.log('[dbg:leave-room] roomRef:', !!roomRef.current, '| inProgress:', joinInProgressRef.current);
-        // #endregion
         joinInProgressRef.current = false;
         // 1) Stop our locally-created camera + mic tracks IMMEDIATELY so the
         //    green macOS camera dot / mic indicator turn off without waiting
