@@ -208,6 +208,16 @@ function VideoTile({
   // Self tile: use explicit cameraOn prop (track.enabled=false doesn't fire mute events).
   // Remote tile: use videoMuted from LiveKit signaling, OR fall back to hasVideo.
   const noVideo = !isScreenShare && (cameraOn !== undefined ? !cameraOn : (videoMuted || !hasVideo));
+
+  // #region agent log
+  useEffect(() => {
+    console.log('[dbg:novideo]', tileId, '| noVideo:', noVideo, '| cameraOn:', cameraOn, '| videoMuted:', videoMuted, '| hasVideo:', hasVideo, '| videoPaused:', videoRef.current?.paused, '| muted:', muted);
+    if (!noVideo && videoRef.current?.paused) {
+      console.log('[dbg:cam-reenable] video is paused after show — calling play()', tileId);
+      videoRef.current.play().catch(e => console.log('[dbg:cam-reenable] play() error:', e));
+    }
+  });
+  // #endregion
   return (
     <div
       className={[
