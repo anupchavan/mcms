@@ -20,14 +20,9 @@ export type TranscriptSpeakerOption = {
     profileImage?: string | null;
 };
 
-function StackDisc({ opt }: { opt: TranscriptSpeakerOption | null }) {
-    if (!opt) {
-        return (
-            <span className="archive-filter-stack-disc" aria-hidden>
-                <UserAvatar name="?" size={18} style={{ border: 'none', borderRadius: '50%' }} />
-            </span>
-        );
-    }
+const STACK_MAX_VISIBLE_DISCS = 3;
+
+function StackDisc({ opt }: { opt: TranscriptSpeakerOption }) {
     return (
         <span className="archive-filter-stack-disc" aria-hidden>
             <UserAvatar
@@ -45,15 +40,17 @@ function RowAvatar({ opt }: { opt: TranscriptSpeakerOption }) {
     return <UserAvatar name={opt.label} profileImage={opt.profileImage} userId={opt.value} size={16} />;
 }
 
-/** Single-select speaker control; same visual language as archive search People multi-select, narrower. */
+/** Multi-select speaker checklist mirroring the People filter on archive search.
+ * "All speakers" is rendered as a header-style row without a checkbox or avatar;
+ * clicking it toggles between everything-selected and nothing-selected. */
 export function TranscriptSpeakerSelect({
     options,
     value,
     onChange,
 }: {
     options: TranscriptSpeakerOption[];
-    value: string;
-    onChange: (next: string) => void;
+    value: string[];
+    onChange: (next: string[]) => void;
 }) {
     const [open, setOpen] = useState(false);
     const [filterText, setFilterText] = useState("");
@@ -63,21 +60,19 @@ export function TranscriptSpeakerSelect({
     const listRef = useRef<HTMLDivElement>(null);
     const highlightIndexRef = useRef(-1);
 
-    const rows = useMemo(
-        () => [{ value: "", label: "All speakers", profileImage: null as string | null }, ...options],
-        [options],
-    );
-
     const normalizedFilter = filterText.trim().toLowerCase();
     const filtered = useMemo(() => {
-        if (!normalizedFilter) return rows;
-        return rows.filter((o) => (o.label || "").toLowerCase().includes(normalizedFilter));
-    }, [rows, normalizedFilter]);
+        if (!normalizedFilter) return options;
+        return options.filter((o) => (o.label || "").toLowerCase().includes(normalizedFilter));
+    }, [options, normalizedFilter]);
 
-    const selectedMeta = useMemo(() => {
-        if (!value) return null;
-        return options.find((o) => o.value === value) ?? { value, label: value, profileImage: null };
-    }, [options, value]);
+    const allSelected = options.length > 0 && value.length === options.length;
+    const selectedSet = useMemo(() => new Set(value), [value]);
+
+    const selectedOrdered = useMemo(
+        () => options.filter((o) => selectedSet.has(o.value)),
+        [options, selectedSet],
+    );
 
     const close = useCallback(() => {
         setOpen(false);
@@ -137,13 +132,18 @@ export function TranscriptSpeakerSelect({
         };
     }, [open, close]);
 
-    const pick = useCallback(
+    const toggleOne = useCallback(
         (v: string) => {
-            onChange(v);
-            close();
+            if (selectedSet.has(v)) onChange(value.filter((x) => x !== v));
+            else onChange([...value, v]);
         },
-        [onChange, close],
+        [onChange, value, selectedSet],
     );
+
+    const toggleAll = useCallback(() => {
+        if (allSelected) onChange([]);
+        else onChange(options.map((o) => o.value));
+    }, [allSelected, onChange, options]);
 
     const onPanelSearchKeyDown = useCallback(
         (e: React.KeyboardEvent<HTMLInputElement>) => {
@@ -158,12 +158,21 @@ export function TranscriptSpeakerSelect({
                 const i = highlightIndexRef.current;
                 if (i >= 0 && i < filtered.length) {
                     e.preventDefault();
-                    pick(filtered[i].value);
+                    toggleOne(filtered[i].value);
                 }
             }
         },
-        [filtered, pick],
+        [filtered, toggleOne],
     );
+
+    const stackVisible = selectedOrdered.slice(0, STACK_MAX_VISIBLE_DISCS);
+    const stackOverflow = selectedOrdered.length - stackVisible.length;
+
+    let triggerLabel: string;
+    if (selectedOrdered.length === 0) triggerLabel = "All";
+    else if (allSelected) triggerLabel = `All ${options.length}`;
+    else if (selectedOrdered.length === 1) triggerLabel = selectedOrdered[0].label;
+    else triggerLabel = `${selectedOrdered.length} selected`;
 
     return (
         <div className="archive-multi-select archive-multi-select--transcript-speaker" ref={rootRef}>
@@ -177,20 +186,34 @@ export function TranscriptSpeakerSelect({
                     aria-label="Speaker filter"
                 >
                     <span className="archive-multi-select-trigger-title">Speaker</span>
-                    <div
-                        className="archive-filter-stack archive-filter-stack--in-trigger"
-                        onPointerDown={(e) => e.stopPropagation()}
-                        onClick={(e) => e.stopPropagation()}
-                    >
-                        {selectedMeta ? (
-                            <div className="archive-filter-stack-slot">
-                                <StackDisc opt={selectedMeta} />
-                            </div>
-                        ) : null}
-                        <span className="archive-transcript-speaker-trigger-label">
-                            {selectedMeta ? selectedMeta.label : "All"}
-                        </span>
-                    </div>
+                    {selectedOrdered.length > 0 ? (
+                        <div
+                            className="archive-filter-stack archive-filter-stack--in-trigger"
+                            onPointerDown={(e) => e.stopPropagation()}
+                            onClick={(e) => e.stopPropagation()}
+                        >
+                            {stackVisible.map((opt, idx) => (
+                                <div
+                                    key={opt.value}
+                                    className={`archive-filter-stack-slot${idx > 0 ? " archive-filter-stack-slot--overlap" : ""}`}
+                                    style={{ zIndex: idx + 1 }}
+                                >
+                                    <StackDisc opt={opt} />
+                                </div>
+                            ))}
+                            {stackOverflow > 0 ? (
+                                <div
+                                    className="archive-filter-stack-slot archive-filter-stack-slot--overlap"
+                                    style={{ zIndex: stackVisible.length + 1 }}
+                                >
+                                    <span className="archive-filter-stack-more" aria-label={`${stackOverflow} more selected`}>
+                                        +{stackOverflow}
+                                    </span>
+                                </div>
+                            ) : null}
+                        </div>
+                    ) : null}
+                    <span className="archive-transcript-speaker-trigger-label">{triggerLabel}</span>
                     <span className="archive-multi-select-trigger-spacer" aria-hidden />
                     <span className="archive-multi-select-trigger-chevron">
                         <Icon icon={open ? ArrowUp01Icon : ArrowDown01Icon} size={14} />
@@ -198,7 +221,7 @@ export function TranscriptSpeakerSelect({
                 </button>
             </div>
             {open && (
-                <div className="archive-multi-select-panel" role="listbox">
+                <div className="archive-multi-select-panel" role="listbox" aria-multiselectable="true">
                     <div className="archive-multi-select-search-wrap">
                         <Icon icon={Search01Icon} size={14} className="archive-multi-select-search-icon" />
                         <input
@@ -215,11 +238,27 @@ export function TranscriptSpeakerSelect({
                         />
                     </div>
                     <div ref={listRef} className="archive-multi-select-list">
-                        {filtered.length === 0 ? (
+                        {!normalizedFilter && options.length > 0 ? (
+                            <button
+                                type="button"
+                                className={`archive-multi-select-row archive-multi-select-row--transcript-speaker-all${allSelected ? " is-selected" : ""}`}
+                                onClick={(e) => {
+                                    e.preventDefault();
+                                    toggleAll();
+                                }}
+                            >
+                                <span className="archive-multi-select-name archive-multi-select-name--all">
+                                    All speakers
+                                </span>
+                            </button>
+                        ) : null}
+                        {options.length === 0 ? (
+                            <div className="archive-multi-select-empty">No speakers</div>
+                        ) : filtered.length === 0 ? (
                             <div className="archive-multi-select-empty">No results</div>
                         ) : (
                             filtered.map((opt, idx) => {
-                                const sel = opt.value === value;
+                                const sel = selectedSet.has(opt.value);
                                 const kbdHi = highlightIndex === idx;
                                 return (
                                     <button
@@ -232,9 +271,12 @@ export function TranscriptSpeakerSelect({
                                         onMouseEnter={() => setHighlightIndex(idx)}
                                         onClick={(e) => {
                                             e.preventDefault();
-                                            pick(opt.value);
+                                            toggleOne(opt.value);
                                         }}
                                     >
+                                        <span className={`archive-multi-select-check${sel ? " is-checked" : ""}`}>
+                                            <span className="archive-multi-select-check-mark" aria-hidden />
+                                        </span>
                                         <RowAvatar opt={opt} />
                                         <span className="archive-multi-select-name">{opt.label}</span>
                                     </button>

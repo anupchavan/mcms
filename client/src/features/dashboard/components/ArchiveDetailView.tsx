@@ -1106,8 +1106,8 @@ function ArchiveTranscriptExplorer({
     const flat = useMemo(() => flattenTranscripts(detail), [detail]);
 
     const [contentQ, setContentQ] = useState("");
-    const [selectedSpeaker, setSelectedSpeaker] = useState("");
-    const [debounced, setDebounced] = useState({ c: "", s: "" });
+    const [selectedSpeakers, setSelectedSpeakers] = useState<string[]>([]);
+    const [debounced, setDebounced] = useState<{ c: string; s: string[] }>({ c: "", s: [] });
     const [serverSegments, setServerSegments] = useState<TranscriptSegment[]>([]);
     const [serverTotal, setServerTotal] = useState(0);
     const [serverSkip, setServerSkip] = useState(0);
@@ -1117,11 +1117,14 @@ function ArchiveTranscriptExplorer({
 
     useEffect(() => {
         const t = setTimeout(
-            () => setDebounced({ c: contentQ.trim(), s: selectedSpeaker.trim() }),
+            () => setDebounced({
+                c: contentQ.trim(),
+                s: selectedSpeakers.map((x) => x.trim()).filter(Boolean),
+            }),
             TRANSCRIPT_DEBOUNCE_MS,
         );
         return () => clearTimeout(t);
-    }, [contentQ, selectedSpeaker]);
+    }, [contentQ, selectedSpeakers]);
 
     const transcriptSpeakerOptions = useMemo(() => {
         const seen = new Map<string, string>();
@@ -1141,6 +1144,7 @@ function ArchiveTranscriptExplorer({
     }, [flat, detail]);
 
     const needIndexedSearch = debounced.c.length >= 2 || debounced.s.length >= 1;
+    const speakersKey = debounced.s.join("\u0001");
     const preferServer = flat.length > 200 || useServer;
 
     useEffect(() => {
@@ -1153,7 +1157,7 @@ function ArchiveTranscriptExplorer({
         setServerSegments([]); setServerTotal(0); setServerSkip(0);
         const params = new URLSearchParams();
         if (debounced.c) params.set("q", debounced.c);
-        if (debounced.s) params.set("speaker", debounced.s);
+        for (const sp of debounced.s) params.append("speaker", sp);
         params.set("limit", "100");
         params.set("skip", "0");
         (fetchWithAuth || fetch)(`${API_BASE}/archive/${meetingId}/transcript-query?${params}`)
@@ -1166,7 +1170,9 @@ function ArchiveTranscriptExplorer({
             })
             .finally(() => { if (!cancelled) setLoading(false); });
         return () => { cancelled = true; };
-    }, [debounced.c, debounced.s, meetingId, fetchWithAuth, needIndexedSearch, preferServer]);
+        // speakersKey collapses the array dependency into a stable string so the effect doesn't refetch on identity changes.
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [debounced.c, speakersKey, meetingId, fetchWithAuth, needIndexedSearch, preferServer]);
 
     const loadMoreServer = useCallback(async () => {
         if (!needIndexedSearch || !preferServer || loading || serverSegments.length >= serverTotal) return;
@@ -1174,7 +1180,7 @@ function ArchiveTranscriptExplorer({
         try {
             const params = new URLSearchParams();
             if (debounced.c) params.set("q", debounced.c);
-            if (debounced.s) params.set("speaker", debounced.s);
+            for (const sp of debounced.s) params.append("speaker", sp);
             params.set("limit", "100");
             params.set("skip", String(serverSkip));
             const res = await (fetchWithAuth || fetch)(`${API_BASE}/archive/${meetingId}/transcript-query?${params}`);
@@ -1191,13 +1197,14 @@ function ArchiveTranscriptExplorer({
     const displayed = useMemo(() => {
         if (needIndexedSearch && preferServer) return serverSegments;
         const c = debounced.c.toLowerCase();
-        const sp = debounced.s.toLowerCase();
+        const speakerSet = new Set(debounced.s.map((x) => x.toLowerCase()));
+        const speakerFilterActive = speakerSet.size > 0;
         return flat.filter((seg) => {
             const okC = !c
                 || seg.text.toLowerCase().includes(c)
                 || String(seg.timestamp || "").toLowerCase().includes(c);
             const segSp = String(seg.speaker || "").trim().toLowerCase();
-            const okS = !sp || segSp === sp.toLowerCase();
+            const okS = !speakerFilterActive || speakerSet.has(segSp);
             return okC && okS;
         });
     }, [flat, debounced.c, debounced.s, needIndexedSearch, preferServer, serverSegments]);
@@ -1232,8 +1239,8 @@ function ArchiveTranscriptExplorer({
                 />
                 <TranscriptSpeakerSelect
                     options={transcriptSpeakerOptions}
-                    value={selectedSpeaker}
-                    onChange={setSelectedSpeaker}
+                    value={selectedSpeakers}
+                    onChange={setSelectedSpeakers}
                 />
             </div>
             {flat.length > 200 && (
