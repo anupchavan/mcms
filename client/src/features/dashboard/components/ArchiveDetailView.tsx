@@ -943,7 +943,7 @@ function ParticipantAvatar({ participant, size = 24 }: { participant: ArchivePar
     const initials = (participant.name || participant.email || "?")[0].toUpperCase();
     // #region agent log
     useEffect(() => {
-        fetch('http://127.0.0.1:7513/ingest/2ed74124-70ef-436a-a5af-14e493d12d53',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'119c19'},body:JSON.stringify({sessionId:'119c19',location:'ArchiveDetailView.tsx:ParticipantAvatar',message:'Participant avatar debug',data:{name:participant.name,email:participant.email,profileImage:participant.profileImage,resolvedUrl:url,showingFallback:!url,initials},hypothesisId:'H2',timestamp:Date.now()})}).catch(()=>{});
+        console.log('[DBG-119c19][ArchiveDetail:ParticipantAvatar][H2] avatar data', {name: participant.name, email: participant.email, profileImage: participant.profileImage, resolvedUrl: url, showingFallback: !url, initials});
     }, [participant.profileImage, url]);
     // #endregion
     return (
@@ -954,7 +954,7 @@ function ParticipantAvatar({ participant, size = 24 }: { participant: ArchivePar
         >
             {url
                 ? <img src={url} alt={participant.name || ""} className="archive-detail-avatar-img"
-                    onError={() => { /* #region agent log */ fetch('http://127.0.0.1:7513/ingest/2ed74124-70ef-436a-a5af-14e493d12d53',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'119c19'},body:JSON.stringify({sessionId:'119c19',location:'ArchiveDetailView.tsx:ParticipantAvatar.img.onError',message:'Participant avatar img failed to load',data:{src:url,name:participant.name},hypothesisId:'H3',timestamp:Date.now()})}).catch(()=>{}); /* #endregion */ }}
+                    onError={() => { /* #region agent log */ console.log('[DBG-119c19][ArchiveDetail:ParticipantAvatar.img.onError][H3] img FAILED to load', {src: url, name: participant.name}); /* #endregion */ }}
                   />
                 : <span>{initials}</span>
             }

@@ -178,7 +178,7 @@ export default function TopBar({ userName, onNewMeeting, theme = 'dark', onToggl
 
     // #region agent log
     useEffect(() => {
-        fetch('http://127.0.0.1:7513/ingest/2ed74124-70ef-436a-a5af-14e493d12d53',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'119c19'},body:JSON.stringify({sessionId:'119c19',location:'TopBar.tsx:render',message:'TopBar user avatar debug',data:{SERVER_BASE,profileImage:user?.profileImage,constructedUrl:user?.profileImage?`${SERVER_BASE}${user.profileImage}`:null,VITE_API_URL:import.meta.env.VITE_API_URL},hypothesisId:'H1',timestamp:Date.now()})}).catch(()=>{});
+        console.log('[DBG-119c19][TopBar][H1] avatar state', {SERVER_BASE, profileImage: user?.profileImage, constructedUrl: user?.profileImage ? `${SERVER_BASE}${user.profileImage}` : null, VITE_API_URL: import.meta.env.VITE_API_URL});
     }, [user?.profileImage]);
     // #endregion
 
@@ -560,7 +560,7 @@ export default function TopBar({ userName, onNewMeeting, theme = 'dark', onToggl
                         <div className="user-avatar">
                             {user?.profileImage
                                 ? <img src={`${SERVER_BASE}${user.profileImage}`} alt="" className="user-avatar-img"
-                                    onError={() => { /* #region agent log */ fetch('http://127.0.0.1:7513/ingest/2ed74124-70ef-436a-a5af-14e493d12d53',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'119c19'},body:JSON.stringify({sessionId:'119c19',location:'TopBar.tsx:img.onError',message:'Avatar img failed to load',data:{src:`${SERVER_BASE}${user?.profileImage}`},hypothesisId:'H3',timestamp:Date.now()})}).catch(()=>{}); /* #endregion */ }}
+                                    onError={() => { /* #region agent log */ console.log('[DBG-119c19][TopBar:img.onError][H3] Avatar img FAILED to load', {src: `${SERVER_BASE}${user?.profileImage}`}); /* #endregion */ }}
                                   />
                                 : <Icon icon={UserIcon} size={18} />
                             }
