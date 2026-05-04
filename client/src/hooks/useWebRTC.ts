@@ -6,6 +6,9 @@ import {
     Track,
     LocalTrack,
     createLocalTracks,
+    VideoPresets,
+    ScreenSharePresets,
+    type LocalVideoTrack,
 } from 'livekit-client';
 
 const LIVEKIT_URL = import.meta.env.VITE_LIVEKIT_URL || 'ws://localhost:7880';
@@ -141,10 +144,33 @@ export default function useWebRTC(
     // Intentionally NOT called on mount. The prompt is deferred until the
     // user clicks "Join" (see `joinRoom` below), so opening the meeting
     // page never asks for camera/mic.
+    //
+    // Capture 1080p when the camera supports it. The publish path simulcasts
+    // down so receivers on poor uplinks still see a track — adaptiveStream +
+    // dynacast (in `joinRoom`) drop the high layer when nobody is rendering
+    // at a size that needs it, so requesting 1080p costs nothing for small
+    // tile use-cases. If the device caps out below 1080p the browser
+    // negotiates the next-best resolution automatically (the
+    // `min`/`ideal` form below); we don't want a hard 1080p constraint to
+    // make `getUserMedia` reject on low-end webcams.
     const acquireLocalTracks = useCallback(async () => {
         const tracks = await createLocalTracks({
-            video: { resolution: { width: 1280, height: 720 } },
-            audio: { echoCancellation: true, noiseSuppression: true },
+            video: {
+                resolution: VideoPresets.h1080.resolution,
+                // Mild constraint hints: ideal 1080p, fall back gracefully.
+                // Most modern webcams report 1080p@30. If a device only
+                // exposes 720p, we still get the best it can give.
+                facingMode: 'user',
+            },
+            audio: {
+                echoCancellation: true,
+                noiseSuppression: true,
+                autoGainControl: true,
+                // 48 kHz mono is what WebRTC's Opus encoder targets anyway;
+                // making it explicit avoids drivers picking 16 kHz.
+                sampleRate: 48000,
+                channelCount: 1,
+            },
         });
         setLocalTracks(tracks);
         localTracksRef.current = tracks;
@@ -198,9 +224,45 @@ export default function useWebRTC(
 
             const { token } = await res.json();
 
+            // ── Quality-tuned room options ──────────────────────────────
+            // - adaptiveStream: SFU sends the lowest simulcast layer that
+            //   matches the rendered <video> size, so we can ship 1080p
+            //   without burning CPU/bandwidth on hidden tiles.
+            // - dynacast: when nobody is subscribing to a layer (e.g. all
+            //   viewers are in a small filmstrip), pause encoding it.
+            // - publishDefaults: the *real* lever for visible quality.
+            //     • videoCodec 'vp9' delivers ~30-50% better quality at the
+            //       same bitrate vs vp8 and works in Chrome / Edge / Firefox
+            //       / Safari 16+. We keep VP8 as a backupCodec so any
+            //       receiver that can't decode VP9 still gets a stream.
+            //     • videoEncoding bumps the camera ceiling to ~3 Mbps@1080p
+            //       (LiveKit's default for 720p is ~1.7 Mbps).
+            //     • screenShareEncoding uses the 1080p@30 preset — text
+            //       and UI scrolling stay sharp instead of the 5–15 fps
+            //       you'd get from defaults.
+            //     • simulcastVideo layers: one extra 360p rung so
+            //       small filmstrip tiles can fall back without us
+            //       sending a single fat 1080p stream to everyone.
             const newRoom = new Room({
                 adaptiveStream: true,
                 dynacast: true,
+                videoCaptureDefaults: {
+                    resolution: VideoPresets.h1080.resolution,
+                },
+                publishDefaults: {
+                    videoCodec: 'vp9',
+                    backupCodec: { codec: 'vp8', encoding: VideoPresets.h720.encoding },
+                    videoEncoding: VideoPresets.h1080.encoding,
+                    screenShareEncoding: ScreenSharePresets.h1080fps30.encoding,
+                    simulcast: true,
+                    videoSimulcastLayers: [VideoPresets.h180, VideoPresets.h360, VideoPresets.h720],
+                    // Opus extras — meaningful audio quality bump for free:
+                    //   red:  packet redundancy → resilient to packet loss
+                    //   dtx:  discontinuous transmission → silence isn't sent
+                    red: true,
+                    dtx: true,
+                    stopMicTrackOnMute: false,
+                },
             });
 
             roomRef.current = newRoom;
@@ -288,6 +350,23 @@ export default function useWebRTC(
         setVideoEnabled(enabled);
     }, [localTracks, videoEnabled]);
 
+    /**
+     * Hint the encoder/SFU that this is a UI/text source so it preserves
+     * spatial detail at the cost of frame rate when bandwidth is tight.
+     * Without this, screen shares of code/docs go soft when the encoder
+     * decides to spend the bit budget on motion smoothness instead.
+     * Use 'detail' (rather than 'text') because Chromium maps 'detail' to
+     * the same path while remaining standardised across browsers.
+     */
+    const applyScreenShareContentHint = useCallback((activeRoom: Room) => {
+        const pub = activeRoom.localParticipant.getTrackPublication(Track.Source.ScreenShare);
+        const track = pub?.track as LocalVideoTrack | undefined;
+        const mst = track?.mediaStreamTrack;
+        if (mst && 'contentHint' in mst) {
+            try { (mst as any).contentHint = 'detail'; } catch { /* ignore */ }
+        }
+    }, []);
+
     const toggleScreenShare = useCallback(async () => {
         const activeRoom = roomRef.current;
         if (!activeRoom) return;
@@ -299,7 +378,16 @@ export default function useWebRTC(
             if (!isSharing) {
                 await activeRoom.localParticipant.setScreenShareEnabled(true, {
                     audio: screenShareSystemAudio,
+                    // Capture the full source resolution; the publish-side
+                    // encoder (set in `publishDefaults.screenShareEncoding`)
+                    // is what actually controls bitrate / frame rate.
+                    resolution: ScreenSharePresets.h1080fps30.resolution,
+                    // contentHint is also passed in capture options so the
+                    // browser's screen-share permission picker / capturer
+                    // knows it's UI content.
+                    contentHint: 'detail',
                 });
+                applyScreenShareContentHint(activeRoom);
             } else {
                 await activeRoom.localParticipant.setScreenShareEnabled(false);
             }
@@ -308,7 +396,7 @@ export default function useWebRTC(
             console.error('Screen share toggle failed:', err);
             setMediaError(err?.message || 'Screen sharing failed');
         }
-    }, [syncLocalScreenShare, screenShareSystemAudio]);
+    }, [syncLocalScreenShare, screenShareSystemAudio, applyScreenShareContentHint]);
 
     /** Updates preference; if already presenting, restarts capture so audio tracks match. */
     const setScreenShareSystemAudioPref = useCallback(
@@ -321,7 +409,10 @@ export default function useWebRTC(
                     await activeRoom.localParticipant.setScreenShareEnabled(false);
                     await activeRoom.localParticipant.setScreenShareEnabled(true, {
                         audio: wantAudio,
+                        resolution: ScreenSharePresets.h1080fps30.resolution,
+                        contentHint: 'detail',
                     });
+                    applyScreenShareContentHint(activeRoom);
                     syncLocalScreenShare(activeRoom);
                 } catch (err: any) {
                     console.error('Screen share audio preference failed:', err);
@@ -329,7 +420,7 @@ export default function useWebRTC(
                 }
             })();
         },
-        [syncLocalScreenShare],
+        [syncLocalScreenShare, applyScreenShareContentHint],
     );
 
     useEffect(() => {

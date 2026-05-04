@@ -143,10 +143,16 @@ function VideoTile({
     if (videoRef.current && stream) {
       videoRef.current.srcObject = stream;
     }
-    if (videoBackdropRef.current && stream) {
+    // The blurred backdrop is purely decorative for camera tiles. For screen
+    // share, attaching the same MediaStream to a second <video> forces the
+    // browser to decode the (potentially 1080p@30) frame twice and pay the
+    // GPU cost of the 24px blur filter — a meaningful hit on lower-end
+    // laptops, and it adds nothing visually because screen-share tiles use
+    // object-fit:contain on a dark surface anyway.
+    if (videoBackdropRef.current && stream && !isScreenShare) {
       videoBackdropRef.current.srcObject = stream;
     }
-  }, [stream]);
+  }, [stream, isScreenShare]);
 
   // Report intrinsic aspect ratio so the stage layout can frame screen shares
   // without cropping them (the user explicitly disallowed any screen-share crop).
@@ -181,18 +187,20 @@ function VideoTile({
       >
         {pinned ? "Unpin" : "Pin"}
       </button>
-      <video
-        ref={videoBackdropRef}
-        autoPlay
-        playsInline
-        muted={true}
-        aria-hidden
-        className="video-tile-video-backdrop"
-        style={isSelf && !isScreenShare
-          ? { transform: "scaleX(-1)", display: hasVideo ? undefined : "none", objectFit: "cover" as const }
-          : { display: hasVideo ? undefined : "none", objectFit: "cover" as const }
-        }
-      />
+      {!isScreenShare && (
+        <video
+          ref={videoBackdropRef}
+          autoPlay
+          playsInline
+          muted={true}
+          aria-hidden
+          className="video-tile-video-backdrop"
+          style={isSelf
+            ? { transform: "scaleX(-1)", display: hasVideo ? undefined : "none", objectFit: "cover" as const }
+            : { display: hasVideo ? undefined : "none", objectFit: "cover" as const }
+          }
+        />
+      )}
       <video
         ref={videoRef}
         autoPlay
@@ -1221,6 +1229,13 @@ export default function VideoArea({
           transform: scale(1.05);
           opacity: 0.9;
           z-index: 1;
+        }
+        /* Screen-share tiles intentionally don't render the blurred
+           backdrop video (saves a full second decode of the share). Use a
+           flat, slightly darker surface so the contained video sits on a
+           clean letterbox instead of the default elevated card colour. */
+        .video-tile.screen-share {
+          background: #0a0a0b;
         }
         .video-tile-avatar {
           width: 3.5rem;
