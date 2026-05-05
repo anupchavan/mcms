@@ -1,13 +1,17 @@
-import { useState, useEffect, useCallback, useRef, forwardRef, useImperativeHandle } from 'react';
+import { useState, useEffect, useCallback, useRef, forwardRef, useImperativeHandle, useMemo } from 'react';
+import { createPortal } from 'react-dom';
 import Icon from "../../../shared/components/Icon";
 import {
     Mic01Icon, MicOff01Icon, Video01Icon, VideoOffIcon,
     ComputerScreenShareIcon, QrCodeIcon, UserGroupIcon,
-    RecordIcon, Cancel01Icon, StopIcon, Link01Icon, Message01Icon
+    RecordIcon, Cancel01Icon, StopIcon, Link01Icon, Message01Icon, UserAdd01Icon,
+    Search01Icon,
 } from '@hugeicons/core-free-icons';
+import { UserAvatar } from '../../../shared/components/UserAvatar';
 import QROverlay from './QROverlay';
 import ShortcutTooltip from "../../../shared/components/ShortcutTooltip";
 import { useSocket } from "../../../stores/SocketContext";
+import { useAuth } from "../../../stores/AuthContext";
 import { pathnameHasMongoMeetingSegment, isMeetingShortSlug } from "../../../utils/meetingSlug";
 
 export interface HostControlsProps {
@@ -33,6 +37,10 @@ export interface HostControlsProps {
     isHost?: boolean;
     chatOpen?: boolean;
     onToggleChat?: () => void;
+    /** Meeting participants passed from parent for the participants panel */
+    participants?: Array<{ _id?: string; id?: string; name?: string; email?: string; profileImage?: string | null }>;
+    /** Set of user IDs currently connected to the room via WebRTC */
+    connectedUserIds?: Set<string>;
 }
 
 export interface HostControlsRef {
@@ -41,6 +49,8 @@ export interface HostControlsRef {
     endMeeting: () => void;
 }
 
+const API_BASE_HC = import.meta.env.VITE_API_URL || 'http://localhost:5001/api';
+
 const HostControls = forwardRef<HostControlsRef, HostControlsProps>(function HostControls({
     meetingId, meetingTitle, meetingUrl, inviteId, modality,
     audioEnabled, videoEnabled, screenSharing,
@@ -48,9 +58,12 @@ const HostControls = forwardRef<HostControlsRef, HostControlsProps>(function Hos
     screenShareSystemAudio = false,
     onScreenShareSystemAudioChange,
     onLeave, hasJoined, onMeetingEnded, isHost = false,
-    chatOpen = false, onToggleChat
+    chatOpen = false, onToggleChat,
+    participants = [],
+    connectedUserIds = new Set<string>(),
 }, ref) {
     const { socket } = useSocket();
+    const { user } = useAuth();
     const [recording, setRecording] = useState(false);
     /** true while we wait for the server to ack transcription_started */
     const [recordingPending, setRecordingPending] = useState(false);
@@ -154,6 +167,144 @@ const HostControls = forwardRef<HostControlsRef, HostControlsProps>(function Hos
         });
     }, [meetingId, meetingUrl, inviteId]);
 
+    // ── Participants panel ────────────────────────────────────────────────────
+    const [showParticipants, setShowParticipants] = useState(false);
+    const [participantSearch, setParticipantSearch] = useState('');
+    const [searchResults, setSearchResults] = useState<any[]>([]);
+    const [inviting, setInviting] = useState<string | null>(null);
+    const [highlightIndex, setHighlightIndex] = useState(-1);
+    /** Locally-added user IDs this session (so UI updates immediately after invite) */
+    const [locallyAdded, setLocallyAdded] = useState<Set<string>>(new Set());
+    const participantsBtnRef = useRef<HTMLButtonElement>(null);
+    const participantsPanelRef = useRef<HTMLDivElement>(null);
+    const listRef = useRef<HTMLDivElement>(null);
+    const [panelPos, setPanelPos] = useState<{ bottom: number; left: number } | null>(null);
+
+    const participantIds = useMemo(() => {
+        const s = new Set(participants.map(p => String(p._id || p.id || '')).filter(Boolean));
+        locallyAdded.forEach(id => s.add(id));
+        return s;
+    }, [participants, locallyAdded]);
+
+    // Search users as they type
+    useEffect(() => {
+        console.log('[ParticipantSearch] query:', JSON.stringify(participantSearch), 'len:', participantSearch.trim().length);
+        if (!participantSearch.trim() || participantSearch.trim().length < 1) {
+            setSearchResults([]);
+            return;
+        }
+        const q = participantSearch.trim();
+        const controller = new AbortController();
+        (async () => {
+            try {
+                const url = `${API_BASE_HC}/users/search?q=${encodeURIComponent(q)}`;
+                console.log('[ParticipantSearch] fetching:', url, 'token:', user?.token ? 'present' : 'MISSING');
+                const res = await fetch(url, {
+                    headers: { Authorization: `Bearer ${user?.token}` },
+                    signal: controller.signal,
+                });
+                console.log('[ParticipantSearch] status:', res.status);
+                if (res.ok) {
+                    const data = await res.json();
+                    console.log('[ParticipantSearch] results:', data);
+                    setSearchResults(data);
+                } else {
+                    console.error('[ParticipantSearch] error body:', await res.text());
+                }
+            } catch (err: any) {
+                if (err?.name !== 'AbortError') console.error('[ParticipantSearch] fetch error:', err);
+            }
+        })();
+        return () => controller.abort();
+    }, [participantSearch, user?.token]);
+
+    // Reset highlight when results change
+    useEffect(() => { setHighlightIndex(-1); }, [searchResults]);
+
+    const handleOpenParticipants = useCallback(() => {
+        if (participantsBtnRef.current) {
+            const rect = participantsBtnRef.current.getBoundingClientRect();
+            setPanelPos({ bottom: window.innerHeight - rect.top + 8, left: rect.left });
+        }
+        setShowParticipants(o => !o);
+        setParticipantSearch('');
+        setSearchResults([]);
+        setHighlightIndex(-1);
+    }, []);
+
+    const handleInvite = useCallback(async (userId: string) => {
+        if (!meetingId || !isHost || inviting) return;
+        setInviting(userId);
+        try {
+            const res = await fetch(`${API_BASE_HC}/meetings/${meetingId}/participants`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${user?.token}` },
+                body: JSON.stringify({ userId }),
+            });
+            if (res.ok) {
+                setLocallyAdded(prev => new Set([...prev, userId]));
+            } else {
+                console.error('[Participants] invite failed', res.status, await res.text());
+            }
+        } catch (err) {
+            console.error('[Participants] invite error', err);
+        }
+        setInviting(null);
+    }, [meetingId, isHost, user?.token, inviting]);
+
+    // Merge meeting participants + search results for display
+    const displayList = useMemo(() => {
+        if (!participantSearch.trim()) return [];
+        return searchResults.map(u => ({
+            ...u,
+            isAlreadyIn: participantIds.has(String(u._id)),
+        }));
+    }, [searchResults, participantIds, participantSearch]);
+
+    const handleSearchKeyDown = useCallback((e: React.KeyboardEvent<HTMLInputElement>) => {
+        if (displayList.length === 0) return;
+        if (e.key === 'ArrowDown') {
+            e.preventDefault();
+            listRef.current?.setAttribute('data-kbd-nav', '');
+            setHighlightIndex(i => Math.min(i + 1, displayList.length - 1));
+        } else if (e.key === 'ArrowUp') {
+            e.preventDefault();
+            listRef.current?.setAttribute('data-kbd-nav', '');
+            setHighlightIndex(i => Math.max(-1, i - 1));
+        } else if (e.key === 'Enter') {
+            const item = displayList[highlightIndex];
+            if (item && !item.isAlreadyIn && !connectedUserIds.has(String(item._id))) {
+                e.preventDefault();
+                handleInvite(String(item._id));
+            }
+        }
+    }, [displayList, highlightIndex, handleInvite, connectedUserIds]);
+
+    // Scroll highlighted row into view
+    useEffect(() => {
+        if (highlightIndex < 0 || !listRef.current) return;
+        const rows = listRef.current.querySelectorAll<HTMLElement>('.archive-multi-select-row');
+        rows[highlightIndex]?.scrollIntoView({ block: 'nearest' });
+    }, [highlightIndex]);
+
+    // Close participants panel on outside click / Escape
+    useEffect(() => {
+        if (!showParticipants) return;
+        const onDoc = (e: MouseEvent) => {
+            const btn = participantsBtnRef.current;
+            const panel = participantsPanelRef.current;
+            if (btn?.contains(e.target as Node) || panel?.contains(e.target as Node)) return;
+            setShowParticipants(false);
+        };
+        const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setShowParticipants(false); };
+        document.addEventListener('mousedown', onDoc);
+        document.addEventListener('keydown', onKey);
+        return () => {
+            document.removeEventListener('mousedown', onDoc);
+            document.removeEventListener('keydown', onKey);
+        };
+    }, [showParticipants]);
+
     return (
         <>
             <div className="host-controls">
@@ -211,7 +362,7 @@ const HostControls = forwardRef<HostControlsRef, HostControlsProps>(function Hos
 
                             {isHost && (
                                 <ShortcutTooltip
-                                    label={recording ? 'Stop recording' : recordingPending ? 'Connecting…' : 'Record'}
+                                    label={recording ? 'Stop transcription' : recordingPending ? 'Connecting…' : 'Transcribe'}
                                     keys={['R']}
                                     position="top"
                                 >
@@ -220,10 +371,10 @@ const HostControls = forwardRef<HostControlsRef, HostControlsProps>(function Hos
                                         onClick={toggleRecording}
                                         disabled={!hasJoined || recordingPending}
                                         aria-busy={recordingPending}
-                                        aria-label={recordingPending ? 'Starting recording…' : recording ? 'Stop recording' : 'Start recording'}
+                                        aria-label={recordingPending ? 'Starting transcription…' : recording ? 'Stop transcription' : 'Start transcription'}
                                     >
                                         <Icon icon={RecordIcon} size={16} />
-                                        <span>{recordingPending ? 'Starting…' : recording ? 'Recording' : 'Record'}</span>
+                                        <span>{recordingPending ? 'Starting…' : recording ? 'Transcribing' : 'Transcribe'}</span>
                                         {recording && <div className="rec-dot"></div>}
                                     </button>
                                 </ShortcutTooltip>
@@ -246,9 +397,13 @@ const HostControls = forwardRef<HostControlsRef, HostControlsProps>(function Hos
                     </ShortcutTooltip>
 
                     {!isOffline && (
-                        <button className="control-btn" disabled>
+                        <button
+                            ref={participantsBtnRef}
+                            className={`control-btn ${showParticipants ? 'active' : ''}`}
+                            onClick={handleOpenParticipants}
+                        >
                             <Icon icon={UserGroupIcon} size={16} />
-                            <span>Participants</span>
+                            <span>Participants {participants.length > 0 ? `(${participants.length})` : ''}</span>
                         </button>
                     )}
 
@@ -315,6 +470,140 @@ const HostControls = forwardRef<HostControlsRef, HostControlsProps>(function Hos
             )}
 
             {showQR && <QROverlay onClose={() => setShowQR(false)} meetingTitle={meetingTitle} meetingId={meetingId} />}
+
+            {showParticipants && panelPos && createPortal(
+                <div
+                    ref={participantsPanelRef}
+                    className="archive-multi-select-panel"
+                    style={{
+                        position: 'fixed',
+                        top: 'auto',
+                        bottom: panelPos.bottom,
+                        left: panelPos.left,
+                        right: 'auto',
+                        zIndex: 99999,
+                        minWidth: 280,
+                        maxWidth: 340,
+                        display: 'flex',
+                        flexDirection: 'column',
+                    }}
+                >
+                    <div ref={listRef} className="archive-multi-select-list" style={{ overflowY: 'auto', height: 280 }}>
+                        {!participantSearch.trim() ? (
+                            /* Show current participants when search is empty */
+                            participants.length === 0 ? (
+                                <div className="archive-multi-select-empty" style={{ padding: '16px 12px', textAlign: 'center', fontSize: '0.8125rem', color: 'var(--text-muted)' }}>
+                                    No participants yet
+                                </div>
+                            ) : (
+                                participants.map(p => {
+                                    const pid = String(p._id || p.id || '');
+                                    return (
+                                        <div
+                                            key={pid}
+                                            className="archive-multi-select-row archive-multi-select-row--transcript-speaker"
+                                            style={{ display: 'flex', alignItems: 'center', gap: '8px', justifyContent: 'space-between' }}
+                                        >
+                                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flex: 1, minWidth: 0 }}>
+                                                <UserAvatar
+                                                    name={p.name || p.email || ''}
+                                                    userId={pid}
+                                                    profileImage={p.profileImage}
+                                                    size={24}
+                                                />
+                                                <div style={{ minWidth: 0 }}>
+                                                    <div className="archive-multi-select-name">
+                                                        {p.name || p.email || 'User'}
+                                                    </div>
+                                                    {p.name && p.email && (
+                                                        <div style={{ fontSize: '0.6875rem', color: 'var(--text-muted)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                                            {p.email}
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            </div>
+                                            <span style={{ fontSize: '0.6875rem', color: 'var(--text-muted)', flexShrink: 0 }}>
+                                                {connectedUserIds.has(pid) ? 'In meeting' : 'Invited'}
+                                            </span>
+                                        </div>
+                                    );
+                                })
+                            )
+                        ) : displayList.length === 0 ? (
+                            <div className="archive-multi-select-empty" style={{ padding: '16px 12px', textAlign: 'center', fontSize: '0.8125rem', color: 'var(--text-muted)' }}>
+                                No users found
+                            </div>
+                        ) : (
+                            displayList.map((u, idx) => {
+                                const uid = String(u._id);
+                                const isIn = u.isAlreadyIn;
+                                const isConnected = connectedUserIds.has(uid);
+                                const canInvite = isHost && !isIn && !isConnected;
+                                return (
+                                    <div
+                                        key={uid}
+                                        className={`archive-multi-select-row archive-multi-select-row--transcript-speaker${idx === highlightIndex ? ' is-keyboard-highlight' : ''}`}
+                                        style={{ display: 'flex', alignItems: 'center', gap: '8px', justifyContent: 'space-between', cursor: canInvite ? 'pointer' : 'default' }}
+                                        onMouseEnter={() => setHighlightIndex(idx)}
+                                        onMouseLeave={() => setHighlightIndex(-1)}
+                                        onClick={() => { if (canInvite) handleInvite(uid); }}
+                                    >
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flex: 1, minWidth: 0 }}>
+                                            <UserAvatar
+                                                name={u.name || u.email || ''}
+                                                userId={uid}
+                                                profileImage={u.profileImage}
+                                                size={24}
+                                            />
+                                            <div style={{ minWidth: 0 }}>
+                                                <div className="archive-multi-select-name">
+                                                    {u.name || u.email || 'User'}
+                                                </div>
+                                                {u.name && u.email && (
+                                                    <div style={{ fontSize: '0.6875rem', color: 'var(--text-muted)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                                        {u.email}
+                                                    </div>
+                                                )}
+                                            </div>
+                                        </div>
+                                        {isConnected ? (
+                                            <span style={{ fontSize: '0.6875rem', color: 'var(--text-muted)', flexShrink: 0 }}>In meeting</span>
+                                        ) : isIn ? (
+                                            <span style={{ fontSize: '0.6875rem', color: 'var(--text-muted)', flexShrink: 0 }}>Invited</span>
+                                        ) : isHost ? (
+                                            <button
+                                                type="button"
+                                                className="btn-icon btn-icon-sm"
+                                                title="Add to meeting"
+                                                disabled={inviting === uid}
+                                                onClick={e => { e.stopPropagation(); handleInvite(uid); }}
+                                                style={{ flexShrink: 0 }}
+                                            >
+                                                <Icon icon={UserAdd01Icon} size={13} />
+                                            </button>
+                                        ) : null}
+                                    </div>
+                                );
+                            })
+                        )}
+                    </div>
+
+                    {/* Search input — bottom */}
+                    <div className="archive-multi-select-search-wrap" style={{ borderTop: '1px solid var(--border)', borderBottom: 'none', flexShrink: 0 }}>
+                        <Icon icon={Search01Icon} size={14} className="archive-multi-select-search-icon" />
+                        <input
+                            type="text"
+                            className="archive-multi-select-search"
+                            placeholder="Search to add…"
+                            autoFocus
+                            value={participantSearch}
+                            onChange={e => setParticipantSearch(e.target.value)}
+                            onKeyDown={handleSearchKeyDown}
+                        />
+                    </div>
+                </div>,
+                document.body
+            )}
         </>
     );
 });

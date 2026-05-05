@@ -65,7 +65,6 @@ export const ChatBubbleSurface: FC<ChatBubbleSurfaceProps> = ({ variant, showTai
       style={{
         position: "relative",
         display: "inline-block",
-        width: "max-content",
         maxWidth: "100%",
         verticalAlign: "top",
         paddingBottom: showTail ? 8 : 0,
@@ -85,6 +84,8 @@ export const ChatBubbleSurface: FC<ChatBubbleSurfaceProps> = ({ variant, showTai
           fontSize: "0.875rem",
           lineHeight: 1.4,
           color: isMe ? "var(--flexoki-paper)" : "var(--text-primary)",
+          overflowWrap: "anywhere",
+          wordBreak: "break-word",
         }}
       >
         {showTail && <TailSvg fill={bg} forOthers={!isMe} />}

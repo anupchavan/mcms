@@ -33,7 +33,7 @@ const TABS: DockTab[] = [
     { id: 'agenda',     label: 'Agenda',       icon: ViewAgendaIcon, hint: 'G' },
     { id: 'chat',       label: 'Chat',         icon: BubbleChatIcon, hint: 'H' },
     { id: 'transcript', label: 'Transcript',   icon: ClosedCaptionIcon, hint: 'T' },
-    { id: 'minutes',    label: 'Minutes',      icon: Note01Icon,     hint: 'N' },
+    { id: 'minutes',    label: 'Minutes',      icon: Note01Icon,     hint: 'M' },
     { id: 'actions',    label: 'Tasks',        icon: CheckListIcon,  hint: 'K' },
 ];
 

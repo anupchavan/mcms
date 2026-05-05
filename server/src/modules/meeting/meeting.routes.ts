@@ -409,5 +409,53 @@ export = function ({ User, Meeting, Poll, Notification, Agenda, protect, usingMo
         }
     });
 
+    /** Add a participant to a meeting (host only). Body: { userId: string } */
+    router.post('/:id/participants', protect, async (req: any, res: any) => {
+        try {
+            if (!usingMongo() || !Meeting) return res.status(400).json({ message: 'Database required' });
+            const meeting = await Meeting.findById(req.params.id);
+            if (!meeting) return res.status(404).json({ message: 'Meeting not found' });
+            if (meeting.hostId.toString() !== req.user.id.toString()) {
+                return res.status(403).json({ message: 'Only the host can add participants' });
+            }
+            const { userId } = req.body;
+            if (!userId) return res.status(400).json({ message: 'userId is required' });
+            const alreadyIn = meeting.participants.some((p: any) => String(p._id || p) === String(userId));
+            if (!alreadyIn) {
+                meeting.participants.push(userId);
+                await meeting.save();
+
+                // Notify the invited user
+                if (Notification && emitToUser) {
+                    try {
+                        const hostName = req.user.name || 'The host';
+                        const notif = await Notification.create({
+                            userId,
+                            type: 'meeting_invite',
+                            meetingId: meeting._id,
+                            message: `${hostName} added you to "${meeting.title}"`,
+                        });
+                        emitToUser(userId, 'notification', {
+                            _id: notif._id,
+                            type: notif.type,
+                            meetingId: meeting._id,
+                            meetingTitle: meeting.title,
+                            inviteId: meeting.id || meeting.shortId || null,
+                            meetingModality: meeting.modality,
+                            meetingStatus: meeting.status,
+                            message: notif.message,
+                        });
+                    } catch (notifErr) {
+                        console.error('Failed to send invite notification:', notifErr);
+                    }
+                }
+            }
+            const populated = await Meeting.findById(meeting._id).populate('participants', 'name email profileImage');
+            res.json({ participants: populated.participants });
+        } catch (error: any) {
+            res.status(500).json({ message: 'Server error', error: error.message });
+        }
+    });
+
     return router;
 };

@@ -5,6 +5,7 @@ import {
     useRef,
     useState,
 } from "react";
+import { createPortal } from "react-dom";
 import Icon from "../../../shared/components/Icon";
 import {
     ArrowDown01Icon,
@@ -15,11 +16,14 @@ import type { ArchiveParticipant, ArchiveTask, ArchiveTaskAssignee } from "./arc
 
 const STACK_MAX_VISIBLE_DISCS = 3;
 
-const CATEGORY_CHIP: Record<string, string> = {
-    Technical: "chip-blue",
-    Administrative: "chip-purple",
-    Decision: "chip-amber",
-    "Follow-up": "chip-cyan",
+const CATEGORIES = ["Technical", "Administrative", "Decision", "Follow-up"];
+
+/** Text-only colors for category labels (no chip background). */
+export const CATEGORY_TEXT_COLOR: Record<string, string> = {
+    Technical: "var(--flair-primary-color)",
+    Administrative: "var(--flair-purple-color)",
+    Decision: "var(--flair-amber-color)",
+    "Follow-up": "var(--primary)",
 };
 
 const MONTH_ABBR = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
@@ -123,7 +127,7 @@ function ArchiveTaskRow({ task, participants, canEdit, fetchWithAuth, apiBase, o
     }, [task.title]);
 
     const persistTask = useCallback(
-        async (patch: Partial<{ title: string; assignees: string[]; status: string }>) => {
+        async (patch: Partial<{ title: string; assignees: string[]; status: string; category: string; deadline: string | null }>) => {
             const res = await (fetchWithAuth || fetch)(`${apiBase}/tasks/${task.id}`, {
                 method: "PUT",
                 headers: { "Content-Type": "application/json" },
@@ -131,7 +135,6 @@ function ArchiveTaskRow({ task, participants, canEdit, fetchWithAuth, apiBase, o
             });
             if (res.ok) {
                 const updated = await res.json();
-                // Server may respond with a different shape; merge minimally and reuse.
                 onTaskUpdated({
                     ...task,
                     ...updated,
@@ -159,7 +162,6 @@ function ArchiveTaskRow({ task, participants, canEdit, fetchWithAuth, apiBase, o
 
     const setAssignees = useCallback(
         async (ids: string[]) => {
-            // Optimistic UI: hand the parent the new list with whatever profiles we already know.
             const enriched: ArchiveTaskAssignee[] = ids.map((id) => {
                 const p = participants.find((pp) => String(pp._id) === String(id));
                 return {
@@ -182,6 +184,23 @@ function ArchiveTaskRow({ task, participants, canEdit, fetchWithAuth, apiBase, o
         },
         [onTaskUpdated, persistTask, task],
     );
+
+    const setCategory = useCallback(
+        async (category: string) => {
+            onTaskUpdated({ ...task, category });
+            await persistTask({ category });
+        },
+        [onTaskUpdated, persistTask, task],
+    );
+
+    const [deadlineDraft, setDeadlineDraft] = useState(task.deadline ? task.deadline.slice(0, 10) : "");
+    useEffect(() => { setDeadlineDraft(task.deadline ? task.deadline.slice(0, 10) : ""); }, [task.deadline]);
+
+    const commitDeadline = useCallback(async (val: string) => {
+        const next = val || null;
+        onTaskUpdated({ ...task, deadline: next });
+        await persistTask({ deadline: next });
+    }, [onTaskUpdated, persistTask, task]);
 
     const assigneeIds = useMemo(
         () => (task.assignees || []).map((a) => String(a.id)).filter(Boolean),
@@ -222,16 +241,32 @@ function ArchiveTaskRow({ task, participants, canEdit, fetchWithAuth, apiBase, o
                 />
             </div>
             <div className="archive-task-table-cell archive-task-table-cell--type" role="cell">
-                {task.category ? (
-                    <span className={`chip ${CATEGORY_CHIP[task.category] || "chip-blue"}`} style={{ fontSize: "0.6875rem" }}>
+                {canEdit ? (
+                    <TaskCategorySelect
+                        value={task.category || "Technical"}
+                        onChange={setCategory}
+                    />
+                ) : task.category ? (
+                    <span style={{ fontSize: "0.8125rem", color: CATEGORY_TEXT_COLOR[task.category] || "var(--text-secondary)" }}>
                         {task.category}
                     </span>
                 ) : <span className="archive-task-no-value">—</span>}
             </div>
             <div className="archive-task-table-cell archive-task-table-cell--deadline" role="cell">
-                <span className="archive-task-deadline-text">
-                    {task.deadline ? formatDeadline(task.deadline) : "—"}
-                </span>
+                {canEdit ? (
+                    <input
+                        type="date"
+                        className="input-field"
+                        value={deadlineDraft}
+                        onChange={(e) => setDeadlineDraft(e.target.value)}
+                        onBlur={(e) => commitDeadline(e.target.value)}
+                        style={{ fontSize: "0.8125rem", padding: "0.2rem 0.35rem", minWidth: 0, width: "100%" }}
+                    />
+                ) : (
+                    <span className="archive-task-deadline-text">
+                        {task.deadline ? formatDeadline(task.deadline) : "—"}
+                    </span>
+                )}
             </div>
             <div className="archive-task-table-cell archive-task-table-cell--status" role="cell">
                 <TaskStatusSelect
@@ -420,8 +455,125 @@ export function TaskAssigneePicker({
     );
 }
 
-/** Status dropdown without a search input. Reuses the archive multi-select pill/panel
- * styling so the trigger matches the assignee picker. */
+/** Category/type dropdown — colored text labels, no chip background. Portal-rendered. */
+export function TaskCategorySelect({
+    value,
+    onChange,
+    disabled,
+}: {
+    value: string;
+    onChange: (next: string) => void;
+    disabled?: boolean;
+}) {
+    const [open, setOpen] = useState(false);
+    const rootRef = useRef<HTMLDivElement>(null);
+    const panelRef = useRef<HTMLDivElement>(null);
+    const [panelPos, setPanelPos] = useState<{ top?: number; bottom?: number; left: number; minWidth: number } | null>(null);
+    const current = value || CATEGORIES[0];
+    const currentColor = CATEGORY_TEXT_COLOR[current] || "var(--text-secondary)";
+
+    const PANEL_MAX_H = 240;
+    const handleToggle = useCallback(() => {
+        if (disabled) return;
+        if (!open && rootRef.current) {
+            const rect = rootRef.current.getBoundingClientRect();
+            const spaceBelow = window.innerHeight - rect.bottom;
+            if (spaceBelow < PANEL_MAX_H) {
+                setPanelPos({ bottom: window.innerHeight - rect.top + 4, left: rect.left, minWidth: rect.width });
+            } else {
+                setPanelPos({ top: rect.bottom + 4, left: rect.left, minWidth: rect.width });
+            }
+        }
+        setOpen((o) => !o);
+    }, [disabled, open]);
+
+    useEffect(() => {
+        if (!open) return;
+        const onDoc = (ev: MouseEvent) => {
+            const root = rootRef.current;
+            const panel = panelRef.current;
+            const t = ev.target as Node;
+            if ((root?.contains(t)) || (panel?.contains(t))) return;
+            setOpen(false);
+        };
+        const onKey = (ev: KeyboardEvent) => { if (ev.key === "Escape") setOpen(false); };
+        const onScroll = () => setOpen(false);
+        document.addEventListener("mousedown", onDoc);
+        document.addEventListener("keydown", onKey);
+        window.addEventListener("scroll", onScroll, true);
+        return () => {
+            document.removeEventListener("mousedown", onDoc);
+            document.removeEventListener("keydown", onKey);
+            window.removeEventListener("scroll", onScroll, true);
+        };
+    }, [open]);
+
+    return (
+        <div className="archive-multi-select archive-multi-select--task-status" ref={rootRef}>
+            <button
+                type="button"
+                className="archive-task-cell-trigger"
+                onClick={handleToggle}
+                disabled={disabled}
+                aria-haspopup="listbox"
+                aria-expanded={open}
+            >
+                <span style={{ color: currentColor, fontSize: "0.8125rem", fontWeight: 500 }}>{current}</span>
+                {!disabled && (
+                    <span className="archive-multi-select-trigger-chevron" aria-hidden>
+                        <Icon icon={open ? ArrowUp01Icon : ArrowDown01Icon} size={12} />
+                    </span>
+                )}
+            </button>
+            {open && panelPos && createPortal(
+                <div
+                    ref={panelRef}
+                    className="archive-multi-select-list"
+                    role="listbox"
+                    style={{
+                        position: "fixed",
+                        top: panelPos.top,
+                        bottom: panelPos.bottom,
+                        left: panelPos.left,
+                        minWidth: panelPos.minWidth,
+                        maxHeight: PANEL_MAX_H,
+                        overflowY: "auto",
+                        background: "var(--bg-card)",
+                        border: "1px solid var(--border)",
+                        borderRadius: "var(--radius-md)",
+                        boxShadow: "var(--shadow-lg)",
+                        zIndex: 9999,
+                        padding: "0.25rem",
+                    }}
+                >
+                    {CATEGORIES.map((cat) => {
+                        const sel = cat === value;
+                        return (
+                            <button
+                                key={cat}
+                                type="button"
+                                role="option"
+                                aria-selected={sel}
+                                className={`archive-multi-select-row archive-task-status-row${sel ? " is-selected" : ""}`}
+                                onClick={(e) => {
+                                    e.preventDefault();
+                                    onChange(cat);
+                                    setOpen(false);
+                                }}
+                            >
+                                <span style={{ color: CATEGORY_TEXT_COLOR[cat] || "var(--text-secondary)", fontSize: "0.8125rem", fontWeight: 500 }}>{cat}</span>
+                            </button>
+                        );
+                    })}
+                </div>,
+                document.body,
+            )}
+        </div>
+    );
+}
+
+/** Status dropdown without a search input. Uses a portal so the panel escapes
+ * overflow containers and CSS stacking contexts inside scrollable task lists. */
 export function TaskStatusSelect({
     value,
     onChange,
@@ -431,11 +583,12 @@ export function TaskStatusSelect({
     value: string;
     onChange: (next: string) => void;
     disabled?: boolean;
-    /** When set, the menu only lists these values (current value is always shown in the trigger). */
     allowedStatuses?: string[];
 }) {
     const [open, setOpen] = useState(false);
     const rootRef = useRef<HTMLDivElement>(null);
+    const panelRef = useRef<HTMLDivElement>(null);
+    const [panelPos, setPanelPos] = useState<{ top?: number; bottom?: number; left: number; minWidth: number } | null>(null);
     const current = STATUS_LOOKUP[value] || STATUS_OPTIONS[0];
 
     const dropdownOptions = useMemo(() => {
@@ -449,20 +602,39 @@ export function TaskStatusSelect({
         return list;
     }, [allowedStatuses, value]);
 
+    const STATUS_PANEL_MAX_H = 280;
+    const handleToggle = useCallback(() => {
+        if (disabled) return;
+        if (!open && rootRef.current) {
+            const rect = rootRef.current.getBoundingClientRect();
+            const spaceBelow = window.innerHeight - rect.bottom;
+            if (spaceBelow < STATUS_PANEL_MAX_H) {
+                setPanelPos({ bottom: window.innerHeight - rect.top + 4, left: rect.left, minWidth: rect.width });
+            } else {
+                setPanelPos({ top: rect.bottom + 4, left: rect.left, minWidth: rect.width });
+            }
+        }
+        setOpen((o) => !o);
+    }, [disabled, open]);
+
     useEffect(() => {
         if (!open) return;
         const onDoc = (ev: MouseEvent) => {
-            const el = rootRef.current;
-            if (el && ev.target instanceof Node && !el.contains(ev.target)) setOpen(false);
+            const root = rootRef.current;
+            const panel = panelRef.current;
+            const t = ev.target as Node;
+            if ((root?.contains(t)) || (panel?.contains(t))) return;
+            setOpen(false);
         };
-        const onKey = (ev: KeyboardEvent) => {
-            if (ev.key === "Escape") setOpen(false);
-        };
+        const onKey = (ev: KeyboardEvent) => { if (ev.key === "Escape") setOpen(false); };
+        const onScroll = () => setOpen(false);
         document.addEventListener("mousedown", onDoc);
         document.addEventListener("keydown", onKey);
+        window.addEventListener("scroll", onScroll, true);
         return () => {
             document.removeEventListener("mousedown", onDoc);
             document.removeEventListener("keydown", onKey);
+            window.removeEventListener("scroll", onScroll, true);
         };
     }, [open]);
 
@@ -471,7 +643,7 @@ export function TaskStatusSelect({
             <button
                 type="button"
                 className="archive-task-cell-trigger"
-                onClick={() => !disabled && setOpen((o) => !o)}
+                onClick={handleToggle}
                 disabled={disabled}
                 aria-haspopup="listbox"
                 aria-expanded={open}
@@ -483,32 +655,49 @@ export function TaskStatusSelect({
                     </span>
                 ) : null}
             </button>
-            {open && (
-                <div className="archive-multi-select-panel archive-task-cell-panel" role="listbox">
-                    <div className="archive-multi-select-list">
-                        {dropdownOptions.map((opt) => {
-                            const sel = opt.value === value;
-                            return (
-                                <button
-                                    key={opt.value}
-                                    type="button"
-                                    role="option"
-                                    aria-selected={sel}
-                                    className={`archive-multi-select-row archive-task-status-row${sel ? " is-selected" : ""}`}
-                                    onClick={(e) => {
-                                        e.preventDefault();
-                                        onChange(opt.value);
-                                        setOpen(false);
-                                    }}
-                                >
-                                    <span className={opt.statusLabelClass}>{opt.label}</span>
-                                </button>
-                            );
-                        })}
-                    </div>
-                </div>
+            {open && panelPos && createPortal(
+                <div
+                    ref={panelRef}
+                    className="archive-multi-select-list"
+                    role="listbox"
+                    style={{
+                        position: "fixed",
+                        top: panelPos.top,
+                        bottom: panelPos.bottom,
+                        left: panelPos.left,
+                        minWidth: panelPos.minWidth,
+                        maxHeight: STATUS_PANEL_MAX_H,
+                        overflowY: "auto",
+                        background: "var(--bg-card)",
+                        border: "1px solid var(--border)",
+                        borderRadius: "1rem",
+                        boxShadow: "var(--shadow-lg)",
+                        zIndex: 9999,
+                        padding: "0.35rem",
+                    }}
+                >
+                    {dropdownOptions.map((opt) => {
+                        const sel = opt.value === value;
+                        return (
+                            <button
+                                key={opt.value}
+                                type="button"
+                                role="option"
+                                aria-selected={sel}
+                                className={`archive-multi-select-row archive-task-status-row${sel ? " is-selected" : ""}`}
+                                onClick={(e) => {
+                                    e.preventDefault();
+                                    onChange(opt.value);
+                                    setOpen(false);
+                                }}
+                            >
+                                <span className={opt.statusLabelClass}>{opt.label}</span>
+                            </button>
+                        );
+                    })}
+                </div>,
+                document.body,
             )}
         </div>
     );
 }
-

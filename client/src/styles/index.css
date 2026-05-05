@@ -585,9 +585,9 @@ body {
   align-items: center;
   gap: 0.35rem;
   padding: 0.3rem 0.55rem;
-  border-radius: var(--lk-size-2xs, 4px);
+  border-radius: var(--lk-size-sm);
   border: 1px solid var(--border);
-  background: var(--bg-elevated);
+  background: none;
   color: var(--text-secondary);
   font-size: var(--font-size-label, 0.75rem);
   font-weight: 500;
@@ -614,9 +614,9 @@ body {
   right: 0;
   z-index: 120;
   min-width: 130px;
-  background: var(--bg-elevated);
+  background: var(--bg-card);
   border: 1px solid var(--border);
-  border-radius: var(--lk-size-xs, 6px);
+  border-radius: var(--lk-size-sm);
   box-shadow: var(--shadow-md);
   padding: 0.25rem;
   display: flex;
@@ -631,7 +631,7 @@ body {
   width: 100%;
   padding: 0.35rem 0.5rem;
   border: none;
-  border-radius: 4px;
+  border-radius: var(--lk-size-xs);
   background: transparent;
   color: var(--text-secondary);
   font-size: var(--font-size-label, 0.75rem);
@@ -880,6 +880,18 @@ body {
   justify-content: center;
   gap: 0.2rem;
   padding-right: 0.5rem;
+}
+
+.input-field.tasks-date-input {
+	font-size: var(--font-size-caption);
+	padding: 0.2rem 0.35rem;
+	padding-left: 0;
+	padding-right: 0;
+	min-width: 0;
+	width: 100%;
+	background: none;
+	border: none;
+	outline: none;
 }
 
 /* ── Archived tasks overlay ─────────────────────────────────────────── */
@@ -1221,8 +1233,8 @@ div.hangup-button {
 }
 
 .btn-icon.active {
-  background: var(--primary-muted);
-  color: var(--primary);
+  background: var(--color-tx-normal);
+  color: var(--color-bg-primary);
 }
 
 
@@ -1756,6 +1768,7 @@ input[type="date"].input-field {
   display: flex;
   flex-direction: column;
   overflow: hidden;
+  background: var(--color-bg-primary);
 }
 
 .tasks-list {
@@ -1815,9 +1828,14 @@ input[type="date"].input-field {
 .task-card {
   padding: calc(var(--lk-size-md) * var(--font-size-body)/(1rem));
   padding-top: calc(var(--lk-size-sm) * var(--font-size-subheading)/(1rem));
+  padding-bottom: calc(var(--lk-size-sm) * var(--font-size-subheading)/(1rem));
   padding-right: calc(var(--lk-size-sm) * var(--font-size-subheading)/(1rem));
 
-  margin-bottom: 0.375rem;
+  margin-bottom: calc(var(--lk-size-sm) * var(--font-size-subheading)/(1rem));
+  background: var(--color-bg-primary);
+}
+.glass-card.task-card {
+	background: var(--color-bg-secondary);
 }
 
 .live-task-card-label {
@@ -3171,7 +3189,6 @@ gap: calc(var(--lk-size-xs) * var(--font-size-caption)/(1rem));
 }
 
 .agenda-list {
-  padding: var(--lk-size-xs);
 }
 
 .agenda-item {
