@@ -13,6 +13,7 @@ import ShortcutTooltip from "../../../shared/components/ShortcutTooltip";
 import { useSocket } from "../../../stores/SocketContext";
 import { useAuth } from "../../../stores/AuthContext";
 import { pathnameHasMongoMeetingSegment, isMeetingShortSlug } from "../../../utils/meetingSlug";
+import { archiveLoadingMinVisibleMs } from "../../dashboard/components/archiveHelpers";
 
 export interface HostControlsProps {
     meetingId?: string;
@@ -171,6 +172,7 @@ const HostControls = forwardRef<HostControlsRef, HostControlsProps>(function Hos
     const [showParticipants, setShowParticipants] = useState(false);
     const [participantSearch, setParticipantSearch] = useState('');
     const [searchResults, setSearchResults] = useState<any[]>([]);
+    const [searchLoading, setSearchLoading] = useState(false);
     const [inviting, setInviting] = useState<string | null>(null);
     const [highlightIndex, setHighlightIndex] = useState(-1);
     /** Locally-added user IDs this session (so UI updates immediately after invite) */
@@ -188,34 +190,35 @@ const HostControls = forwardRef<HostControlsRef, HostControlsProps>(function Hos
 
     // Search users as they type
     useEffect(() => {
-        console.log('[ParticipantSearch] query:', JSON.stringify(participantSearch), 'len:', participantSearch.trim().length);
         if (!participantSearch.trim() || participantSearch.trim().length < 1) {
             setSearchResults([]);
+            setSearchLoading(false);
             return;
         }
         const q = participantSearch.trim();
         const controller = new AbortController();
+        let cancelled = false;
+        const startedMs = typeof performance !== 'undefined' ? performance.now() : Date.now();
+        setSearchLoading(true);
         (async () => {
             try {
-                const url = `${API_BASE_HC}/users/search?q=${encodeURIComponent(q)}`;
-                console.log('[ParticipantSearch] fetching:', url, 'token:', user?.token ? 'present' : 'MISSING');
-                const res = await fetch(url, {
+                const res = await fetch(`${API_BASE_HC}/users/search?q=${encodeURIComponent(q)}`, {
                     headers: { Authorization: `Bearer ${user?.token}` },
                     signal: controller.signal,
                 });
-                console.log('[ParticipantSearch] status:', res.status);
-                if (res.ok) {
-                    const data = await res.json();
-                    console.log('[ParticipantSearch] results:', data);
-                    setSearchResults(data);
-                } else {
-                    console.error('[ParticipantSearch] error body:', await res.text());
-                }
+                const data = res.ok ? await res.json() : [];
+                const elapsed = (typeof performance !== 'undefined' ? performance.now() : Date.now()) - startedMs;
+                await new Promise<void>((resolve) => {
+                    setTimeout(resolve, Math.max(0, archiveLoadingMinVisibleMs() - elapsed));
+                });
+                if (!cancelled) setSearchResults(data);
             } catch (err: any) {
                 if (err?.name !== 'AbortError') console.error('[ParticipantSearch] fetch error:', err);
+            } finally {
+                if (!cancelled) setSearchLoading(false);
             }
         })();
-        return () => controller.abort();
+        return () => { cancelled = true; controller.abort(); };
     }, [participantSearch, user?.token]);
 
     // Reset highlight when results change
@@ -229,6 +232,7 @@ const HostControls = forwardRef<HostControlsRef, HostControlsProps>(function Hos
         setShowParticipants(o => !o);
         setParticipantSearch('');
         setSearchResults([]);
+        setSearchLoading(false);
         setHighlightIndex(-1);
     }, []);
 
@@ -488,7 +492,8 @@ const HostControls = forwardRef<HostControlsRef, HostControlsProps>(function Hos
                         flexDirection: 'column',
                     }}
                 >
-                    <div ref={listRef} className="archive-multi-select-list" style={{ overflowY: 'auto', height: 280 }}>
+                    <div style={{ position: 'relative' }}>
+                    <div ref={listRef} className="archive-multi-select-list" style={{ overflowY: 'auto' }}>
                         {!participantSearch.trim() ? (
                             /* Show current participants when search is empty */
                             participants.length === 0 ? (
@@ -586,6 +591,15 @@ const HostControls = forwardRef<HostControlsRef, HostControlsProps>(function Hos
                                 );
                             })
                         )}
+                    </div>
+                    {searchLoading && participantSearch.trim() && (
+                        <div className="archive-results-loading-overlay" aria-busy="true">
+                            <div className="archive-searching-loading" role="status">
+                                <span className="archive-searching-loading-spinner" aria-hidden />
+                                <span className="archive-searching-loading-text">Searching</span>
+                            </div>
+                        </div>
+                    )}
                     </div>
 
                     {/* Search input — bottom */}

@@ -2383,6 +2383,11 @@ gap: calc(var(--lk-size-xs) * var(--font-size-caption)/(1rem));
   }
 }
 
+.archive-multi-select-panel .archive-searching-loading {
+  font-size: 0.75rem;
+  gap: 0.4rem;
+}
+
 .meeting-card {
   position: relative;
   padding: calc(var(--lk-size-md) * var(--font-size-body)/(1rem));
