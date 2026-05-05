@@ -231,10 +231,18 @@ export default function TopBar({ userName, onNewMeeting, theme = 'dark', onToggl
             .catch(() => {});
     }, [user?.token]);
 
+    // Request browser notification permission once on mount.
+    useEffect(() => {
+        if ('Notification' in window && Notification.permission === 'default') {
+            Notification.requestPermission();
+        }
+    }, []);
+
     useEffect(() => {
         if (!socket) return;
         const handler = (notif: any) => {
             setNotifications(prev => [notif, ...prev]);
+            fireBrowserNotif(notif);
         };
         socket.on('notification', handler);
         return () => { socket.off('notification', handler); };
@@ -338,6 +346,37 @@ export default function TopBar({ userName, onNewMeeting, theme = 'dark', onToggl
             selectSearchResult(searchResults[searchSelectedIndex]);
         }
     }, [showSearchDropdown, searchLoading, searchResults, searchSelectedIndex, selectSearchResult]);
+
+    function fireBrowserNotif(notif: any) {
+        if (!('Notification' in window) || Notification.permission !== 'granted') return;
+        const TITLES: Record<string, string> = {
+            poll_invite: 'New poll invitation',
+            meeting_confirmed: 'Meeting confirmed',
+            meeting_invite: 'Meeting invitation',
+            meeting_summary_ready: 'Meeting summary ready',
+            task_assigned: 'Task assigned',
+            task_completion_submitted: 'Task submitted for review',
+            task_verified: 'Task verified',
+            task_rejected: 'Task needs revision',
+            task_feedback: 'Task feedback',
+            attendance_marked: 'Attendance marked',
+            brief_ready: 'Brief ready',
+            rubric_score: 'Rubric scored',
+            rsvp_update: 'RSVP update',
+        };
+        const title = TITLES[notif.type] || 'New notification';
+        const bn = new Notification(title, {
+            body: notif.message,
+            icon: `${typeof window !== 'undefined' ? window.location.origin : ''}/favicon.ico`,
+            tag: notif._id ? String(notif._id) : undefined,
+        });
+        const slug = resolveMeetingSlug(notif);
+        if (slug) {
+            const isArchive = notif.type === 'meeting_summary_ready';
+            const path = isArchive ? `/archives/${slug}` : `/meetings/${slug}`;
+            bn.onclick = () => { window.focus(); window.location.href = appHref(path); };
+        }
+    }
 
     return (
         <header className="topbar">
