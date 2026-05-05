@@ -4,20 +4,13 @@ import Icon from '../../../shared/components/Icon';
 import ShortcutTooltip from '../../../shared/components/ShortcutTooltip';
 import { useAuth } from '../../../stores/AuthContext';
 import {
-    Add01Icon, Delete02Icon, SparklesIcon,
-    MessageAdd01Icon,
+    Add01Icon, Delete02Icon,
+    MessageAdd01Icon, ArrowDown01Icon, ArrowUp01Icon,
 } from '@hugeicons/core-free-icons';
-import { TaskStatusSelect, TaskAssigneePicker, STATUS_LOOKUP } from '../../dashboard/components/ArchiveTaskTable';
+import { TaskStatusSelect, TaskAssigneePicker, TaskCategorySelect, STATUS_LOOKUP, CATEGORY_TEXT_COLOR } from '../../dashboard/components/ArchiveTaskTable';
 import type { ArchiveParticipant } from '../../dashboard/components/archiveHelpers';
 
 const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:5001/api';
-
-const categoryChips: Record<string, string> = {
-    'Technical': 'chip-blue',
-    'Administrative': 'chip-purple',
-    'Decision': 'chip-amber',
-    'Follow-up': 'chip-cyan',
-};
 
 const CATEGORIES = ['Technical', 'Administrative', 'Decision', 'Follow-up'];
 const HOST_STATUSES = ['draft', 'pending', 'in-progress', 'completed', 'verified', 'missing'];
@@ -97,6 +90,11 @@ function toArchiveParticipants(participants: any[]): ArchiveParticipant[] {
     }));
 }
 
+async function readErrorMessage(res: Response): Promise<string> {
+    try { const data = await res.json(); return data?.message || 'Request failed'; }
+    catch { return 'Request failed'; }
+}
+
 export default function Tasks({ items, sectionTitle = 'Tasks', emptyMessage = 'No tasks found.', meetingId, meetingHostId, fetchWithAuth, onRefresh, addTaskTrigger, onAddTriggered, participants, agendaItems = [] }: TasksProps) {
     const { user } = useAuth() || {};
     const currentUserId = String(user?.id || user?._id || '');
@@ -121,6 +119,18 @@ export default function Tasks({ items, sectionTitle = 'Tasks', emptyMessage = 'N
     const [newDeadlineDate, setNewDeadlineDate] = useState('');
     const [newAgendaItemId, setNewAgendaItemId] = useState('');
     const [newAssigneeIds, setNewAssigneeIds] = useState<string[]>([]);
+
+    // ── Collapse state per card ───────────────────────────────────────
+    const [collapsedCards, setCollapsedCards] = useState<Set<string>>(new Set());
+
+    const toggleCollapse = useCallback((id: string) => {
+        setCollapsedCards((prev) => {
+            const next = new Set(prev);
+            if (next.has(id)) next.delete(id);
+            else next.add(id);
+            return next;
+        });
+    }, []);
 
     const archiveParticipants = useMemo(() => toArchiveParticipants(participants || []), [participants]);
 
@@ -154,7 +164,8 @@ export default function Tasks({ items, sectionTitle = 'Tasks', emptyMessage = 'N
 
         const unlinkedItems = items.filter((item) => !item.agendaItemId || !agendaLookup.has(String(item.agendaItemId)));
         if (unlinkedItems.length > 0) {
-            groups.push({ key: '_unlinked', title: 'General / Unlinked', items: unlinkedItems });
+            // No title for unlinked items — render without a section heading
+            groups.push({ key: '_unlinked', title: null, items: unlinkedItems });
         }
         return groups.length > 0 ? groups : [{ key: '_all', title: null, items }];
     }, [agendaItems, agendaLookup, items]);
@@ -176,11 +187,6 @@ export default function Tasks({ items, sectionTitle = 'Tasks', emptyMessage = 'N
     const closeFeedbackModal = useCallback((value: string | null) => {
         setFeedbackModal(prev => { prev?.resolve(value); return null; });
     }, []);
-
-    const readErrorMessage = async (res: Response) => {
-        try { const data = await res.json(); return data?.message || 'Request failed'; }
-        catch { return 'Request failed'; }
-    };
 
     const getHostFeedback = async (item: Task, nextStatus: string): Promise<string | null | undefined> => {
         if (!isHostForItem(item)) return undefined;
@@ -241,6 +247,34 @@ export default function Tasks({ items, sectionTitle = 'Tasks', emptyMessage = 'N
         } catch (err) { console.error('Failed to update assignees:', err); }
     };
 
+    const handleCategoryChange = async (item: Task, newCat: string) => {
+        const itemId = item.id || item._id;
+        if (!itemId) return;
+        try {
+            const res = await (fetchWithAuth || fetch)(`${API_BASE}/tasks/${itemId}`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ category: newCat }),
+            });
+            if (!res.ok) { window.alert(await readErrorMessage(res)); return; }
+            onRefresh?.();
+        } catch (err) { console.error('Failed to update category:', err); }
+    };
+
+    const handleDeadlineChange = async (item: Task, newDeadline: string) => {
+        const itemId = item.id || item._id;
+        if (!itemId) return;
+        try {
+            const res = await (fetchWithAuth || fetch)(`${API_BASE}/tasks/${itemId}`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ deadline: newDeadline || null }),
+            });
+            if (!res.ok) { window.alert(await readErrorMessage(res)); return; }
+            onRefresh?.();
+        } catch (err) { console.error('Failed to update deadline:', err); }
+    };
+
     const handleDelete = async (itemId: string) => {
         try {
             await (fetchWithAuth || fetch)(`${API_BASE}/tasks/${itemId}`, { method: 'DELETE' });
@@ -292,7 +326,6 @@ export default function Tasks({ items, sectionTitle = 'Tasks', emptyMessage = 'N
                 agendaItemId: newAgendaItemId || null,
                 assignees: newAssigneeIds,
             };
-            // Legacy single-assignee fields for backward compat
             if (newAssigneeIds.length > 0) {
                 const p = (participants || []).find((pp: any) => String(pp._id || pp.id) === newAssigneeIds[0]);
                 if (p) { body.assignee = p._id || p.id; body.assigneeName = p.name; }
@@ -342,8 +375,9 @@ export default function Tasks({ items, sectionTitle = 'Tasks', emptyMessage = 'N
                                 const isHost = isHostForItem(item);
                                 const canStatus = canEditStatus(item);
                                 const allowedStatuses = isHost ? HOST_STATUSES : ASSIGNEE_STATUSES;
+                                const isCollapsed = collapsedCards.has(itemId);
+                                const isAI = item.source === 'ai-extracted';
 
-                                // Build current assignee ids from canonical assignees array
                                 const currentAssigneeIds = (item.assignees && item.assignees.length > 0)
                                     ? item.assignees.map((a) => String(a.id))
                                     : item.assigneeId ? [item.assigneeId] : [];
@@ -356,85 +390,136 @@ export default function Tasks({ items, sectionTitle = 'Tasks', emptyMessage = 'N
                                     <div
                                         key={itemId || index}
                                         className="task-card glass-card animate-in"
-                                        style={{ animationDelay: `${index * 0.06}s` }}
+                                        style={{
+                                            animationDelay: `${index * 0.06}s`,
+                                            position: 'relative',
+                                        }}
                                     >
-                                        {/* ── Card header: title + actions ── */}
-                                        <div className="live-task-card-header">
-                                            <span className="live-task-card-title">
+                                        {/* ── AI eyebrow (only when expanded) ── */}
+                                        {isAI && !isCollapsed && (
+                                            <div style={{
+                                                fontSize: '0.625rem',
+                                                fontWeight: 600,
+                                                letterSpacing: '0.06em',
+                                                textTransform: 'uppercase',
+                                                color: 'var(--flair-purple-color)',
+                                                marginBottom: '0.35rem',
+                                            }}>
+                                                AI Generated
+                                            </div>
+                                        )}
+
+                                        {/* ── Card header: title + collapse + actions ── */}
+                                        <div className="live-task-card-header" style={{ marginBottom: isCollapsed ? 0 : undefined }}>
+                                            <span
+                                                className="live-task-card-title"
+                                                style={isCollapsed ? {
+                                                    overflow: 'hidden',
+                                                    textOverflow: 'ellipsis',
+                                                    whiteSpace: 'nowrap',
+                                                    flex: 1,
+                                                    minWidth: 0,
+                                                } : { flex: 1, minWidth: 0 }}
+                                            >
                                                 {item.title}
-                                                {item.source === 'ai-extracted' && (
-                                                    <span className="chip chip-purple" style={{ fontSize: '0.5625rem', padding: '1px 5px', marginLeft: '0.4rem' }}>
-                                                        <Icon icon={SparklesIcon} size={8} /> AI
-                                                    </span>
-                                                )}
                                             </span>
                                             <div className="live-task-card-actions">
-                                                {isHost && item.assigneeId && (
+                                                {isHost && item.assigneeId && !isCollapsed && (
                                                     <button className="btn-icon btn-icon-sm" onClick={() => handleSendFeedback(item)} title="Send note to assignee">
                                                         <Icon icon={MessageAdd01Icon} size={14} />
                                                     </button>
                                                 )}
-                                                {meetingId && isHost && (
+                                                {meetingId && isHost && !isCollapsed && (
                                                     <button className="btn-icon btn-icon-sm" onClick={() => handleDelete(itemId)} title="Delete task">
                                                         <Icon icon={Delete02Icon} size={14} />
                                                     </button>
                                                 )}
+                                                <button
+                                                    className="btn-icon btn-icon-sm"
+                                                    onClick={() => toggleCollapse(itemId)}
+                                                    title={isCollapsed ? 'Expand' : 'Collapse'}
+                                                >
+                                                    <Icon icon={isCollapsed ? ArrowDown01Icon : ArrowUp01Icon} size={14} />
+                                                </button>
                                             </div>
                                         </div>
 
-                                        {/* ── Assigned to ── */}
-                                        <div className="live-task-card-field">
-                                            <span className="live-task-card-label">Assigned to</span>
-                                            {isHost && archiveParticipants.length > 0 ? (
-                                                <TaskAssigneePicker
-                                                    participants={archiveParticipants}
-                                                    value={currentAssigneeIds}
-                                                    selectedAssignees={(item.assignees || []).map(a => ({ id: a.id, name: a.name ?? null, email: a.email ?? null, profileImage: a.profileImage ?? null }))}
-                                                    onChange={(ids) => handleAssigneeChange(item, ids)}
-                                                />
-                                            ) : (
-                                                <span className="live-task-card-value">{assigneeDisplayName}</span>
-                                            )}
-                                        </div>
+                                        {/* ── Expanded card body ── */}
+                                        {!isCollapsed && (
+                                            <>
+                                                {/* Assigned to */}
+                                                <div className="live-task-card-field">
+                                                    <span className="live-task-card-label">Assigned to</span>
+                                                    {isHost && archiveParticipants.length > 0 ? (
+                                                        <TaskAssigneePicker
+                                                            participants={archiveParticipants}
+                                                            value={currentAssigneeIds}
+                                                            selectedAssignees={(item.assignees || []).map(a => ({ id: a.id, name: a.name ?? null, email: a.email ?? null, profileImage: a.profileImage ?? null }))}
+                                                            onChange={(ids) => handleAssigneeChange(item, ids)}
+                                                        />
+                                                    ) : (
+                                                        <span className="live-task-card-value">{assigneeDisplayName}</span>
+                                                    )}
+                                                </div>
 
-                                        {/* ── Type and Deadline ── */}
-                                        <div className="live-task-card-row">
-                                            <div className="live-task-card-field">
-                                                <span className="live-task-card-label">Type</span>
-                                                <span className={`chip ${categoryChips[item.category] || 'chip-blue'}`} style={{ fontSize: '0.6875rem' }}>
-                                                    {item.category || 'Technical'}
-                                                </span>
-                                            </div>
-                                            <div className="live-task-card-field">
-                                                <span className="live-task-card-label">Deadline</span>
-                                                <span className="live-task-card-value">
-                                                    {item.deadline ? formatDateOnlyDisplay(item.deadline) : '—'}
-                                                </span>
-                                            </div>
+                                                {/* Type and Deadline */}
+                                                <div className="live-task-card-row">
+                                                    <div className="live-task-card-field">
+                                                        <span className="live-task-card-label">Type</span>
+                                                        {isHost ? (
+                                                            <TaskCategorySelect
+                                                                value={item.category || 'Technical'}
+                                                                onChange={(cat) => handleCategoryChange(item, cat)}
+                                                            />
+                                                        ) : (
+                                                            <span style={{ fontSize: '0.8125rem', color: CATEGORY_TEXT_COLOR[item.category] || 'var(--text-secondary)' }}>
+                                                                {item.category || '—'}
+                                                            </span>
+                                                        )}
+                                                    </div>
+                                                    <div className="live-task-card-field">
+                                                        <span className="live-task-card-label">Deadline</span>
+                                                        {isHost ? (
+                                                            <input
+                                                                type="date"
+                                                                className="input-field tasks-date-input"
+                                                                defaultValue={formatDateOnlyDisplay(item.deadline)}
+                                                                key={`dl-${itemId}-${item.deadline}`}
+                                                                onBlur={(e) => handleDeadlineChange(item, e.target.value)}
+                                                                style={{ fontSize: '0.8125rem' }}
+                                                            />
+                                                        ) : (
+                                                            <span className="live-task-card-value">
+                                                                {item.deadline ? formatDateOnlyDisplay(item.deadline) : '—'}
+                                                            </span>
+                                                        )}
+                                                    </div>
+													<div className="live-task-card-field">
+                                                    <span className="live-task-card-label">Status</span>
+                                                    {canStatus ? (
+                                                        <TaskStatusSelect
+                                                            value={item.status}
+                                                            onChange={(next) => handleStatusChange(item, next)}
+                                                            allowedStatuses={allowedStatuses}
+                                                        />
+                                                    ) : (
+                                                        <span className={STATUS_LOOKUP[item.status]?.statusLabelClass || ''}>
+                                                            {STATUS_LOOKUP[item.status]?.label || item.status}
+                                                        </span>
+                                                    )}
+                                                </div>
+                                                </div>
 
-                                        <div className="live-task-card-field">
-                                            <span className="live-task-card-label">Status</span>
-                                            {canStatus ? (
-                                                <TaskStatusSelect
-                                                    value={item.status}
-                                                    onChange={(next) => handleStatusChange(item, next)}
-                                                    allowedStatuses={allowedStatuses}
-                                                />
-                                            ) : (
-                                                <span className={STATUS_LOOKUP[item.status]?.statusLabelClass || ''}>
-                                                    {STATUS_LOOKUP[item.status]?.label || item.status}
-                                                </span>
-                                            )}
-                                        </div>
-                                        </div>
 
 
 
-                                        {/* ── Host feedback ── */}
-                                        {item.hostFeedback && (
-                                            <div className="ai-card-feedback">
-                                                <strong>Host feedback:</strong> {item.hostFeedback}
-                                            </div>
+                                                {/* Host feedback */}
+                                                {item.hostFeedback && (
+                                                    <div className="ai-card-feedback">
+                                                        <strong>Host feedback:</strong> {item.hostFeedback}
+                                                    </div>
+                                                )}
+                                            </>
                                         )}
                                     </div>
                                 );

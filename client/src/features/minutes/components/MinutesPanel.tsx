@@ -5,6 +5,7 @@ import {
   CheckmarkSquare01Icon,
   Cancel01Icon,
   Notebook01Icon,
+  PlusSignIcon,
 } from '@hugeicons/core-free-icons';
 
 export interface MinutesItem {
@@ -64,9 +65,9 @@ const MinutesPanel: FC<MinutesPanelProps> = ({ minutesItems = [], onAddItem, onI
       {isAdding && (
         <div className="item-add-form" style={{
           padding: '1rem',
-          background: 'var(--bg-elevated)',
+          background: 'var(--bg-card)',
           borderRadius: 'var(--radius-md)',
-          marginTop: '1rem',
+          margin: 'var(--lk-size-sm)',
           border: '1px solid var(--border)'
         }}>
           <div style={{ marginBottom: '1rem' }}>
@@ -87,21 +88,21 @@ const MinutesPanel: FC<MinutesPanelProps> = ({ minutesItems = [], onAddItem, onI
               }}
             />
           </div>
-          <div style={{ display: 'flex', gap: '0.5rem' }}>
-            <button type="button" className="btn btn-primary" onClick={handleAdd} style={{ flex: 1, padding: '0.5rem', fontSize: '0.875rem' }}>
-              <Icon icon={CheckmarkSquare01Icon} size={14} />
+          <div style={{ display: 'flex', gap: '0.5rem', justifyContent: 'flex-end' }}>
+            <button type="button" className="btn btn-primary" onClick={handleAdd} style={{ padding: 'var(--lk-size-sm)', paddingTop: 'var(--lk-size-xs)', paddingBottom: 'var(--lk-size-xs)', fontSize: '0.875rem' }}>
+              <Icon icon={PlusSignIcon} size={14} />
               <span style={{ marginLeft: '0.25rem' }}>Add Item</span>
             </button>
-            <button type="button" className="btn btn-secondary" onClick={() => setIsAdding(false)} style={{ padding: '0.5rem', fontSize: '0.875rem' }}>
+            <button type="button" className="btn btn-secondary" onClick={() => setIsAdding(false)} style={{ padding: 'var(--lk-size-sm)', paddingTop: 'var(--lk-size-xs)', paddingBottom: 'var(--lk-size-xs)', fontSize: '0.875rem' }}>
               Cancel
             </button>
           </div>
         </div>
       )}
 
-      <div className="agenda-list" style={{ marginTop: '1rem' }}>
+      <div className="agenda-list" style={{ margin: 'var(--lk-size-sm)' }}>
         {items.length === 0 && !isAdding ? (
-          <div style={{ textAlign: 'center', color: 'var(--text-secondary)', fontSize: '0.875rem', padding: '2rem 0' }}>
+          <div style={{ textAlign: 'center', color: 'var(--text-secondary)', fontSize: '0.875rem' }}>
             No minute items yet. Add items as the meeting progresses.
           </div>
         ) : (
@@ -122,9 +123,6 @@ const MinutesPanel: FC<MinutesPanelProps> = ({ minutesItems = [], onAddItem, onI
                 <Icon icon={Notebook01Icon} size={16} />
                 <div style={{ flex: 1 }}>
                   <div style={{ fontSize: '0.875rem', fontWeight: 500, color: 'var(--text-primary)' }}>{item.title}</div>
-                </div>
-                <div className="chip chip-amber" style={{ fontSize: '0.625rem' }}>
-                  unassigned
                 </div>
               </div>
             );

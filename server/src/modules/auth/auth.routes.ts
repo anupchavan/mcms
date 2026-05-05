@@ -87,7 +87,7 @@ export = function ({ User, protect, generateToken, usingMongo, inMemoryUsers }: 
     router.get('/search', protect, async (req: any, res: any) => {
         try {
             const q = (req.query.q || '').trim();
-            if (!q || q.length < 2) return res.json([]);
+            if (!q || q.length < 1) return res.json([]);
 
             if (usingMongo() && User) {
                 const regex = new RegExp(q, 'i');

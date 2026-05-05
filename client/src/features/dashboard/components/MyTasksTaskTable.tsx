@@ -8,7 +8,7 @@ import {
 import { Link } from "react-router-dom";
 import { useAuth } from "../../../stores/AuthContext";
 import { TaskFeedbackModal, type TaskFeedbackModalState } from "../../minutes/components/TaskFeedbackModal";
-import { TaskStatusSelect, TaskAssigneePicker } from "./ArchiveTaskTable";
+import { TaskStatusSelect, TaskAssigneePicker, TaskCategorySelect, CATEGORY_TEXT_COLOR } from "./ArchiveTaskTable";
 import { UserAvatar } from "../../../shared/components/UserAvatar";
 import Icon from "../../../shared/components/Icon";
 import { Archive01Icon, Delete01Icon } from "@hugeicons/core-free-icons";
@@ -21,12 +21,6 @@ const ASSIGNEE_STATUSES = ["pending", "in-progress", "completed"];
 
 const MONTH_ABBR = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 
-const CATEGORY_CHIP: Record<string, string> = {
-    Technical: "chip-blue",
-    Administrative: "chip-purple",
-    Decision: "chip-amber",
-    "Follow-up": "chip-cyan",
-};
 
 function formatDeadline(v: string): string {
     const d = new Date(v);
@@ -319,6 +313,12 @@ function MyTasksTaskRow({
 
     const editableStatuses = isHost ? HOST_STATUSES : ASSIGNEE_STATUSES;
 
+    const [deadlineDraft, setDeadlineDraft] = useState(task.deadline ? task.deadline.slice(0, 10) : "");
+    useEffect(() => { setDeadlineDraft(task.deadline ? task.deadline.slice(0, 10) : ""); }, [task.deadline]);
+    const commitDeadline = useCallback(async (val: string) => {
+        await persistPatch({ deadline: val || null });
+    }, [persistPatch]);
+
     // Only use task.assignees (the canonical multi-assignee list).
     // We intentionally ignore the legacy task.assigneeId / task.assignee fields here
     // to avoid showing stale or host-referencing data as if the task were assigned.
@@ -429,16 +429,32 @@ function MyTasksTaskRow({
                 )}
             </div>
             <div className="my-tasks-task-table-cell my-tasks-task-table-cell--type" role="cell">
-                {task.category ? (
-                    <span className={`chip ${CATEGORY_CHIP[task.category] || "chip-blue"}`} style={{ fontSize: "0.6875rem" }}>
+                {isHost ? (
+                    <TaskCategorySelect
+                        value={task.category || "Technical"}
+                        onChange={(cat) => persistPatch({ category: cat })}
+                    />
+                ) : task.category ? (
+                    <span style={{ fontSize: "0.8125rem", color: CATEGORY_TEXT_COLOR[task.category] || "var(--text-secondary)" }}>
                         {task.category}
                     </span>
                 ) : <span style={{ color: "var(--text-muted)" }}>—</span>}
             </div>
             <div className="my-tasks-task-table-cell my-tasks-task-table-cell--deadline" role="cell">
-                <span style={{ fontSize: "0.8125rem", color: task.deadline ? "var(--text-primary)" : "var(--text-muted)" }}>
-                    {task.deadline ? formatDeadline(task.deadline) : "—"}
-                </span>
+                {isHost ? (
+                    <input
+                        type="date"
+                        className="input-field tasks-date-input"
+                        value={deadlineDraft}
+                        onChange={(e) => setDeadlineDraft(e.target.value)}
+                        onBlur={(e) => commitDeadline(e.target.value)}
+                        style={{ fontSize: "0.8125rem", minWidth: 0, width: "100%" }}
+                    />
+                ) : (
+                    <span style={{ fontSize: "0.8125rem", color: task.deadline ? "var(--text-primary)" : "var(--text-muted)" }}>
+                        {task.deadline ? formatDeadline(task.deadline) : "—"}
+                    </span>
+                )}
             </div>
             <div className="my-tasks-task-table-cell my-tasks-task-table-cell--status" role="cell">
                 <TaskStatusSelect

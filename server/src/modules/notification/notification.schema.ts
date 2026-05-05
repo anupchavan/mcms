@@ -4,7 +4,7 @@ const notificationSchema = new mongoose.Schema({
     userId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
     type: { type: String, required: true, enum: [
         'poll_invite', 'meeting_confirmed', 'rsvp_update',
-        'attendance_marked', 'brief_ready',
+        'meeting_invite', 'attendance_marked', 'brief_ready',
         'meeting_summary_ready', 'rubric_score',
         // Canonical task notification types.
         'task_assigned', 'task_completion_submitted', 'task_verified',

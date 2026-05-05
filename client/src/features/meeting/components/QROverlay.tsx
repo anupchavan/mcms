@@ -80,7 +80,7 @@ export default function QROverlay({ onClose, meetingTitle, meetingId }: QROverla
 
     return (
         <div className="qr-overlay" onClick={onClose} style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', position: 'fixed', inset: 0, background: 'rgba(var(--flexoki-black-rgb), 0.6)', zIndex: 10000 }}>
-            <div onClick={(e) => e.stopPropagation()} style={{ position: 'relative', display: 'flex', gap: '32px', background: 'var(--bg-primary)', padding: '32px', borderRadius: '16px', maxWidth: '800px', width: '90%', border: '1px solid var(--border)', boxShadow: '0 20px 25px -5px rgba(var(--flexoki-black-rgb), 0.1), 0 10px 10px -5px rgba(var(--flexoki-black-rgb), 0.04)' }}>
+            <div onClick={(e) => e.stopPropagation()} style={{ position: 'relative', display: 'flex', gap: '32px', background: 'var(--bg-primary)', padding: 'var(--lk-size-lg)', paddingTop: 'var(--lk-size-lg)', borderRadius: '16px', maxWidth: '800px', width: '90%', border: '1px solid var(--border)', boxShadow: '0 20px 25px -5px rgba(var(--flexoki-black-rgb), 0.1), 0 10px 10px -5px rgba(var(--flexoki-black-rgb), 0.04)' }}>
                 {/* Left Side: QR */}
                 <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '16px', flex: 1 }}>
                     <div className="qr-box" style={{ background: 'var(--flexoki-paper)', padding: '16px', borderRadius: '12px', boxShadow: '0 4px 6px -1px rgba(var(--flexoki-black-rgb), 0.1)' }}>
@@ -115,13 +115,19 @@ export default function QROverlay({ onClose, meetingTitle, meetingId }: QROverla
 
                 {/* Right Side: Report */}
                 <div style={{ flex: 1, borderLeft: '1px solid var(--border)', paddingLeft: '32px', display: 'flex', flexDirection: 'column' }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
-                        <h3 style={{ fontSize: '16px', fontWeight: 600, color: 'var(--text-primary)' }}>Live Attendance</h3>
-                        <div className="chip chip-emerald">{report?.presentCount || 0} / {report?.total || 0} Present</div>
+					<div style={{ display: 'flex', alignItems: 'center', gap: '6px', justifyContent: 'space-between', marginBottom: 'var(--lk-size-md)' }}>
+						<h3 style={{ fontSize: '16px', fontWeight: 600, color: 'var(--text-primary)' }}>Live Attendance</h3>
+						<div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+							<div className="chip chip-emerald">{report?.presentCount || 0} / {report?.total || 0} Present</div>
+							<button onClick={onClose} className="btn btn-secondary" style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '6px 8px', fontSize: '12px', background: 'var(--bg-card)' }}><Icon icon={Cancel01Icon} size={14} /></button>
+						</div>
                     </div>
+
+
+
                     <div style={{ flex: 1, overflowY: 'auto', maxHeight: '300px', display: 'flex', flexDirection: 'column', gap: '8px', paddingRight: '8px' }}>
                         {report?.attended?.length > 0 ? report.attended.map((a: any, i: number) => (
-                            <div key={i} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 14px', background: 'var(--bg-elevated)', borderRadius: '8px', fontSize: '13px', border: '1px solid var(--border)' }}>
+                            <div key={i} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: 'var(--font-size-label)', marginBottom: 'var(--lk-size-sm)' }}>
                                 <span style={{ color: 'var(--text-primary)', fontWeight: 500 }}>{a.user?.name || a.user?.email || 'Unknown User'}</span>
                                 <span style={{ color: 'var(--text-muted)' }}>{new Date(a.joinTimestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
                             </div>
@@ -131,13 +137,7 @@ export default function QROverlay({ onClose, meetingTitle, meetingId }: QROverla
                     </div>
                 </div>
 
-                <button
-                    onClick={onClose}
-                    className="btn btn-secondary"
-                    style={{ position: 'absolute', top: '16px', right: '16px', display: 'flex', alignItems: 'center', gap: '6px', padding: '6px 12px', fontSize: '12px' }}
-                >
-                    <Icon icon={Cancel01Icon} size={14} /> Close
-                </button>
+
             </div>
         </div>
     );

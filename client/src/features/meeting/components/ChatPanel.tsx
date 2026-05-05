@@ -42,7 +42,7 @@ const LinkifyContent = ({ text, isSelf }: { text: string; isSelf?: boolean }) =>
       {parts.map((part, i) => {
         if (part.match(urlRegex)) {
           return (
-            <a key={i} href={part} target="_blank" rel="noopener noreferrer" style={{ color: linkColor, textDecoration: 'underline' }}>
+            <a key={i} href={part} target="_blank" rel="noopener noreferrer" style={{ color: linkColor, textDecoration: 'underline', overflowWrap: 'anywhere' }}>
               {part}
             </a>
           );
@@ -250,7 +250,6 @@ const HostInlinePin: FC<{
   show: boolean;
   onClick: () => void;
 }> = ({ isPinned, show, onClick }) => {
-  if (!show) return null;
   return (
     <button
       type="button"
@@ -273,6 +272,9 @@ const HostInlinePin: FC<{
         justifyContent: 'center',
         lineHeight: 0,
         transform: isPinned ? 'rotate(-45deg)' : undefined,
+        // Always reserve space — visibility toggled so bubble width never shifts
+        visibility: show ? 'visible' : 'hidden',
+        pointerEvents: show ? 'auto' : 'none',
       }}
     >
       <Icon icon={PinIcon} size={13} style={{ color: 'inherit' }} />

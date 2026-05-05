@@ -391,7 +391,7 @@ export default function LiveMeetingPage({ isPersonalRoom = false }: LiveMeetingP
         { key: "g", handler: () => selectDockPanel("agenda") },
         { key: "h", handler: () => selectDockPanel("chat") },
         { key: "t", handler: () => selectDockPanel("transcript") },
-        { key: "n", handler: () => selectDockPanel("minutes") },
+        { key: "m", handler: () => selectDockPanel("minutes") },
     ], [selectDockPanel]);
     useKeyboardShortcuts(dockShortcuts);
 

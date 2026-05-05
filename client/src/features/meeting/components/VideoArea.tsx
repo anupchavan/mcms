@@ -576,6 +576,14 @@ export default function VideoArea({
     const peerUserIds = new Set(peers.map((p) => p.userId).filter(Boolean));
     return 1 + peerUserIds.size;
   }, [peers]);
+
+  const connectedUserIds = useMemo(() => {
+    const ids = new Set<string>();
+    const selfId = (currentUser as any)?.id || (currentUser as any)?._id;
+    if (selfId) ids.add(String(selfId));
+    peers.forEach(p => { if (p.userId) ids.add(String(p.userId)); });
+    return ids;
+  }, [currentUser, peers]);
   const [pinnedTileIds, setPinnedTileIds] = useState<Set<string>>(new Set());
 
   const togglePin = useCallback((tileId: string) => {
@@ -1069,6 +1077,8 @@ export default function VideoArea({
         isHost={isHost}
         chatOpen={chatOpen}
         onToggleChat={onToggleChat}
+        participants={participants}
+        connectedUserIds={connectedUserIds}
       />
 
       <style>{`

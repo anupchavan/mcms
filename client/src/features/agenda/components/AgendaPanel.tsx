@@ -3,8 +3,8 @@ import Icon from '../../../shared/components/Icon';
 import {
   Add01Icon,
   Clock01Icon,
-  CheckmarkSquare01Icon,
   Cancel01Icon,
+  PlusSignIcon,
 } from '@hugeicons/core-free-icons';
 
 interface AgendaItem {
@@ -61,9 +61,9 @@ const AgendaPanel: FC<AgendaPanelProps> = ({ agendaItems = [], isHost = false, o
       {isAdding && (
         <div className="item-add-form" style={{
           padding: '1rem',
-          background: 'var(--bg-elevated)',
+          background: 'var(--bg-card)',
           borderRadius: 'var(--radius-md)',
-          marginTop: '1rem',
+          margin: 'var(--lk-size-sm)',
           border: '1px solid var(--border)'
         }}>
           <div style={{ marginBottom: '0.75rem' }}>
@@ -102,9 +102,9 @@ const AgendaPanel: FC<AgendaPanelProps> = ({ agendaItems = [], isHost = false, o
               }}
             />
           </div>
-          <div style={{ display: 'flex', gap: '0.5rem' }}>
-            <button className="btn btn-primary" onClick={handleAdd} style={{ flex: 1, padding: '0.5rem', fontSize: '0.875rem' }}>
-              <Icon icon={CheckmarkSquare01Icon} size={14} />
+          <div style={{ display: 'flex', gap: '0.5rem', justifyContent: 'flex-end' }}>
+            <button className="btn btn-primary" onClick={handleAdd} style={{ padding: 'var(--lk-size-sm)', paddingTop: 'var(--lk-size-xs)', paddingBottom: 'var(--lk-size-xs)', fontSize: '0.875rem' }}>
+              <Icon icon={PlusSignIcon} size={14} />
               <span style={{ marginLeft: '0.25rem' }}>Add Item</span>
             </button>
             <button className="btn btn-secondary" onClick={() => setIsAdding(false)} style={{ padding: '0.5rem', fontSize: '0.875rem' }}>
@@ -114,9 +114,9 @@ const AgendaPanel: FC<AgendaPanelProps> = ({ agendaItems = [], isHost = false, o
         </div>
       )}
 
-      <div className="agenda-list" style={{ marginTop: '1rem' }}>
+      <div className="agenda-list" style={{ margin: 'var(--lk-size-sm)' }}>
         {items.length === 0 && !isAdding ? (
-          <div style={{ textAlign: 'center', color: 'var(--text-secondary)', fontSize: '0.875rem', padding: '2rem 0' }}>
+          <div style={{ textAlign: 'center', color: 'var(--text-secondary)', fontSize: '0.875rem' }}>
             No agenda items for this meeting.
           </div>
         ) : (

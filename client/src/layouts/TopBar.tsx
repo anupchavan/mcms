@@ -295,14 +295,17 @@ export default function TopBar({ userName, onNewMeeting, theme = 'dark', onToggl
     const getNotifIcon = (type: string) => {
         switch (type) {
             case 'poll_invite': return BarChartIcon;
-            case 'meeting_confirmed': return Calendar02Icon;
+            case 'meeting_confirmed':
+            case 'meeting_invite': return Calendar02Icon;
             case 'meeting_summary_ready': return Archive03Icon;
             default: return Notification01Icon;
         }
     };
 
     const notificationRowIconModifier = (type: string) =>
-        type === 'poll_invite' ? 'poll' : type === 'meeting_confirmed' ? 'confirmed' : type === 'meeting_summary_ready' ? 'archive' : '';
+        type === 'poll_invite' ? 'poll'
+        : (type === 'meeting_confirmed' || type === 'meeting_invite') ? 'confirmed'
+        : type === 'meeting_summary_ready' ? 'archive' : '';
 
     const selectSearchResult = useCallback((m: any) => {
         const linkSlug = publicMeetingSlug(m);
@@ -502,6 +505,37 @@ export default function TopBar({ userName, onNewMeeting, theme = 'dark', onToggl
                                             </>
                                         );
 
+                                        const inviteActions = n.type === 'meeting_invite' && slug && (
+                                            <>
+                                                <button
+                                                    type="button"
+                                                    className="notification-item-action"
+                                                    onClick={async () => {
+                                                        try {
+                                                            await navigator.clipboard.writeText(appHref(`/meetings/${slug}`));
+                                                            setNotifToast('Meeting link copied');
+                                                            markNotificationRead(n);
+                                                        } catch { /* ignore */ }
+                                                    }}
+                                                >
+                                                    <Icon icon={Copy01Icon} size={12} />
+                                                    Copy link
+                                                </button>
+                                                <button
+                                                    type="button"
+                                                    className="notification-item-action notification-item-action-primary"
+                                                    onClick={() => {
+                                                        markNotificationRead(n);
+                                                        navigate(`/meetings/${slug}`);
+                                                        setShowNotif(false);
+                                                    }}
+                                                >
+                                                    <Icon icon={Video01Icon} size={12} />
+                                                    Join
+                                                </button>
+                                            </>
+                                        );
+
                                         const archiveActions = n.type === 'meeting_summary_ready' && slug && (
                                             <button
                                                 type="button"
@@ -517,7 +551,7 @@ export default function TopBar({ userName, onNewMeeting, theme = 'dark', onToggl
                                             </button>
                                         );
 
-                                        const actionRow = pollActions || confirmedActions || archiveActions;
+                                        const actionRow = pollActions || confirmedActions || inviteActions || archiveActions;
 
                                         return (
                                             <div
