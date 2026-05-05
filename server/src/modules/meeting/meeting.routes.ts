@@ -59,7 +59,7 @@ export = function ({ User, Meeting, Poll, Notification, Agenda, protect, usingMo
                         { hostId: userId },
                         { participants: userId },
                     ],
-                }).sort({ createdAt: -1 }).populate('participants', 'name email');
+                }).sort({ createdAt: -1 }).populate('participants', 'name email profileImage');
                 const expiredMeetings = dbMeetings.filter((meeting: any) => shouldAutoCompleteMeeting(meeting));
                 if (expiredMeetings.length > 0) {
                     await Promise.all(expiredMeetings.map(async (meeting: any) => {
@@ -111,7 +111,7 @@ export = function ({ User, Meeting, Poll, Notification, Agenda, protect, usingMo
             const userId = req.user.id;
 
             if (usingMongo() && Meeting) {
-                let meeting = await meetingQueryByAnyId(Meeting, id)?.populate('participants', 'name email');
+                let meeting = await meetingQueryByAnyId(Meeting, id)?.populate('participants', 'name email profileImage');
                 if (!meeting) return res.status(404).json({ message: 'Meeting not found' });
 
                 const isHost = String(meeting.hostId) === String(userId);
@@ -120,7 +120,7 @@ export = function ({ User, Meeting, Poll, Notification, Agenda, protect, usingMo
                 if (!isHost && !isParticipant) {
                     meeting.participants.push(userId);
                     await meeting.save();
-                    meeting = await Meeting.findById(meeting._id).populate('participants', 'name email');
+                    meeting = await Meeting.findById(meeting._id).populate('participants', 'name email profileImage');
                 }
 
                 const base = (CLIENT_URL || 'http://localhost:5173').replace(/\/$/, '');
@@ -261,7 +261,7 @@ export = function ({ User, Meeting, Poll, Notification, Agenda, protect, usingMo
                     }
                 }
 
-                const populated = await Meeting.findById(newMeeting._id).populate('participants', 'name email');
+                const populated = await Meeting.findById(newMeeting._id).populate('participants', 'name email profileImage');
 
                 return res.status(201).json({
                     _id: populated._id,
