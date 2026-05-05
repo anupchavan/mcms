@@ -85,11 +85,11 @@ export default function LiveMeetingPage({ isPersonalRoom = false }: LiveMeetingP
     const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
     const [pinnedChatMessage, setPinnedChatMessage] = useState<ChatMessage | null>(null);
     const [transcripts, setTranscripts] = useState<any[]>([]);
-    const [actionItems, setActionItems] = useState<any[]>([]);
+    const [tasks, setTasks] = useState<any[]>([]);
     const [liveParticipants, setLiveParticipants] = useState<any[]>([]);
     const [dockOpen, setDockOpen] = useState(true);
     const [dockActivePanelId, setDockActivePanelId] = useState<DockPanelId>("agenda");
-    const [addActionItemTrigger, setAddActionItemTrigger] = useState(0);
+    const [addTaskTrigger, setAddTaskTrigger] = useState(0);
     const [nowTs, setNowTs] = useState(() => Date.now());
     const meetingLayoutRef = useRef<HTMLDivElement | null>(null);
     const chatFetchMeetingRef = useRef<string | null>(null);
@@ -168,9 +168,9 @@ export default function LiveMeetingPage({ isPersonalRoom = false }: LiveMeetingP
         catch (err) { console.error("Failed to fetch transcript:", err); }
     }, [fetchWithAuth]);
 
-    const fetchActionItems = useCallback(async (id: string) => {
-        try { const res = await fetchWithAuth(`${API_BASE}/action-items/${id}`); if (res.ok) setActionItems(await res.json()); }
-        catch (err) { console.error("Failed to fetch action items:", err); }
+    const fetchTasks = useCallback(async (id: string) => {
+        try { const res = await fetchWithAuth(`${API_BASE}/tasks/${id}`); if (res.ok) setTasks(await res.json()); }
+        catch (err) { console.error("Failed to fetch tasks:", err); }
     }, [fetchWithAuth]);
 
     const fetchChat = useCallback(async (id: string) => {
@@ -235,8 +235,8 @@ export default function LiveMeetingPage({ isPersonalRoom = false }: LiveMeetingP
         setPinnedChatMessage(null);
         fetchAgenda(internalMeetingId);
         fetchTranscript(internalMeetingId);
-        fetchActionItems(internalMeetingId);
-    }, [selectedMeeting, fetchAgenda, fetchTranscript, fetchActionItems, internalMeetingId]);
+        fetchTasks(internalMeetingId);
+    }, [selectedMeeting, fetchAgenda, fetchTranscript, fetchTasks, internalMeetingId]);
 
     useEffect(() => {
         if (!internalMeetingId || !chatSessionActive) return;
@@ -277,8 +277,8 @@ export default function LiveMeetingPage({ isPersonalRoom = false }: LiveMeetingP
         const handleAgendaSync = ({ meetingId: mid, items }: { meetingId: string; items: any[] }) => {
             if (mid?.toString() === meetingIdStr) setAgendaItems(items);
         };
-        const handleActionItemsSync = ({ meetingId: mid, items }: { meetingId: string; items: any[] }) => {
-            if (mid?.toString() === meetingIdStr) setActionItems(items);
+        const handleTasksSync = ({ meetingId: mid, items }: { meetingId: string; items: any[] }) => {
+            if (mid?.toString() === meetingIdStr) setTasks(items);
         };
         const normalizeMsg = (msg: any): ChatMessage => ({
             id: String(msg.id),
@@ -345,7 +345,7 @@ export default function LiveMeetingPage({ isPersonalRoom = false }: LiveMeetingP
 
         socket.on("transcript_update", handleTranscriptUpdate);
         socket.on("agenda_sync", handleAgendaSync);
-        socket.on("action_items_sync", handleActionItemsSync);
+        socket.on("tasks_sync", handleTasksSync);
         socket.on("chat_message", handleChatMessage);
         socket.on("chat_presence", handleChatPresence);
         socket.on("chat_pin_updated", handleChatPinUpdated);
@@ -355,7 +355,7 @@ export default function LiveMeetingPage({ isPersonalRoom = false }: LiveMeetingP
             socket.emit("leave_meeting", { meetingId: meetingIdStr });
             socket.off("transcript_update", handleTranscriptUpdate);
             socket.off("agenda_sync", handleAgendaSync);
-            socket.off("action_items_sync", handleActionItemsSync);
+            socket.off("tasks_sync", handleTasksSync);
             socket.off("chat_message", handleChatMessage);
             socket.off("chat_presence", handleChatPresence);
             socket.off("chat_pin_updated", handleChatPinUpdated);
@@ -364,10 +364,10 @@ export default function LiveMeetingPage({ isPersonalRoom = false }: LiveMeetingP
     }, [socket, selectedMeeting, chatSessionActive, internalMeetingId, navigate, user?.name, user?.profileImage, user?.id, user?._id]);
 
     // Dock interactions
-    const triggerAddActionItem = useCallback(() => {
+    const triggerAddTask = useCallback(() => {
         setDockActivePanelId("actions");
         setDockOpen(true);
-        setAddActionItemTrigger(t => t + 1);
+        setAddTaskTrigger(t => t + 1);
     }, []);
     const triggerAddAgendaItem = useCallback(() => {
         setDockActivePanelId("agenda");
@@ -454,7 +454,7 @@ export default function LiveMeetingPage({ isPersonalRoom = false }: LiveMeetingP
                 <header className="page-header">
                     <h2 className="page-header-title">Live Meeting</h2>
                     <p className="page-header-description">
-                        Select an upcoming meeting to join the call, agenda, transcript, chat, and action items.
+                        Select an upcoming meeting to join the call, agenda, transcript, chat, and tasks.
                     </p>
                 </header>
                 <div className="meeting-list">
@@ -522,12 +522,12 @@ export default function LiveMeetingPage({ isPersonalRoom = false }: LiveMeetingP
                 isHost={isHost}
                 fullscreenRef={meetingLayoutRef}
                 onMeetingEnded={handleMeetingEnded}
-                onTriggerAddActionItem={triggerAddActionItem}
+                onTriggerAddTask={triggerAddTask}
                 onTriggerAddAgendaItem={triggerAddAgendaItem}
                 agendaItems={agendaItems}
-                actionItems={actionItems}
+                tasks={tasks}
                 onAgendaChange={handleAgendaChange}
-                onRefreshActionItems={() => internalMeetingId && fetchActionItems(internalMeetingId)}
+                onRefreshTasks={() => internalMeetingId && fetchTasks(internalMeetingId)}
                 onParticipantsUpdate={setLiveParticipants}
                 chatOpen={chatOpen}
                 onToggleChat={toggleChat}
@@ -543,10 +543,10 @@ export default function LiveMeetingPage({ isPersonalRoom = false }: LiveMeetingP
                 onSelectPanel={selectDockPanel}
                 onToggleOpen={toggleDockOpen}
                 agendaItems={agendaItems}
-                actionItems={actionItems}
+                tasks={tasks}
                 transcripts={transcripts}
                 participants={liveParticipantsList}
-                addActionItemTrigger={addActionItemTrigger}
+                addTaskTrigger={addTaskTrigger}
                 chatMessages={chatMessages}
                 currentUserId={(user?.id || user?._id)?.toString() || ""}
                 onSendChatMessage={handleSendMessage}
@@ -556,8 +556,8 @@ export default function LiveMeetingPage({ isPersonalRoom = false }: LiveMeetingP
                 chatSessionActive={chatSessionActive}
                 onRequestJoinMeeting={handleRequestJoinFromChat}
                 onAgendaChange={handleAgendaChange}
-                onAddActionItemConsumed={() => setAddActionItemTrigger(0)}
-                onRefreshActionItems={() => internalMeetingId && fetchActionItems(internalMeetingId)}
+                onAddTaskConsumed={() => setAddTaskTrigger(0)}
+                onRefreshTasks={() => internalMeetingId && fetchTasks(internalMeetingId)}
                 fetchWithAuth={fetchWithAuth}
             />
         </div>

@@ -46,7 +46,7 @@ let User: any = null,
 let Transcript: any = null,
   Agenda: any = null,
   Minutes: any = null,
-  ActionItem: any = null,
+  Task: any = null,
   Attendance: any = null,
   MeetingSummary: any = null,
   ChatMessage: any = null;
@@ -91,7 +91,7 @@ try {
   Transcript = require("./modules/transcript/transcript.schema");
   Agenda = require("./modules/agenda/agenda.schema");
   Minutes = require("./modules/minutes/minutes.schema");
-  ActionItem = require("./modules/action-item/action-item.schema");
+  Task = require("./modules/task/task.schema");
   Attendance = require("./modules/attendance/attendance.schema");
   MeetingSummary = require("./modules/meeting/meeting-summary.schema");
   ChatMessage = require("./modules/chat/chat.schema");
@@ -417,10 +417,10 @@ app.use("/api/meetings", require("./modules/meeting/meeting.routes")(deps));
 app.use("/api/polls", require("./modules/poll/poll.routes")(deps));
 app.use("/api/agenda", require("./modules/agenda/agenda.routes")(deps));
 app.use("/api/minutes", require("./modules/minutes/minutes.routes")(deps));
-app.use(
-  "/api/action-items",
-  require("./modules/action-item/action-item.routes")(deps),
-);
+// Tasks (formerly "action items"). Both paths share the same router so older clients keep working during rollout.
+const tasksRouter = require("./modules/task/task.routes")(deps);
+app.use("/api/tasks", tasksRouter);
+app.use("/api/action-items", tasksRouter);
 app.use(
   "/api/attendance",
   require("./modules/attendance/attendance.routes")(deps),
@@ -565,9 +565,9 @@ async function processRealtimeActions(meetingId: string, agg: TranscriptAgg) {
           meetingUsers = meeting.participants;
       }
       for (const a of actions) {
-        if (usingMongoFlag && ActionItem) {
+        if (usingMongoFlag && Task) {
           const safeTitle = a.title.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-          const exists = await ActionItem.findOne({
+          const exists = await Task.findOne({
             meetingId,
             title: { $regex: new RegExp(`^${safeTitle}$`, "i") },
           });
@@ -594,11 +594,12 @@ async function processRealtimeActions(meetingId: string, agg: TranscriptAgg) {
             }
           }
 
-          await ActionItem.create({
+          await Task.create({
             meetingId,
             title: a.title,
             assigneeName: a.assignee || null,
             assignee: assigneeId,
+            assignees: assigneeId ? [assigneeId] : [],
             category: a.category || "Technical",
             status: "pending",
             deadline: a.deadline || null,
@@ -628,15 +629,22 @@ async function processRealtimeActions(meetingId: string, agg: TranscriptAgg) {
       }
       if (added && io) {
         let items = [];
-        if (usingMongoFlag && ActionItem) {
-          const dbItems = await ActionItem.find({ meetingId })
-            .populate("assignee", "name email")
+        if (usingMongoFlag && Task) {
+          const dbItems = await Task.find({ meetingId })
+            .populate("assignee", "name email profileImage")
+            .populate("assignees", "name email profileImage")
             .sort({ createdAt: 1 });
           items = dbItems.map((i: any) => ({
             id: i._id.toString(),
             title: i.title,
-            assignee: i.assigneeName || i.assignee?.name || "Unassigned",
-            assigneeId: (i.assignee?._id || i.assignee)?.toString(),
+            assignees: (i.assignees || []).map((a: any) => ({
+              id: String(a?._id || a),
+              name: a?.name || null,
+              email: a?.email || null,
+              profileImage: a?.profileImage || null,
+            })),
+            assignee: i.assigneeName || i.assignees?.[0]?.name || i.assignee?.name || "Unassigned",
+            assigneeId: (i.assignees?.[0]?._id || i.assignee?._id || i.assignee)?.toString(),
             category: i.category,
             status: i.status,
             deadline: i.deadline,
@@ -647,7 +655,7 @@ async function processRealtimeActions(meetingId: string, agg: TranscriptAgg) {
         } else {
           items = inMemoryActionItems[meetingId] || [];
         }
-        io.to(`meeting:${meetingId}`).emit("action_items_sync", {
+        io.to(`meeting:${meetingId}`).emit("tasks_sync", {
           meetingId,
           items,
         });
@@ -655,7 +663,7 @@ async function processRealtimeActions(meetingId: string, agg: TranscriptAgg) {
     }
   } catch (e: any) {
     if (process.env.NODE_ENV !== "production") {
-      console.error("Real-time AI action extraction failed:", e.message);
+      console.error("Real-time AI task extraction failed:", e.message);
     }
   }
 }
@@ -1756,11 +1764,12 @@ io.on("connection", (socket: any) => {
                     }
                   }
 
-                  await ActionItem.create({
+                  await Task.create({
                     meetingId,
                     title: a.title,
                     assigneeName: a.assignee || null,
                     assignee: assigneeId,
+                    assignees: assigneeId ? [assigneeId] : [],
                     category: a.category || "Technical",
                     status: "pending",
                     deadline: a.deadline || null,
@@ -1769,29 +1778,36 @@ io.on("connection", (socket: any) => {
                   });
                 }
                 if (io) {
-                  const dbItems = await ActionItem.find({ meetingId })
-                    .populate("assignee", "name email")
+                  const dbItems = await Task.find({ meetingId })
+                    .populate("assignee", "name email profileImage")
+                    .populate("assignees", "name email profileImage")
                     .sort({ createdAt: 1 });
                   const processed = dbItems.map((item: any) => ({
                     id: (item._id || item.id).toString(),
                     title: item.title,
+                    assignees: (item.assignees || []).map((u: any) => ({
+                      id: String(u?._id || u),
+                      name: u?.name || null,
+                      email: u?.email || null,
+                      profileImage: u?.profileImage || null,
+                    })),
                     assignee:
-                      item.assigneeName || item.assignee?.name || "Unassigned",
+                      item.assigneeName || item.assignees?.[0]?.name || item.assignee?.name || "Unassigned",
                     assigneeId: (
-                      item.assignee?._id || item.assignee
+                      item.assignees?.[0]?._id || item.assignee?._id || item.assignee
                     )?.toString(),
                     category: item.category,
                     status: item.status,
                     deadline: item.deadline,
                     meetingId: meetingId.toString(),
                   }));
-                  io.to(`meeting:${meetingId}`).emit("action_items_sync", {
+                  io.to(`meeting:${meetingId}`).emit("tasks_sync", {
                     meetingId,
                     items: processed,
                   });
                 }
               } catch (e: any) {
-                console.error("AI action extraction failed:", e.message);
+                console.error("AI task extraction failed:", e.message);
               }
 
               try {
@@ -1808,8 +1824,9 @@ io.on("connection", (socket: any) => {
               }
 
               try {
-                const latestActionItems = await ActionItem.find({ meetingId })
+                const latestTasks = await Task.find({ meetingId })
                   .populate("assignee", "name email")
+                  .populate("assignees", "name email")
                   .sort({ createdAt: 1 });
                 const storedSummary = await callAIMeetingSummary({
                   meeting_title: meeting.title,
@@ -1831,10 +1848,10 @@ io.on("connection", (socket: any) => {
                       duration: item.duration,
                     }),
                   ),
-                  action_items: latestActionItems.map((item: any) => ({
+                  action_items: latestTasks.map((item: any) => ({
                     title: item.title,
                     status: item.status,
-                    assignee: item.assigneeName || item.assignee?.name || null,
+                    assignee: item.assigneeName || item.assignees?.[0]?.name || item.assignee?.name || null,
                     deadline: item.deadline || null,
                     category: item.category || null,
                   })),

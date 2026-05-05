@@ -1214,10 +1214,10 @@ input[type="date"].input-field {
 
 
 /* ═══════════════════════════════════════════════════════════════
-   ACTION ITEMS (moved from inline <style>)
+   TASKS (formerly "Action Items")
    ═══════════════════════════════════════════════════════════════ */
 
-.action-items-section {
+.tasks-section {
   display: flex;
   flex-direction: column;
   flex: 1;
@@ -1225,7 +1225,7 @@ input[type="date"].input-field {
   overflow: hidden;
 }
 
-.action-items-body {
+.tasks-body {
   flex: 1;
   min-height: 0;
   display: flex;
@@ -1233,46 +1233,46 @@ input[type="date"].input-field {
   overflow: hidden;
 }
 
-.action-items-list {
+.tasks-list {
   flex: 1;
   min-height: 0;
   padding: var(--lk-size-sm);
   overflow-y: auto;
 }
 
-.action-items-empty-state {
+.tasks-empty-state {
   color: var(--text-muted);
   font-size: 0.8125rem;
   padding: 0.5rem 0.25rem 0.75rem;
 }
 
-.action-item-deadline-block {
+.task-deadline-block {
   margin-top: 0.35rem;
   display: flex;
   flex-direction: column;
   gap: 0.35rem;
 }
 
-.action-item-deadline-label {
+.task-deadline-label {
   font-size: 0.6875rem;
   font-weight: 500;
   color: var(--text-secondary);
 }
 
-.action-item-deadline-row {
+.task-deadline-row {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   gap: 0.5rem;
 }
 
-.action-item-deadline-row .input-field[type="date"],
-.action-item-deadline-row .input-field[type="time"] {
+.task-deadline-row .input-field[type="date"],
+.task-deadline-row .input-field[type="time"] {
   flex: 1;
   min-width: 8.5rem;
 }
 
-.action-item-time-toggle {
+.task-time-toggle {
   display: inline-flex;
   align-items: center;
   gap: 0.35rem;
@@ -1283,11 +1283,11 @@ input[type="date"].input-field {
   white-space: nowrap;
 }
 
-.action-item-time-toggle input {
+.task-time-toggle input {
   accent-color: var(--primary);
 }
 
-.action-item-card {
+.task-card {
   padding: 0.75rem;
   margin-bottom: 0.375rem;
 }
@@ -4064,6 +4064,335 @@ input[type="date"].input-field {
   white-space: nowrap;
 }
 
+/* ═══════════════════════════════════════════════════════════════
+   ARCHIVE TASK TABLE (Notion-style: editable title + assignees + status)
+   ═══════════════════════════════════════════════════════════════ */
+.archive-task-table {
+  border: 1px solid var(--border);
+  /* border-radius: 10px; */
+  /* overflow: hidden; */
+  /* background: var(--bg-elevated); */
+  font-size: 0.8125rem;
+}
+
+.archive-task-table-head,
+.archive-task-table-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr) minmax(0, 0.85fr);
+}
+
+.archive-task-table-head {
+  align-items: center;
+  border-bottom: 1px solid var(--border);
+}
+
+/* Stretch cells to the tallest column so the title input can fill row height. */
+.archive-task-table-row {
+  align-items: stretch;
+}
+
+.archive-task-table-row + .archive-task-table-row {
+  border-top: 1px solid var(--border);
+}
+
+.archive-task-table-cell {
+  padding: 0.4rem 0.825rem;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+}
+
+.archive-task-table-head .archive-task-table-cell {
+  font-weight: 500;
+  letter-spacing: -0.02em;
+  color: var(--text-muted);
+  padding-top: 0.5rem;
+  padding-bottom: 0.5rem;
+}
+.archive-task-table-cell--title, .archive-task-table-cell--assignees {
+border-right: 1px solid var(--border);
+}
+
+.archive-task-table-cell--title {
+  gap: 0.4rem;
+  align-items: stretch;
+}
+.archive-task-table-cell--title:focus-within {
+  position: relative;
+}
+.archive-task-table-cell--title:focus-within::after {
+  content: '';
+  pointer-events: none;
+  position: absolute;
+  inset: 0;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-2xs);
+  z-index: 1;
+  box-sizing: border-box;
+}
+.archive-task-table-cell--assignees { padding: 0.4rem 0.825rem; }
+.archive-task-table-cell--status { padding: 0.4rem 0.825rem; }
+
+.archive-task-title-input {
+  flex: 1 1 auto;
+  min-width: 0;
+  align-self: stretch;
+  height: 100%;
+  min-height: 28px;
+  box-sizing: border-box;
+  padding-top: 0.25rem;
+  padding-bottom: 0.25rem;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  font: inherit;
+  color: var(--text-primary);
+  outline: none;
+  transition: border-color 0.15s ease, background 0.15s ease;
+}
+.archive-task-title-input:hover:not(:disabled) {
+  /* background: var(--bg-secondary); */
+}
+.archive-task-title-input:focus:not(:disabled) {
+  background: none;
+  border-color: transparent;
+}
+.archive-task-title-input:disabled {
+  cursor: text;
+  color: var(--text-primary);
+  background: transparent;
+}
+
+/* Status column: uppercase colored labels only (no pill backgrounds). */
+.archive-task-status-label {
+  display: inline-flex;
+  align-items: center;
+  font-size: var(--font-size-caption);
+  font-weight: 600;
+  letter-spacing: 0.0618em;
+  text-transform: uppercase;
+  line-height: var(--lk-halfstep);
+  background: transparent;
+  padding: 0;
+  border: none;
+}
+
+.archive-task-status-label--pending {
+  color: var(--flair-amber-color);
+}
+
+.archive-task-status-label--in-progress {
+  color: var(--flair-primary-color);
+}
+
+.archive-task-status-label--awaiting-verify {
+  color: var(--flair-purple-color);
+}
+
+.archive-task-status-label--verified {
+  color: var(--flair-emerald-color);
+}
+
+.archive-task-status-label--missing {
+  color: var(--accent-rose);
+}
+
+.archive-task-status-label--draft {
+  color: var(--text-secondary);
+}
+
+.archive-task-saving {
+  align-self: center;
+  font-size: 0.625rem;
+  color: var(--text-muted);
+}
+
+.archive-task-cell-trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  width: 100%;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  font: inherit;
+  color: var(--text-primary);
+  cursor: pointer;
+  text-align: left;
+  min-height: 28px;
+  transition: background 0.15s ease, border-color 0.15s ease;
+}
+.archive-task-cell-trigger:hover:not(:disabled) {
+  /* background: var(--bg-secondary); */
+}
+.archive-task-cell-trigger:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: -2px;
+}
+.archive-task-cell-trigger:disabled {
+  cursor: default;
+}
+
+.archive-task-cell-panel {
+  position: absolute;
+  z-index: 200;
+  margin-top: 4px;
+  min-width: 220px;
+  max-height: 280px;
+  overflow-y: auto;
+}
+
+/* Assignee picker: panel spans full width of the grid cell (anchor is .archive-multi-select). */
+.archive-task-cell-panel--assignees {
+  width: 100%;
+  min-width: 0;
+  left: 0;
+  right: 0;
+  box-sizing: border-box;
+}
+
+.archive-task-cell-trigger--assignees {
+  justify-content: flex-start;
+}
+
+.archive-filter-stack--task-assignee-trigger {
+  flex-shrink: 0;
+}
+
+.archive-task-unassigned {
+  color: var(--text-muted);
+  font-size: 0.75rem;
+}
+.archive-task-table-cell--status:hover, .archive-task-table-cell--assignees:hover {
+	background: var(--bg-secondary);
+}
+.archive-multi-select--task-status {
+  position: relative;
+  width: 100%;
+}
+
+.archive-task-status-row {
+  grid-template-columns: minmax(0, 1fr);
+  padding: 0.35rem 0.6rem;
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   MY TASKS PAGE TABLE (matches archive task table styling)
+   ═══════════════════════════════════════════════════════════════ */
+.my-tasks-task-table {
+  border: 1px solid var(--border);
+  font-size: 0.8125rem;
+}
+
+.my-tasks-task-table-head,
+.my-tasks-task-table-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1.55fr) minmax(0, 1.2fr) minmax(6.75rem, auto) minmax(0, 1fr) minmax(0, 0.88fr);
+}
+
+.my-tasks-task-table-head {
+  align-items: center;
+  border-bottom: 1px solid var(--border);
+}
+
+.my-tasks-task-table-row {
+  align-items: stretch;
+}
+
+.my-tasks-task-table-row + .my-tasks-task-table-row {
+  border-top: 1px solid var(--border);
+}
+
+.my-tasks-task-table-cell {
+  padding: 0.4rem 0.625rem;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+}
+
+.my-tasks-task-table-head .my-tasks-task-table-cell {
+  font-weight: 500;
+  letter-spacing: -0.02em;
+  color: var(--text-muted);
+  padding-top: 0.5rem;
+  padding-bottom: 0.5rem;
+}
+
+.my-tasks-task-table-cell--title {
+  gap: 0.4rem;
+  align-items: stretch;
+  border-right: 1px solid var(--border);
+}
+
+.my-tasks-task-table-cell--title:focus-within {
+  box-shadow: 0 0 0 1.5px var(--border-hover);
+  border-radius: var(--radius-2xs);
+}
+
+.my-tasks-task-table-cell--meeting {
+  border-right: 1px solid var(--border);
+  min-width: 0;
+}
+
+.my-tasks-task-table-cell--date {
+  border-right: 1px solid var(--border);
+  font-variant-numeric: tabular-nums;
+  color: var(--text-secondary);
+  font-size: 0.75rem;
+  white-space: nowrap;
+}
+
+.my-tasks-task-table-cell--assignees {
+  border-right: 1px solid var(--border);
+  padding: 0.3rem 0.45rem;
+}
+
+.my-tasks-task-table-cell--status {
+  padding: 0.3rem 0.45rem;
+}
+
+.my-tasks-meeting-link {
+  color: var(--primary);
+  font-weight: 500;
+  text-decoration: none;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.my-tasks-meeting-link:hover {
+  text-decoration: underline;
+}
+
+.my-tasks-meeting-fallback {
+  color: var(--text-muted);
+  font-size: 0.8125rem;
+}
+
+.my-tasks-task-table-empty {
+  padding: 1.35rem 1rem;
+  text-align: center;
+  color: var(--text-muted);
+  font-size: 0.875rem;
+  border-top: 1px solid var(--border);
+}
+
+.my-tasks-task-table .archive-multi-select--task-status {
+  width: 100%;
+}
+
+.my-tasks-task-table .archive-multi-select--task-status .archive-task-cell-panel {
+  width: 100%;
+  min-width: 0;
+  left: 0;
+  right: 0;
+  box-sizing: border-box;
+}
+
+
 .archive-detail-transcript-list {
 	min-height: 22rem;
 	max-height: 22rem;
@@ -5689,7 +6018,7 @@ button.archive-detail-section-toggle:hover .archive-detail-section-chevron {
 
 
 /* ═══════════════════════════════════════════════════════════════
-   INLINE FORM ROWS (action-item, agenda add, etc.)
+   INLINE FORM ROWS (task, agenda add, etc.)
    ═══════════════════════════════════════════════════════════════ */
 
 .inline-form-card {

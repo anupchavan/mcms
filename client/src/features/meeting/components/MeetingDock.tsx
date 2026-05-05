@@ -13,7 +13,7 @@ import AgendaPanel from '../../agenda/components/AgendaPanel';
 import ChatPanel, { ChatMessage } from './ChatPanel';
 import TranscriptFeed from '../../transcript/components/TranscriptFeed';
 import MinutesPanel from '../../minutes/components/MinutesPanel';
-import ActionItems from '../../minutes/components/ActionItems';
+import Tasks from '../../minutes/components/Tasks';
 
 /** Identifier for each dock tab. Drives both the active-panel state and the
  *  icon-rail buttons. Exhaustive — TypeScript will flag any missed case. */
@@ -34,7 +34,7 @@ const TABS: DockTab[] = [
     { id: 'chat',       label: 'Chat',         icon: BubbleChatIcon, hint: 'H' },
     { id: 'transcript', label: 'Transcript',   icon: ClosedCaptionIcon, hint: 'T' },
     { id: 'minutes',    label: 'Minutes',      icon: Note01Icon,     hint: 'N' },
-    { id: 'actions',    label: 'Action items', icon: CheckListIcon,  hint: 'K' },
+    { id: 'actions',    label: 'Tasks',        icon: CheckListIcon,  hint: 'K' },
 ];
 
 interface MeetingDockProps {
@@ -49,10 +49,10 @@ interface MeetingDockProps {
 
     agendaItems: any[];
     minutesItems?: any[];
-    actionItems: any[];
+    tasks: any[];
     transcripts: any[];
     participants: any[];
-    addActionItemTrigger: number;
+    addTaskTrigger: number;
 
     chatMessages: ChatMessage[];
     currentUserId: string;
@@ -66,8 +66,8 @@ interface MeetingDockProps {
 
     onAgendaChange: (items: any[]) => void;
     onMinutesChange?: (items: any[]) => void;
-    onAddActionItemConsumed: () => void;
-    onRefreshActionItems: () => void;
+    onAddTaskConsumed: () => void;
+    onRefreshTasks: () => void;
     fetchWithAuth: (url: string, options?: RequestInit) => Promise<Response>;
 }
 
@@ -81,10 +81,10 @@ const MeetingDock: FC<MeetingDockProps> = ({
     onToggleOpen,
     agendaItems,
     minutesItems = [],
-    actionItems,
+    tasks,
     transcripts,
     participants,
-    addActionItemTrigger,
+    addTaskTrigger,
     chatMessages,
     currentUserId,
     onSendChatMessage,
@@ -95,8 +95,8 @@ const MeetingDock: FC<MeetingDockProps> = ({
     onRequestJoinMeeting,
     onAgendaChange,
     onMinutesChange,
-    onAddActionItemConsumed,
-    onRefreshActionItems,
+    onAddTaskConsumed,
+    onRefreshTasks,
     fetchWithAuth,
 }) => {
     /** Render the currently active panel. Memoised so toggling other state
@@ -136,15 +136,15 @@ const MeetingDock: FC<MeetingDockProps> = ({
                 );
             case 'actions':
                 return (
-                    <ActionItems
-                        items={actionItems}
+                    <Tasks
+                        items={tasks}
                         meetingId={meetingId}
                         meetingHostId={meetingHostId}
                         agendaItems={agendaItems}
                         fetchWithAuth={fetchWithAuth}
-                        onRefresh={onRefreshActionItems}
-                        addActionItemTrigger={addActionItemTrigger}
-                        onAddTriggered={onAddActionItemConsumed}
+                        onRefresh={onRefreshTasks}
+                        addTaskTrigger={addTaskTrigger}
+                        onAddTriggered={onAddTaskConsumed}
                         participants={participants}
                     />
                 );
@@ -154,13 +154,13 @@ const MeetingDock: FC<MeetingDockProps> = ({
             }
         }
     }, [
-        activePanelId, agendaItems, minutesItems, actionItems, transcripts,
-        participants, isHost, meetingId, meetingHostId, addActionItemTrigger,
+        activePanelId, agendaItems, minutesItems, tasks, transcripts,
+        participants, isHost, meetingId, meetingHostId, addTaskTrigger,
         chatMessages, currentUserId, onSendChatMessage,
         pinnedChatMessage, onPinChatMessage, onUnpinChatMessage,
         chatSessionActive, onRequestJoinMeeting,
-        onAgendaChange, onMinutesChange, onAddActionItemConsumed,
-        onRefreshActionItems, fetchWithAuth,
+        onAgendaChange, onMinutesChange, onAddTaskConsumed,
+        onRefreshTasks, fetchWithAuth,
     ]);
 
     return (

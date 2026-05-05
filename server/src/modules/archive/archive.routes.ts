@@ -2,7 +2,7 @@ import express from 'express';
 import mongoose from 'mongoose';
 const router = express.Router();
 import Agenda = require('../agenda/agenda.schema');
-import ActionItem = require('../action-item/action-item.schema');
+import Task = require('../task/task.schema');
 import MeetingSummary = require('../meeting/meeting-summary.schema');
 import Minutes = require('../minutes/minutes.schema');
 import ResourcePin = require('../pin/pin.schema');
@@ -412,7 +412,7 @@ export = function ({ User, Meeting, protect, usingMongo, callAISummarize, callAI
 			await Promise.all([
 				Transcript.deleteMany({ meetingId: midOid }),
 				Agenda.deleteOne({ meetingId: midOid }),
-				ActionItem.deleteMany({ meetingId: midOid }),
+				Task.deleteMany({ meetingId: midOid }),
 				MeetingSummary.deleteMany({ meetingId: midOid }),
 				Minutes.deleteMany({ meetingId: midOid }),
 				ResourcePin.deleteMany({ meetingId: midOid }),
@@ -484,9 +484,18 @@ export = function ({ User, Meeting, protect, usingMongo, callAISummarize, callAI
 			const sk = Math.max(0, parseInt(String(skip), 10) || 0);
 
 			const filter: any = { meetingId: meeting._id };
-			const speakerTrim = (speaker || '').trim();
-			if (speakerTrim) {
-				filter.speaker = new RegExp(escapeRegex(speakerTrim), 'i');
+			const rawSpeakers = Array.isArray(speaker)
+				? speaker
+				: typeof speaker === 'string'
+					? [speaker]
+					: [];
+			const speakerList = rawSpeakers
+				.map((s: any) => String(s || '').trim())
+				.filter(Boolean);
+			if (speakerList.length === 1) {
+				filter.speaker = new RegExp(`^${escapeRegex(speakerList[0])}$`, 'i');
+			} else if (speakerList.length > 1) {
+				filter.speaker = { $in: speakerList.map((s: string) => new RegExp(`^${escapeRegex(s)}$`, 'i')) };
 			}
 
 			const qTrim = (q || '').trim();
@@ -578,7 +587,24 @@ export = function ({ User, Meeting, protect, usingMongo, callAISummarize, callAI
 		try {
 			if (!usingMongo()) return res.json({ summary: inMemoryMeetingSummaries[req.params.meetingId] || null });
 
-			const existing = await MeetingSummary.findOne({ meetingId: req.params.meetingId }).lean();
+			const resolvedMid = await resolveMeetingId(req.params.meetingId);
+			if (!resolvedMid) return res.status(404).json({ message: 'Meeting not found' });
+
+			const forceRegen =
+				String(req.query.force || '') === '1' ||
+				String(req.query.force || '').toLowerCase() === 'true';
+			if (forceRegen) {
+				const meetingForForce = await Meeting.findById(resolvedMid).select('hostId status').lean();
+				if (!meetingForForce || meetingForForce.status !== 'completed') {
+					return res.status(404).json({ message: 'Meeting not found or not archived' });
+				}
+				if (String(meetingForForce.hostId) !== String(req.user.id)) {
+					return res.status(403).json({ message: 'Only the host can regenerate summary' });
+				}
+				await MeetingSummary.deleteMany({ meetingId: resolvedMid });
+			}
+
+			const existing = await MeetingSummary.findOne({ meetingId: resolvedMid }).lean();
 			if (existing) {
 				return res.json({
 					summary: {
@@ -594,14 +620,18 @@ export = function ({ User, Meeting, protect, usingMongo, callAISummarize, callAI
 				});
 			}
 
-			let actionItems;
+			let tasks;
 			let meeting, agenda, minutesDoc, transcripts;
-			[meeting, agenda, minutesDoc, transcripts, actionItems] = await Promise.all([
-				Meeting.findById(req.params.meetingId).lean(),
-				Agenda.findOne({ meetingId: req.params.meetingId }).lean(),
-				Minutes.findOne({ meetingId: req.params.meetingId }).lean(),
-				Transcript.find({ meetingId: req.params.meetingId }).sort({ startTime: 1, createdAt: 1 }).lean(),
-				ActionItem.find({ meetingId: req.params.meetingId }).populate('assignee', 'name email').sort({ createdAt: 1 }).lean(),
+			[meeting, agenda, minutesDoc, transcripts, tasks] = await Promise.all([
+				Meeting.findById(resolvedMid).lean(),
+				Agenda.findOne({ meetingId: resolvedMid }).lean(),
+				Minutes.findOne({ meetingId: resolvedMid }).lean(),
+				Transcript.find({ meetingId: resolvedMid }).sort({ startTime: 1, createdAt: 1 }).lean(),
+				Task.find({ meetingId: resolvedMid })
+					.populate('assignee', 'name email profileImage')
+					.populate('assignees', 'name email profileImage')
+					.sort({ createdAt: 1 })
+					.lean(),
 			]);
 
 			if (!meeting) return res.status(404).json({ message: 'Meeting not found' });
@@ -621,7 +651,7 @@ export = function ({ User, Meeting, protect, usingMongo, callAISummarize, callAI
 
 			let aiError = null;
 
-			// Post-meeting AI Action Item Extraction
+			// Post-meeting AI Task Extraction
 			if (callAIExtractActions && transcripts.length > 0) {
 				try {
 					const transcriptText = transcripts.map((t: any) => `${t.speaker}: ${t.text}`).join('\n');
@@ -632,21 +662,19 @@ export = function ({ User, Meeting, protect, usingMongo, callAISummarize, callAI
 						notes: item.notes || '',
 						duration: item.duration,
 					}));
-					const extractedActions = await callAIExtractActions(transcriptText, minutesItemsForAi);
-					
-					// Save extracted actions
-					if (extractedActions && extractedActions.length > 0) {
+					const extractedTasks = await callAIExtractActions(transcriptText, minutesItemsForAi);
+
+					if (extractedTasks && extractedTasks.length > 0) {
 						let meetingUsers: any[] = meeting.participants || [];
 						if (meeting.participants && meeting.participants.length > 0 && meeting.participants[0].name === undefined) {
-							// Try to populate if it wasn't
 							const populatedMeeting = await Meeting.findById(meeting._id).populate('participants', 'name email').lean();
 							if (populatedMeeting) meetingUsers = populatedMeeting.participants;
 						}
-						
-						for (const a of extractedActions) {
+
+						for (const a of extractedTasks) {
 							const safeTitle = a.title.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-							const exists = await ActionItem.findOne({
-								meetingId: req.params.meetingId,
+							const exists = await Task.findOne({
+								meetingId: resolvedMid,
 								title: { $regex: new RegExp(`^${safeTitle}$`, "i") },
 							});
 							if (exists) continue;
@@ -669,11 +697,12 @@ export = function ({ User, Meeting, protect, usingMongo, callAISummarize, callAI
 								}
 							}
 
-							await ActionItem.create({
-								meetingId: req.params.meetingId,
+							await Task.create({
+								meetingId: resolvedMid,
 								title: a.title,
 								assigneeName: a.assignee || null,
 								assignee: assigneeId,
+								assignees: assigneeId ? [assigneeId] : [],
 								category: a.category || "Technical",
 								status: "pending",
 								deadline: a.deadline || null,
@@ -681,11 +710,14 @@ export = function ({ User, Meeting, protect, usingMongo, callAISummarize, callAI
 								aiConfidence: a.confidence || null,
 							});
 						}
-						// Refresh actionItems list after extraction
-						actionItems = await ActionItem.find({ meetingId: req.params.meetingId }).populate('assignee', 'name email').sort({ createdAt: 1 }).lean();
+						tasks = await Task.find({ meetingId: resolvedMid })
+							.populate('assignee', 'name email profileImage')
+							.populate('assignees', 'name email profileImage')
+							.sort({ createdAt: 1 })
+							.lean();
 					}
 				} catch(e: any) {
-					console.error('Post-meeting AI action extraction failed:', e.message);
+					console.error('Post-meeting AI task extraction failed:', e.message);
 					aiError = e.message;
 				}
 			}
@@ -710,18 +742,18 @@ export = function ({ User, Meeting, protect, usingMongo, callAISummarize, callAI
 							notes: item.notes || '',
 							duration: item.duration,
 						})),
-						action_items: (actionItems || []).map((item: any) => ({
+						action_items: (tasks || []).map((item: any) => ({
 							title: item.title,
 							status: item.status,
-							assignee: item.assigneeName || item.assignee?.name || null,
+							assignee: item.assigneeName || item.assignees?.[0]?.name || item.assignee?.name || null,
 							deadline: item.deadline || null,
 							category: item.category || null,
 						})),
 					});
 					await MeetingSummary.findOneAndUpdate(
-						{ meetingId: req.params.meetingId },
+						{ meetingId: resolvedMid },
 						{
-							meetingId: req.params.meetingId,
+							meetingId: resolvedMid,
 							overview: summary.overview || '',
 							discussionPoints: summary.discussion_points || [],
 							completedItems: summary.completed_items || [],
@@ -744,7 +776,7 @@ export = function ({ User, Meeting, protect, usingMongo, callAISummarize, callAI
 				...(((minutesDoc as any)?.items || [])
 					.filter((item: any) => ['completed', 'done'].includes(String(item.status).toLowerCase()))
 					.map((item: any) => item.title)),
-				...((actionItems || [])
+				...((tasks || [])
 					.filter((item: any) => String(item.status).toLowerCase() === 'verified')
 					.map((item: any) => item.title)),
 			];
@@ -752,13 +784,13 @@ export = function ({ User, Meeting, protect, usingMongo, callAISummarize, callAI
 				...(((minutesDoc as any)?.items || [])
 					.filter((item: any) => !['completed', 'done'].includes(String(item.status).toLowerCase()))
 					.map((item: any) => item.title)),
-				...((actionItems || [])
+				...((tasks || [])
 					.filter((item: any) => String(item.status).toLowerCase() !== 'verified')
 					.map((item: any) => item.title)),
 			];
 
 			const fallbackSummary = {
-				overview: `This meeting produced ${transcripts.length} transcript segment(s) and ${actionItems.length} action item(s).`,
+				overview: `This meeting produced ${transcripts.length} transcript segment(s) and ${tasks.length} task(s).`,
 				discussion_points: transcripts.slice(0, 5).map((t: any) => `${t.speaker}: ${t.text}`),
 				completed_items: completedItems,
 				pending_items: pendingItems,
@@ -767,9 +799,9 @@ export = function ({ User, Meeting, protect, usingMongo, callAISummarize, callAI
 				model: `server-fallback${aiError ? ' [' + aiError.substring(0, 50) + ']' : ''}`,
 			};
 			await MeetingSummary.findOneAndUpdate(
-				{ meetingId: req.params.meetingId },
+				{ meetingId: resolvedMid },
 				{
-					meetingId: req.params.meetingId,
+					meetingId: resolvedMid,
 					overview: fallbackSummary.overview,
 					discussionPoints: fallbackSummary.discussion_points,
 					completedItems: fallbackSummary.completed_items,
@@ -788,18 +820,19 @@ export = function ({ User, Meeting, protect, usingMongo, callAISummarize, callAI
 		}
 	});
 
-	router.post('/:meetingId/extract-actions', protect, async (req: any, res: any) => {
+	/** Idempotent AI task extraction.
+	 * Mounted at both `/extract-tasks` (canonical) and `/extract-actions` (legacy alias) so old clients keep working. */
+	const extractTasksHandler = async (req: any, res: any) => {
 		try {
-			if (!usingMongo()) return res.json({ actions: [] });
+			if (!usingMongo()) return res.json({ tasks: [] });
 
-			const [meeting, minutesDoc, transcripts, existingActions] = await Promise.all([
+			const [meeting, minutesDoc, transcripts] = await Promise.all([
 				Meeting.findById(req.params.meetingId).lean(),
 				Minutes.findOne({ meetingId: req.params.meetingId }).lean(),
 				Transcript.find({ meetingId: req.params.meetingId }).sort({ startTime: 1, createdAt: 1 }).lean(),
-				ActionItem.find({ meetingId: req.params.meetingId }).lean(),
 			]);
 
-			if (!meeting || transcripts.length === 0) return res.json({ actions: [] });
+			if (!meeting || transcripts.length === 0) return res.json({ tasks: [] });
 			if (!callAIExtractActions) return res.status(400).json({ message: 'AI Extraction not available' });
 
 			const transcriptText = transcripts.map((t: any) => `${t.speaker}: ${t.text}`).join('\n');
@@ -810,20 +843,18 @@ export = function ({ User, Meeting, protect, usingMongo, callAISummarize, callAI
 				notes: item.notes || '',
 				duration: item.duration,
 			}));
-			const extractedActions = await callAIExtractActions(transcriptText, minutesItemsForAi);
-			
-			// Save extracted actions
-			if (extractedActions && extractedActions.length > 0) {
+			const extractedTasks = await callAIExtractActions(transcriptText, minutesItemsForAi);
+
+			if (extractedTasks && extractedTasks.length > 0) {
 				let meetingUsers: any[] = (meeting as any).participants || [];
 				if ((meeting as any).participants && (meeting as any).participants.length > 0 && (meeting as any).participants[0].name === undefined) {
-					// Try to populate if it wasn't
 					const populatedMeeting = await Meeting.findById((meeting as any)._id).populate('participants', 'name email').lean();
 					if (populatedMeeting) meetingUsers = populatedMeeting.participants;
 				}
-				
-				for (const a of extractedActions) {
+
+				for (const a of extractedTasks) {
 					const safeTitle = a.title.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-					const exists = await ActionItem.findOne({
+					const exists = await Task.findOne({
 						meetingId: req.params.meetingId,
 						title: { $regex: new RegExp(`^${safeTitle}$`, "i") },
 					});
@@ -847,11 +878,12 @@ export = function ({ User, Meeting, protect, usingMongo, callAISummarize, callAI
 						}
 					}
 
-					await ActionItem.create({
+					await Task.create({
 						meetingId: req.params.meetingId,
 						title: a.title,
 						assigneeName: a.assignee || null,
 						assignee: assigneeId,
+						assignees: assigneeId ? [assigneeId] : [],
 						category: a.category || "Technical",
 						status: "pending",
 						deadline: a.deadline || null,
@@ -861,18 +893,32 @@ export = function ({ User, Meeting, protect, usingMongo, callAISummarize, callAI
 				}
 			}
 
-			const updatedActionItems = await ActionItem.find({ meetingId: req.params.meetingId }).populate('assignee', 'name email').sort({ createdAt: 1 }).lean();
-			return res.json({ actions: updatedActionItems.map((i: any) => ({
-				id: i._id, title: i.title,
-				assignee: i.assigneeName || i.assignee?.name || 'Unassigned',
+			const updatedTasks = await Task.find({ meetingId: req.params.meetingId })
+				.populate('assignee', 'name email profileImage')
+				.populate('assignees', 'name email profileImage')
+				.sort({ createdAt: 1 })
+				.lean();
+			const payload = updatedTasks.map((i: any) => ({
+				id: i._id,
+				title: i.title,
+				assignees: (i.assignees || []).map((a: any) => ({
+					id: String(a?._id || a),
+					name: a?.name || null,
+					email: a?.email || null,
+					profileImage: a?.profileImage || null,
+				})),
+				assignee: i.assigneeName || i.assignees?.[0]?.name || i.assignee?.name || 'Unassigned',
 				category: i.category, status: i.status, deadline: i.deadline,
 				source: i.source,
 				agendaItemId: i.agendaItemId || null,
-			})) });
+			}));
+			return res.json({ tasks: payload, actions: payload });
 		} catch (error: any) {
 			res.status(500).json({ message: 'Server error', error: error.message });
 		}
-	});
+	};
+	router.post('/:meetingId/extract-tasks', protect, extractTasksHandler);
+	router.post('/:meetingId/extract-actions', protect, extractTasksHandler);
 
 	router.get('/:meetingId', protect, async (req: any, res: any) => {
 		try {
@@ -886,8 +932,9 @@ export = function ({ User, Meeting, protect, usingMongo, callAISummarize, callAI
 				const lookupId = (meeting.id || meeting._id);
 				const agendaItems = inMemoryAgendas[lookupId] || [];
 				const transcripts = inMemoryTranscripts[lookupId] || [];
-				const actionItems = (inMemoryActionItems[lookupId] || []).map((i: any) => ({
+				const tasks = (inMemoryActionItems[lookupId] || []).map((i: any) => ({
 					id: i.id || i._id, title: i.title,
+					assignees: [],
 					assignee: i.assignee || 'Unassigned',
 					category: i.category, status: i.status, deadline: i.deadline,
 					source: i.source,
@@ -922,7 +969,8 @@ export = function ({ User, Meeting, protect, usingMongo, callAISummarize, callAI
 					agendaItems,
 					transcriptsByAgenda,
 					transcriptFlat,
-					actionItems,
+					tasks,
+					actionItems: tasks,
 					pins: [], // pin in-memory not implemented yet
 					meetingSummary: summary ? {
 						overview: summary.overview || '',
@@ -946,7 +994,9 @@ export = function ({ User, Meeting, protect, usingMongo, callAISummarize, callAI
 
 			const agenda = await Agenda.findOne({ meetingId: resolvedId });
 			const transcripts = await Transcript.find({ meetingId: resolvedId }).sort({ startTime: 1, createdAt: 1 });
-			const actionItems = await ActionItem.find({ meetingId: resolvedId }).populate('assignee', 'name email');
+			const tasks = await Task.find({ meetingId: resolvedId })
+				.populate('assignee', 'name email profileImage')
+				.populate('assignees', 'name email profileImage');
 			const pins = await ResourcePin.find({ meetingId: resolvedId }).populate('userId', 'name');
 			const meetingSummary = await MeetingSummary.findOne({ meetingId: resolvedId });
 
@@ -982,9 +1032,23 @@ export = function ({ User, Meeting, protect, usingMongo, callAISummarize, callAI
 				agendaItems: agenda ? (agenda as any).items : [],
 				transcriptsByAgenda,
 				transcriptFlat,
-				actionItems: actionItems.map((i: any) => ({
+				tasks: tasks.map((i: any) => ({
+					id: i._id,
+					title: i.title,
+					assignees: (i.assignees || []).map((a: any) => ({
+						id: String(a?._id || a),
+						name: a?.name || null,
+						email: a?.email || null,
+						profileImage: a?.profileImage || null,
+					})),
+					assignee: i.assigneeName || i.assignees?.[0]?.name || i.assignee?.name || 'Unassigned',
+					category: i.category, status: i.status, deadline: i.deadline,
+					source: i.source,
+					agendaItemId: i.agendaItemId || null,
+				})),
+				actionItems: tasks.map((i: any) => ({
 					id: i._id, title: i.title,
-					assignee: i.assigneeName || i.assignee?.name || 'Unassigned',
+					assignee: i.assigneeName || i.assignees?.[0]?.name || i.assignee?.name || 'Unassigned',
 					category: i.category, status: i.status, deadline: i.deadline,
 					source: i.source,
 					agendaItemId: i.agendaItemId || null,

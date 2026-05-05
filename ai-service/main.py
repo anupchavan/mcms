@@ -53,7 +53,9 @@ try:
     if GROQ_API_KEY:
         from groq import Groq  # type: ignore
 
-        groq_client = Groq(api_key=GROQ_API_KEY)
+        # Ignore GROK_BASE_URL here: the Groq SDK falls back to it when base_url is omitted,
+        # which breaks chat paths (e.g. base .../v1 + /openai/v1/chat/completions → 404).
+        groq_client = Groq(api_key=GROQ_API_KEY, base_url="https://api.groq.com")
         print("Groq client successfully initialized.")
     else:
         print("Groq client not configured (GROQ_API_KEY missing).")

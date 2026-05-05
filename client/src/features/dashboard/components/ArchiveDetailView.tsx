@@ -12,12 +12,13 @@ import {
     Search01Icon,
 } from "@hugeicons/core-free-icons";
 import {
-    ArchiveDetail, ArchiveParticipant, TranscriptSegment, flattenTranscripts,
-    formatArchiveDate, groupActionItemsByAgenda, TRANSCRIPT_DEBOUNCE_MS,
+    ArchiveDetail, ArchiveParticipant, ArchiveTask, TranscriptSegment, flattenTranscripts,
+    formatArchiveDate, groupTasksByAgenda, TRANSCRIPT_DEBOUNCE_MS,
 } from "./archiveHelpers";
 import { UserAvatar } from "../../../shared/components/UserAvatar";
 import { useAuth } from "../../../stores/AuthContext";
 import { TranscriptSpeakerSelect } from "./TranscriptSpeakerSelect";
+import { ArchiveTaskTable } from "./ArchiveTaskTable";
 
 const API_BASE = import.meta.env.VITE_API_URL || "http://localhost:5001/api";
 const PARTICIPANTS_VISIBLE = 5;
@@ -84,7 +85,7 @@ export default function ArchiveDetailView({ meetingId, fetchWithAuth }: ArchiveD
     const [loadingSummary, setLoadingSummary] = useState(false);
     const [finalSummary, setFinalSummary] = useState<ArchiveDetail["meetingSummary"]>(null);
     const [loadingFinalSummary, setLoadingFinalSummary] = useState(false);
-    const [extractingActions, setExtractingActions] = useState(false);
+    const [generatingTasks, setGeneratingTasks] = useState(false);
     const [notFound, setNotFound] = useState(false);
 
     // sidebar modals
@@ -113,6 +114,8 @@ export default function ArchiveDetailView({ meetingId, fetchWithAuth }: ArchiveD
                 if (cancelled) return;
                 if (!res.ok) { setNotFound(true); return; }
                 const data = await res.json();
+                // Server returns either `tasks` (canonical) or `actionItems` (legacy alias). Normalize so the rest of the view can rely on `tasks`.
+                if (!Array.isArray(data.tasks)) data.tasks = Array.isArray(data.actionItems) ? data.actionItems : [];
                 setDetail(data);
                 setFinalSummary(data.meetingSummary || null);
             } catch (err) {
@@ -146,16 +149,25 @@ export default function ArchiveDetailView({ meetingId, fetchWithAuth }: ArchiveD
         setLoadingFinalSummary(false);
     }, [meetingId, fetchWithAuth]);
 
-    const extractActionItems = useCallback(async () => {
-        setExtractingActions(true);
+    const generateTasks = useCallback(async () => {
+        setGeneratingTasks(true);
         try {
-            const res = await (fetchWithAuth || fetch)(`${API_BASE}/archive/${meetingId}/extract-actions`, { method: "POST" });
+            const res = await (fetchWithAuth || fetch)(`${API_BASE}/archive/${meetingId}/extract-tasks`, { method: "POST" });
             if (res.ok) {
                 const data = await res.json();
-                setDetail(prev => prev ? ({ ...prev, actionItems: data.actions || [] }) : prev);
+                const tasks: ArchiveTask[] = (data.tasks || data.actions || []).map((t: any) => ({
+                    id: String(t.id),
+                    title: t.title,
+                    status: t.status,
+                    assignees: Array.isArray(t.assignees) ? t.assignees : [],
+                    assignee: t.assignee,
+                    source: t.source,
+                    agendaItemId: t.agendaItemId ?? null,
+                }));
+                setDetail(prev => prev ? ({ ...prev, tasks, actionItems: tasks }) : prev);
             }
-        } catch (err) { console.error("Failed to extract action items:", err); }
-        setExtractingActions(false);
+        } catch (err) { console.error("Failed to generate tasks:", err); }
+        setGeneratingTasks(false);
     }, [meetingId, fetchWithAuth]);
 
     const loadSummary = useCallback(async () => {
@@ -381,6 +393,20 @@ export default function ArchiveDetailView({ meetingId, fetchWithAuth }: ArchiveD
         loadSummary();
     }, [detail, isAutoGenMeeting, summaries, loadSummary]);
 
+    // Auto-generate tasks for recent meetings that completed without the AI extraction firing yet.
+    // The server already runs extraction on `end_meeting`, so this is a safety net for rare flake cases.
+    const tasksGeneratedRef = useRef(false);
+    useEffect(() => {
+        if (!detail || !isAutoGenMeeting || tasksGeneratedRef.current) return;
+        const tasks = detail.tasks || [];
+        if (tasks.length > 0) return;
+        const hasTranscripts = (detail.transcriptFlat?.length || 0) > 0
+            || Object.values(detail.transcriptsByAgenda || {}).some((s) => (s || []).length > 0);
+        if (!hasTranscripts) return;
+        tasksGeneratedRef.current = true;
+        generateTasks();
+    }, [detail, isAutoGenMeeting, generateTasks]);
+
     // Build allParticipants: host first (deduplicated), then other participants
     // Must be before early returns (rules of hooks)
     const allParticipants = useMemo<ArchiveParticipant[]>(() => {
@@ -524,38 +550,66 @@ export default function ArchiveDetailView({ meetingId, fetchWithAuth }: ArchiveD
                         </ArchiveSection>
                     )}
 
-                    {detail.actionItems.length > 0 ? (
-                        <ArchiveSection title="Action Items">
-                            {groupActionItemsByAgenda(detail).map((group) => (
-                                <div key={group.key} style={{ marginBottom: "0.9rem" }}>
-                                    <div style={{ display: "flex", alignItems: "center", gap: "0.45rem", marginBottom: "0.4rem" }}>
-                                        <span style={{ fontSize: "0.75rem", fontWeight: 600, color: "var(--text-secondary)" }}>{group.title}</span>
-                                        <span className="chip chip-blue" style={{ fontSize: "0.5625rem" }}>{group.items.length}</span>
-                                    </div>
-                                    {group.items.map(item => (
-                                        <div key={item.id} className="glass-card" style={{ padding: "8px 12px", marginBottom: "6px" }}>
-                                            <div style={{ display: "flex", alignItems: "center", gap: "6px", fontSize: "0.8125rem" }}>
-                                                <span className={`chip ${item.status === "verified" ? "chip-emerald" : "chip-amber"}`} style={{ fontSize: "0.5625rem" }}>
-                                                    {item.status}
-                                                </span>
-                                                <span style={{ fontWeight: 500 }}>{item.title}</span>
-                                                <span style={{ color: "var(--text-muted)", marginLeft: "auto", fontSize: "0.75rem" }}>{item.assignee}</span>
-                                                {item.source === "ai-extracted" && (
-                                                    <span className="chip chip-purple" style={{ fontSize: "0.5rem" }}>AI</span>
-                                                )}
+                    {(() => {
+                        const tasks = detail.tasks || [];
+                        const hasTranscripts = Object.keys(detail.transcriptsByAgenda || {}).length > 0;
+                        if (tasks.length === 0 && !generatingTasks && !hasTranscripts) return null;
+                        const groups = groupTasksByAgenda(detail);
+                        return (
+                            <ArchiveSection title="Tasks">
+                                {tasks.length > 0 ? (
+                                    groups.length > 1 ? (
+                                        groups.map((group) => (
+                                            <div key={group.key} style={{ marginBottom: "1.1rem" }}>
+                                                <div style={{ display: "flex", alignItems: "center", gap: "0.45rem", marginBottom: "0.4rem" }}>
+                                                    <span style={{ fontSize: "0.75rem", fontWeight: 600, color: "var(--text-secondary)" }}>{group.title}</span>
+                                                    <span className="chip chip-blue" style={{ fontSize: "0.5625rem" }}>{group.items.length}</span>
+                                                </div>
+                                                <ArchiveTaskTable
+                                                    tasks={group.items}
+                                                    participants={allParticipants}
+                                                    canEdit={isHost}
+                                                    fetchWithAuth={fetchWithAuth}
+                                                    apiBase={API_BASE}
+                                                    onTaskUpdated={(next) => {
+                                                        setDetail(prev => {
+                                                            if (!prev) return prev;
+                                                            const merged = (prev.tasks || []).map(t => t.id === next.id ? next : t);
+                                                            return { ...prev, tasks: merged, actionItems: merged };
+                                                        });
+                                                    }}
+                                                />
                                             </div>
-                                        </div>
-                                    ))}
-                                </div>
-                            ))}
-                        </ArchiveSection>
-                    ) : (Object.keys(detail.transcriptsByAgenda).length > 0 && (
-                        <ArchiveSection title="Action Items">
-                            <button className="btn btn-sm btn-primary" onClick={extractActionItems} disabled={extractingActions}>
-                                {extractingActions ? "Extracting..." : "Extract Action Items from Transcript"}
-                            </button>
-                        </ArchiveSection>
-                    ))}
+                                        ))
+                                    ) : (
+                                        <ArchiveTaskTable
+                                            tasks={tasks}
+                                            participants={allParticipants}
+                                            canEdit={isHost}
+                                            fetchWithAuth={fetchWithAuth}
+                                            apiBase={API_BASE}
+                                            onTaskUpdated={(next) => {
+                                                setDetail(prev => {
+                                                    if (!prev) return prev;
+                                                    const merged = (prev.tasks || []).map(t => t.id === next.id ? next : t);
+                                                    return { ...prev, tasks: merged, actionItems: merged };
+                                                });
+                                            }}
+                                        />
+                                    )
+                                ) : generatingTasks ? (
+                                    <div className="archive-detail-summary-loading" role="status">
+                                        <span className="archive-searching-loading-spinner" aria-hidden />
+                                        <span className="archive-searching-loading-text">Generating tasks</span>
+                                    </div>
+                                ) : (
+                                    <div style={{ color: "var(--text-muted)", fontSize: "0.8125rem" }}>
+                                        No tasks were captured for this meeting.
+                                    </div>
+                                )}
+                            </ArchiveSection>
+                        );
+                    })()}
 
                     {detail.pins.length > 0 && (
                         <ArchiveSection title="Resource Pins">

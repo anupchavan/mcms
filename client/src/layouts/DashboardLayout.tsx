@@ -46,7 +46,7 @@ export interface DashboardStats {
     [key: string]: unknown;
 }
 
-export interface MyActionItems {
+export interface MyTasks {
     assignedToMe: any[];
     assignedByMe: any[];
 }
@@ -57,8 +57,8 @@ export interface DashboardLayoutContext {
     refreshMeetings: () => Promise<void>;
     dashboardStats: DashboardStats | null;
     refreshDashboardStats: () => Promise<void>;
-    myActionItems: MyActionItems;
-    refreshMyActionItems: () => Promise<void>;
+    myTasks: MyTasks;
+    refreshMyTasks: () => Promise<void>;
     openCreateMeetingModal: () => void;
     openLocationModal: (address: string) => void;
     openPoll: (meetingId: string) => void;
@@ -84,7 +84,7 @@ export default function DashboardLayout() {
 
     const [meetings, setMeetings] = useState<AppMeeting[]>([]);
     const [dashboardStats, setDashboardStats] = useState<DashboardStats | null>(null);
-    const [myActionItems, setMyActionItems] = useState<MyActionItems>({
+    const [myTasks, setMyTasks] = useState<MyTasks>({
         assignedToMe: [],
         assignedByMe: [],
     });
@@ -112,42 +112,47 @@ export default function DashboardLayout() {
         } catch (err) { console.error("Failed to fetch dashboard stats:", err); }
     }, [fetchWithAuth]);
 
-    const refreshMyActionItems = useCallback(async () => {
+    const refreshMyTasks = useCallback(async () => {
         try {
-            const res = await fetchWithAuth(`${API_BASE}/action-items/mine/overview`);
+            const res = await fetchWithAuth(`${API_BASE}/tasks/mine/overview`);
             if (res.ok) {
                 const data = await res.json();
-                setMyActionItems({
+                setMyTasks({
                     assignedToMe: Array.isArray(data.assignedToMe) ? data.assignedToMe : [],
                     assignedByMe: Array.isArray(data.assignedByMe) ? data.assignedByMe : [],
                 });
             }
-        } catch (err) { console.error("Failed to fetch my action items:", err); }
+        } catch (err) { console.error("Failed to fetch my tasks:", err); }
     }, [fetchWithAuth]);
 
     useEffect(() => {
         refreshMeetings();
         refreshDashboardStats();
-        refreshMyActionItems();
-    }, [refreshMeetings, refreshDashboardStats, refreshMyActionItems]);
+        refreshMyTasks();
+    }, [refreshMeetings, refreshDashboardStats, refreshMyTasks]);
 
     useEffect(() => {
         if (typeof document !== "undefined") document.documentElement.setAttribute("data-theme", theme);
         if (typeof window !== "undefined") window.localStorage.setItem("theme", theme);
     }, [theme]);
 
-    // Listen for action-item notifications globally so the tasks page stays fresh.
+    // Listen for task notifications globally so the tasks page stays fresh.
     useEffect(() => {
         if (!socket) return;
         const handler = (notif: any) => {
-            if (["action_item_assigned", "action_item_completion_submitted", "action_item_verified",
-                 "action_item_rejected", "action_item_feedback"].includes(notif.type)) {
-                refreshMyActionItems();
+            if ([
+                'task_assigned', 'task_completion_submitted', 'task_verified',
+                'task_rejected', 'task_feedback',
+                // Legacy notification types — kept so older notifications still trigger a refresh.
+                'action_item_assigned', 'action_item_completion_submitted', 'action_item_verified',
+                'action_item_rejected', 'action_item_feedback',
+            ].includes(notif.type)) {
+                refreshMyTasks();
             }
         };
         socket.on("notification", handler);
         return () => { socket.off("notification", handler); };
-    }, [socket, refreshMyActionItems]);
+    }, [socket, refreshMyTasks]);
 
     // When a meeting ends server-side and we get notified, refresh the list.
     useEffect(() => {
@@ -237,15 +242,15 @@ export default function DashboardLayout() {
         refreshMeetings,
         dashboardStats,
         refreshDashboardStats,
-        myActionItems,
-        refreshMyActionItems,
+        myTasks,
+        refreshMyTasks,
         openCreateMeetingModal,
         openLocationModal,
         openPoll,
         handleCreateMeeting,
     }), [
         fetchWithAuth, meetings, refreshMeetings, dashboardStats, refreshDashboardStats,
-        myActionItems, refreshMyActionItems, openCreateMeetingModal, openLocationModal,
+        myTasks, refreshMyTasks, openCreateMeetingModal, openLocationModal,
         openPoll, handleCreateMeeting,
     ]);
 

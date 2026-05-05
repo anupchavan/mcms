@@ -898,7 +898,7 @@ export default function ArchiveListView({ fetchWithAuth, onSelectMeeting }: Arch
             <header className="page-header">
                 <h2 className="page-header-title">Archives</h2>
                 <p className="page-header-description">
-                    Search and browse past meeting transcripts, summaries, and action items.
+                    Search and browse past meeting transcripts, summaries, and tasks.
                 </p>
             </header>
 

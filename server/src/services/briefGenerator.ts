@@ -1,25 +1,25 @@
 import Agenda = require('../modules/agenda/agenda.schema');
-import ActionItem = require('../modules/action-item/action-item.schema');
+import Task = require('../modules/task/task.schema');
 import { isMeetingInviteSegment } from '../utils/meetingInviteId';
 
 async function generateBrief(meeting: any, callAISummarize: any) {
     const agenda = await Agenda.findOne({ meetingId: meeting._id });
     const agendaItems = agenda ? (agenda as any).items : [];
 
-    const pendingActions = await ActionItem.find({
+    const pendingTasks = await Task.find({
         status: { $in: ['pending', 'in-progress', 'completed'] },
-    }).sort({ createdAt: -1 }).limit(5).populate('assignee', 'name');
+    }).sort({ createdAt: -1 }).limit(5).populate('assignee', 'name').populate('assignees', 'name');
 
     const context = {
         meetingTitle: meeting.title,
         meetingDate: meeting.confirmedDate || meeting.date,
         meetingTime: meeting.confirmedTime || meeting.time,
         agendaItems: agendaItems.map((i: any) => ({ title: i.title, duration: i.duration })),
-        pendingActions: pendingActions.map((a: any) => ({
-            title: a.title,
-            assignee: a.assigneeName || a.assignee?.name || 'Unassigned',
-            status: a.status,
-            deadline: a.deadline,
+        pendingTasks: pendingTasks.map((t: any) => ({
+            title: t.title,
+            assignee: (t.assignees?.[0]?.name) || t.assigneeName || t.assignee?.name || 'Unassigned',
+            status: t.status,
+            deadline: t.deadline,
         })),
     };
 
@@ -39,16 +39,16 @@ async function generateBrief(meeting: any, callAISummarize: any) {
         ? agendaItems.map((item: any, idx: number) => `${idx + 1}. ${item.title} (${item.duration} min)`).join('\n')
         : 'No agenda items set yet.';
 
-    const actionList = pendingActions.length > 0
-        ? pendingActions.map((a: any) => `- ${a.title} (${(a as any).assigneeName || (a as any).assignee?.name || 'Unassigned'}) — ${a.status}`).join('\n')
-        : 'No pending action items.';
+    const taskList = pendingTasks.length > 0
+        ? pendingTasks.map((t: any) => `- ${t.title} (${(t as any).assignees?.[0]?.name || (t as any).assigneeName || (t as any).assignee?.name || 'Unassigned'}) — ${t.status}`).join('\n')
+        : 'No pending tasks.';
 
     return {
         meetingTitle: meeting.title,
         date: context.meetingDate,
         time: context.meetingTime,
         agendaSummary: agendaList,
-        pendingActionsSummary: actionList,
+        pendingTasksSummary: taskList,
         aiSummary: aiSummary || null,
     };
 }
@@ -72,8 +72,8 @@ function formatBriefEmail(brief: any, meetingSlugForUrl: string | null | undefin
     <h3 style="margin:20px 0 8px;color:#4f46e5">Agenda</h3>
     <pre style="background:#f9fafb;padding:12px;border-radius:8px;font-size:13px;white-space:pre-wrap">${brief.agendaSummary}</pre>
 
-    <h3 style="margin:20px 0 8px;color:#4f46e5">Pending Action Items</h3>
-    <pre style="background:#f9fafb;padding:12px;border-radius:8px;font-size:13px;white-space:pre-wrap">${brief.pendingActionsSummary}</pre>
+    <h3 style="margin:20px 0 8px;color:#4f46e5">Pending Tasks</h3>
+    <pre style="background:#f9fafb;padding:12px;border-radius:8px;font-size:13px;white-space:pre-wrap">${brief.pendingTasksSummary}</pre>
 
     ${brief.aiSummary ? `<h3 style="margin:20px 0 8px;color:#4f46e5">AI Summary</h3>
     <p style="font-size:14px">${JSON.stringify(brief.aiSummary)}</p>` : ''}

@@ -85,14 +85,14 @@ interface VideoAreaProps {
   /** @deprecated Panel toggling lives in MeetingDock now. Kept optional for back-compat. */
   onToggleRightPanel?: () => void;
   onMeetingEnded?: () => void;
-  onTriggerAddActionItem?: () => void;
+  onTriggerAddTask?: () => void;
   onTriggerAddAgendaItem?: () => void;
   agendaItems?: any[];
   minutesItems?: any[];
-  actionItems?: any[];
+  tasks?: any[];
   onAgendaChange?: (items: any[]) => void;
   onMinutesChange?: (items: any[]) => void;
-  onRefreshActionItems?: () => void;
+  onRefreshTasks?: () => void;
   onParticipantsUpdate?: (participants: any[]) => void;
   /** Whether the current user is the meeting host */
   isHost?: boolean;
@@ -327,14 +327,14 @@ export default function VideoArea({
   onToggleAgendaPanel: _onToggleAgendaPanel,
   onToggleRightPanel: _onToggleRightPanel,
   onMeetingEnded,
-  onTriggerAddActionItem,
+  onTriggerAddTask,
   onTriggerAddAgendaItem,
   agendaItems = [],
   minutesItems = [],
-  actionItems = [],
+  tasks = [],
   onAgendaChange,
   onMinutesChange,
-  onRefreshActionItems,
+  onRefreshTasks,
   onParticipantsUpdate,
   isHost = false,
   canJoin = true,
@@ -364,12 +364,12 @@ export default function VideoArea({
     return `${h > 0 ? h.toString().padStart(2, '0') + ':' : ''}${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
   };
 
-  const handleAddActionItem = async (type: string) => {
+  const handleAddTask = async (type: string) => {
     if (!meetingId || !isHost) return;
-    const title = activeNote.trim() || `Action item: ${type}`;
+    const title = activeNote.trim() || `Task: ${type}`;
     const activeAgendaItem = agendaItems.find((item) => ['active', 'in-progress'].includes(String(item.status || '').toLowerCase()));
     try {
-      const res = await (fetch as any)(`${API_BASE}/action-items/${meetingId}`, {
+      const res = await (fetch as any)(`${API_BASE}/tasks/${meetingId}`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -378,12 +378,12 @@ export default function VideoArea({
         body: JSON.stringify({ title, category: type, agendaItemId: activeAgendaItem?.id || null }),
       });
       if (res.ok) {
-        onRefreshActionItems?.();
+        onRefreshTasks?.();
         setActiveNote("");
-        triggerToast("Action item saved");
+        triggerToast("Task saved");
       }
     } catch (err) {
-      console.error("Failed to save action item:", err);
+      console.error("Failed to save task:", err);
     }
   };
 
@@ -514,12 +514,12 @@ export default function VideoArea({
     { key: 'r', handler: () => isHost && hasJoined && hostControlsRef.current?.toggleRecording(), allowInInput: false },
     { key: 'c', handler: () => hasJoined && toggleVideo(), allowInInput: false },
     { key: 'a', handler: () => isHost && onTriggerAddAgendaItem?.(), allowInInput: false },
-    { key: 'a', shift: true, handler: () => isHost && onTriggerAddActionItem?.(), allowInInput: false },
+    { key: 'a', shift: true, handler: () => isHost && onTriggerAddTask?.(), allowInInput: false },
     { key: 'Enter', handler: () => !hasJoined && canJoin && handleJoin(), allowInInput: false },
     { key: 'l', mod: true, shift: true, handler: () => hasJoined && handleLeave(), allowInInput: false },
     // End meeting shortcut only fires for the host
     { key: 'e', mod: true, shift: true, handler: () => isHost && hasJoined && hostControlsRef.current?.endMeeting(), allowInInput: false },
-  ], [hasJoined, isHost, canJoin, toggleAudio, toggleVideo, handleJoin, handleLeave, onTriggerAddActionItem, onTriggerAddAgendaItem]);
+  ], [hasJoined, isHost, canJoin, toggleAudio, toggleVideo, handleJoin, handleLeave, onTriggerAddTask, onTriggerAddAgendaItem]);
 
   useKeyboardShortcuts(meetingShortcuts);
 
@@ -824,14 +824,14 @@ export default function VideoArea({
                     <div className="focus-note-card">
                       <textarea
                         className="focus-note-input"
-                        placeholder={isHost ? "Type a note, decision, or action item..." : "Type a note or parking-lot item..."}
+                        placeholder={isHost ? "Type a note, decision, or task..." : "Type a note or parking-lot item..."}
                         value={activeNote}
                         onChange={(e) => setActiveNote(e.target.value)}
                       ></textarea>
                       <div className="focus-note-actions">
-                        {isHost && <button className="focus-note-btn" onClick={() => handleAddActionItem('Technical')}>+ Technical</button>}
-                        {isHost && <button className="focus-note-btn" onClick={() => handleAddActionItem('Decision')}>+ Decision</button>}
-                        {isHost && <button className="focus-note-btn" onClick={() => handleAddActionItem('Follow-up')}>+ Follow-up</button>}
+                        {isHost && <button className="focus-note-btn" onClick={() => handleAddTask('Technical')}>+ Technical</button>}
+                        {isHost && <button className="focus-note-btn" onClick={() => handleAddTask('Decision')}>+ Decision</button>}
+                        {isHost && <button className="focus-note-btn" onClick={() => handleAddTask('Follow-up')}>+ Follow-up</button>}
                         <button className="focus-note-btn" onClick={handleAddParkingLot}>+ Parking</button>
                         <button className="focus-note-btn primary" onClick={handleAddNote}>Save Note</button>
                       </div>
@@ -863,12 +863,12 @@ export default function VideoArea({
                   </div>
 
                   <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
-                    <div className="focus-section-label">Action Items · {actionItems.length}</div>
+                    <div className="focus-section-label">Tasks · {tasks.length}</div>
                     <div className="focus-action-feed">
-                      {actionItems.length === 0 ? (
-                        <div className="focus-empty-state">No action items captured yet</div>
+                      {tasks.length === 0 ? (
+                        <div className="focus-empty-state">No tasks captured yet</div>
                       ) : (
-                        actionItems.map((ai, idx) => (
+                        tasks.map((ai, idx) => (
                           <div key={ai.id || idx} className={`focus-action-card ${ai.category?.toLowerCase()}`}>
                             <div className="focus-ac-top">
                               <span className={`focus-ac-type ${ai.category?.toLowerCase()}`}>{ai.category}</span>
