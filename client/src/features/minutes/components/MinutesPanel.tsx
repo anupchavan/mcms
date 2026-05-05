@@ -8,18 +8,22 @@ import {
 } from '@hugeicons/core-free-icons';
 
 export interface MinutesItem {
-  id: string;
+  id?: string;
+  _id?: string;
   title: string;
   duration?: number;
-  status: 'active' | 'completed' | 'pending';
+  status?: string;
 }
 
 interface MinutesPanelProps {
   minutesItems: MinutesItem[];
+  /** Called when the user submits a new minute item — receives the title string. */
+  onAddItem?: (title: string) => void;
+  /** @deprecated Use onAddItem instead */
   onItemChange?: (items: MinutesItem[]) => void;
 }
 
-const MinutesPanel: FC<MinutesPanelProps> = ({ minutesItems = [], onItemChange }) => {
+const MinutesPanel: FC<MinutesPanelProps> = ({ minutesItems = [], onAddItem, onItemChange }) => {
   const [isAdding, setIsAdding] = useState(false);
   const [newTitle, setNewTitle] = useState('');
 
@@ -27,13 +31,18 @@ const MinutesPanel: FC<MinutesPanelProps> = ({ minutesItems = [], onItemChange }
 
   const handleAdd = () => {
     if (!newTitle.trim()) return;
-    const newItem: MinutesItem = {
-      id: Math.random().toString(36).substr(2, 9),
-      title: newTitle.trim(),
-      duration: 0,
-      status: 'pending'
-    };
-    onItemChange?.([...items, newItem]);
+    if (onAddItem) {
+      onAddItem(newTitle.trim());
+    } else {
+      // Legacy fallback: update locally via onItemChange
+      const newItem: MinutesItem = {
+        id: Math.random().toString(36).substr(2, 9),
+        title: newTitle.trim(),
+        duration: 0,
+        status: 'pending',
+      };
+      onItemChange?.([...items, newItem]);
+    }
     setNewTitle('');
     setIsAdding(false);
   };
@@ -96,35 +105,30 @@ const MinutesPanel: FC<MinutesPanelProps> = ({ minutesItems = [], onItemChange }
             No minute items yet. Add items as the meeting progresses.
           </div>
         ) : (
-          items.map(item => (
-            <div key={item.id} className={`agenda-item ${item.status}`} style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: '0.75rem',
-              padding: '0.75rem',
-              background: 'var(--bg-elevated)',
-              borderRadius: 'var(--radius-sm)',
-              marginBottom: '0.5rem',
-              border: item.status === 'active' ? '1px solid var(--primary)' : '1px solid var(--border)',
-              cursor: 'pointer',
-              transition: 'background-color 0.2s, border-color 0.2s'
-            }}
-            onClick={() => {
-              const newStatus = item.status === 'pending' ? 'active' : item.status === 'active' ? 'completed' : 'pending';
-              const updatedItems = items.map(i => i.id === item.id ? { ...i, status: newStatus as MinutesItem['status'] } : i);
-              onItemChange?.(updatedItems);
-            }}
-            title="Click to change status (Pending -> Active -> Completed)"
-            >
-              <Icon icon={Notebook01Icon} size={16} />
-              <div style={{ flex: 1 }}>
-                <div style={{ fontSize: '0.875rem', fontWeight: 500, textDecoration: item.status === 'completed' ? 'line-through' : 'none', color: item.status === 'completed' ? 'var(--text-secondary)' : 'var(--text-primary)' }}>{item.title}</div>
+          items.map((item, index) => {
+            const itemKey = item.id || item._id || String(index);
+            const status = item.status || 'pending';
+            return (
+              <div key={itemKey} className={`agenda-item ${status}`} style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '0.75rem',
+                padding: '0.75rem',
+                background: 'var(--bg-elevated)',
+                borderRadius: 'var(--radius-sm)',
+                marginBottom: '0.5rem',
+                border: '1px solid var(--border)',
+              }}>
+                <Icon icon={Notebook01Icon} size={16} />
+                <div style={{ flex: 1 }}>
+                  <div style={{ fontSize: '0.875rem', fontWeight: 500, color: 'var(--text-primary)' }}>{item.title}</div>
+                </div>
+                <div className="chip chip-amber" style={{ fontSize: '0.625rem' }}>
+                  unassigned
+                </div>
               </div>
-              <div className={`chip chip-${item.status === 'active' ? 'blue' : item.status === 'completed' ? 'emerald' : 'amber'}`} style={{ fontSize: '0.625rem' }}>
-                {item.status}
-              </div>
-            </div>
-          ))
+            );
+          })
         )}
       </div>
     </div>
