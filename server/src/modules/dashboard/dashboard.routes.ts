@@ -1,7 +1,17 @@
 import express from 'express';
 const router = express.Router();
 import Attendance = require('../attendance/attendance.schema');
-import ActionItem = require('../action-item/action-item.schema');
+import Task = require('../task/task.schema');
+import Transcript = require('../transcript/transcript.schema');
+
+/** Used to scope speaking-time aggregation to the user's transcripts (case-insensitive name match). */
+function escapeRegex(s: string): string {
+    return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+/** Words-per-minute baseline for converting transcript word counts into estimated speaking minutes.
+ * 150 wpm is a typical conversational pace; we don't have endTime on segments so this is the best proxy. */
+const WORDS_PER_MINUTE = 150;
 
 export = function ({ Meeting, User, protect, usingMongo }: any) {
 
@@ -13,10 +23,9 @@ export = function ({ Meeting, User, protect, usingMongo }: any) {
                     user: userName, role: 'Participant',
                     streak: 0, totalMeetings: 0, totalHours: 0,
                     punctualityRate: 100, tasksCompleted: 0, tasksTotal: 0,
-                    badges: [{ name: 'Getting Started', icon: '🌱', description: 'Keep attending meetings!' }],
+                    badges: [{ name: 'Getting Started', iconKey: 'sapling', description: 'Keep attending meetings!' }],
                     weeklyHeatmap: [{ day: 'Mon', hours: 0 }, { day: 'Tue', hours: 0 }, { day: 'Wed', hours: 0 }, { day: 'Thu', hours: 0 }, { day: 'Fri', hours: 0 }],
                     monthlyAttendance: [{ week: 'W1', attended: 0, total: 0 }, { week: 'W2', attended: 0, total: 0 }, { week: 'W3', attended: 0, total: 0 }, { week: 'W4', attended: 0, total: 0 }],
-                    sentimentProfile: { positive: 50, neutral: 40, negative: 10 },
                     speakingTime: 0, avgMeetingDuration: 0,
                 });
             }
@@ -57,9 +66,11 @@ export = function ({ Meeting, User, protect, usingMongo }: any) {
 
             const streak = Math.floor(maxStreak / 3);
 
-            const actionItems = await ActionItem.find({ assignee: userId });
-            const tasksTotal = actionItems.length;
-            const tasksCompleted = actionItems.filter((i: any) => i.status === 'verified').length;
+            const tasks = await Task.find({
+                $or: [{ assignees: userId }, { assignee: userId }],
+            });
+            const tasksTotal = tasks.length;
+            const tasksCompleted = tasks.filter((i: any) => i.status === 'verified').length;
 
             const dayMap: Record<number, string> = { 0: 'Sun', 1: 'Mon', 2: 'Tue', 3: 'Wed', 4: 'Thu', 5: 'Fri', 6: 'Sat' };
             const heatmap: Record<string, number> = { Mon: 0, Tue: 0, Wed: 0, Thu: 0, Fri: 0 };
@@ -98,18 +109,46 @@ export = function ({ Meeting, User, protect, usingMongo }: any) {
                 week: `W${i + 1}`, attended: weekBuckets[i], total: weekTotals[i] || weekBuckets[i],
             }));
 
-            const badges: any[] = [];
+            // Speaking time estimate: word count of user's transcript segments / WORDS_PER_MINUTE.
+            // Server doesn't currently persist segment end times, so we use an industry-typical conversational pace as a proxy.
+            let speakingTime = 0;
+            const meetingIds = meetings.map((m: any) => m._id);
+            if (meetingIds.length > 0 && userName && userName !== 'User') {
+                const userSegments = await Transcript.find({
+                    meetingId: { $in: meetingIds },
+                    speaker: new RegExp(`^${escapeRegex(userName)}$`, 'i'),
+                }).select('text').lean();
+                let totalWords = 0;
+                for (const seg of userSegments) {
+                    const words = String((seg as any).text || '').trim().split(/\s+/).filter(Boolean).length;
+                    totalWords += words;
+                }
+                speakingTime = Math.round(totalWords / WORDS_PER_MINUTE);
+            }
+
+            const avgMeetingDuration = totalMeetings > 0 ? Math.round((totalHours / totalMeetings) * 60) : 0;
+
+            const badges: Array<{ name: string; iconKey: string; description: string }> = [];
             if (tasksTotal > 0 && (tasksCompleted / tasksTotal) >= 0.9) {
-                badges.push({ name: 'Action Hero', icon: '🏆', description: '90%+ tasks on time' });
+                badges.push({ name: 'Action Hero', iconKey: 'trophy', description: '90%+ tasks on time' });
             }
             if (maxStreak >= 7) {
-                badges.push({ name: '7-Day Streak', icon: '🔥', description: '7 consecutive on-time meetings' });
+                badges.push({ name: '7-Day Streak', iconKey: 'flame', description: '7 consecutive on-time meetings' });
             }
             if (totalMeetings >= 50) {
-                badges.push({ name: 'Meeting Veteran', icon: '⭐', description: '50+ meetings attended' });
+                badges.push({ name: 'Meeting Veteran', iconKey: 'star', description: '50+ meetings attended' });
+            }
+            if (punctualityRate >= 95 && attendanceRecords.length >= 5) {
+                badges.push({ name: 'Always On Time', iconKey: 'clock', description: '95%+ punctuality across recent meetings' });
+            }
+            if (speakingTime > 0 && avgMeetingDuration > 0) {
+                const ratio = (speakingTime / Math.max(1, avgMeetingDuration * Math.max(1, totalMeetings))) * 100;
+                if (ratio >= 25 && ratio <= 50) {
+                    badges.push({ name: 'Engaged Speaker', iconKey: 'mic', description: 'Healthy share-of-voice in meetings' });
+                }
             }
             if (badges.length === 0) {
-                badges.push({ name: 'Getting Started', icon: '🌱', description: 'Keep attending meetings!' });
+                badges.push({ name: 'Getting Started', iconKey: 'sapling', description: 'Keep attending meetings!' });
             }
 
             res.json({
@@ -117,8 +156,7 @@ export = function ({ Meeting, User, protect, usingMongo }: any) {
                 streak: streak, totalMeetings, totalHours: Math.round(totalHours * 10) / 10,
                 punctualityRate, tasksCompleted, tasksTotal,
                 badges, weeklyHeatmap, monthlyAttendance,
-                sentimentProfile: { positive: 50, neutral: 40, negative: 10 },
-                speakingTime: 0, avgMeetingDuration: totalMeetings > 0 ? Math.round((totalHours / totalMeetings) * 60) : 0,
+                speakingTime, avgMeetingDuration,
             });
         } catch (error: any) {
             console.error('Dashboard stats error:', error);

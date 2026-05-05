@@ -91,13 +91,13 @@ function buildRecommendations(stats: DashboardStats): Recommendation[] {
         recs.push({
             id: 'task-strong',
             icon: Target01Icon,
-            text: `Strong task follow-through: you've completed ${Math.round(taskRatio * 100)}% of action items assigned to you.`,
+            text: `Strong task follow-through: you've completed ${Math.round(taskRatio * 100)}% of tasks assigned to you.`,
         });
     } else if (taskRatio != null && taskRatio < 0.5 && stats.tasksTotal >= 3) {
         recs.push({
             id: 'task-weak',
             icon: Target01Icon,
-            text: `Only ${Math.round(taskRatio * 100)}% of your action items are verified — review the pending ones to keep momentum.`,
+            text: `Only ${Math.round(taskRatio * 100)}% of your tasks are verified — review the pending ones to keep momentum.`,
         });
     }
 

@@ -1,5 +1,5 @@
-import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
-import { createPortal } from 'react-dom';
+import React, { useState, useEffect, useRef, useCallback, useMemo } from "react";
+import { TaskFeedbackModal, type TaskFeedbackModalState } from "./TaskFeedbackModal";
 import Icon from '../../../shared/components/Icon';
 import ShortcutTooltip from '../../../shared/components/ShortcutTooltip';
 import { useAuth } from '../../../stores/AuthContext';
@@ -7,7 +7,7 @@ import {
     CheckmarkCircle01Icon, Clock01Icon, AlertCircleIcon,
     ArrowRight01Icon,
     Add01Icon, Delete02Icon, SparklesIcon, PencilEdit02Icon,
-    Video01Icon, MessageAdd01Icon, UserIcon,
+    Video01Icon, MessageAdd01Icon,
     Calendar02Icon,
 } from '@hugeicons/core-free-icons';
 
@@ -51,7 +51,7 @@ function formatDateOnlyDisplay(dateValue: string | undefined): string {
     return `${year}-${month}-${day}`;
 }
 
-interface ActionItem {
+interface Task {
     id?: string;
     _id?: string;
     title: string;
@@ -79,15 +79,15 @@ interface AgendaItemLink {
     status?: string;
 }
 
-interface ActionItemsProps {
-    items: ActionItem[];
+interface TasksProps {
+    items: Task[];
     sectionTitle?: string;
     emptyMessage?: string;
     meetingId?: string;
     meetingHostId?: string;
     fetchWithAuth?: (url: string, options?: RequestInit) => Promise<Response>;
     onRefresh?: () => void;
-    addActionItemTrigger?: number;
+    addTaskTrigger?: number;
     onAddTriggered?: () => void;
     participants?: any[];
     agendaItems?: AgendaItemLink[];
@@ -99,15 +99,15 @@ function getPreferredAgendaItemId(agendaItems: AgendaItemLink[]): string {
     return activeItem?.id || agendaItems[0].id || '';
 }
 
-export default function ActionItems({ items, sectionTitle = 'Action Items', emptyMessage = 'No action items found.', meetingId, meetingHostId, fetchWithAuth, onRefresh, addActionItemTrigger, onAddTriggered, participants, agendaItems = [] }: ActionItemsProps) {
+export default function Tasks({ items, sectionTitle = 'Tasks', emptyMessage = 'No tasks found.', meetingId, meetingHostId, fetchWithAuth, onRefresh, addTaskTrigger, onAddTriggered, participants, agendaItems = [] }: TasksProps) {
     const { user } = useAuth() || {};
     const currentUserId = String(user?.id || user?._id || '');
-    const getItemHostId = (item: ActionItem) => String(item.meetingHostId || meetingHostId || '');
-    const isHostForItem = (item: ActionItem) => Boolean(currentUserId) && getItemHostId(item) === currentUserId;
-    const isAssigneeForItem = (item: ActionItem) => Boolean(currentUserId) && String(item.assigneeId || '') === currentUserId;
-    const canEditStatus = (item: ActionItem) => isHostForItem(item) || (isAssigneeForItem(item) && item.status !== 'verified');
-    const canEditDetails = (item: ActionItem) => isHostForItem(item);
-    const getEditableStatuses = (item: ActionItem) => isHostForItem(item) ? HOST_STATUSES : ASSIGNEE_STATUSES;
+    const getItemHostId = (item: Task) => String(item.meetingHostId || meetingHostId || '');
+    const isHostForItem = (item: Task) => Boolean(currentUserId) && getItemHostId(item) === currentUserId;
+    const isAssigneeForItem = (item: Task) => Boolean(currentUserId) && String(item.assigneeId || '') === currentUserId;
+    const canEditStatus = (item: Task) => isHostForItem(item) || (isAssigneeForItem(item) && item.status !== 'verified');
+    const canEditDetails = (item: Task) => isHostForItem(item);
+    const getEditableStatuses = (item: Task) => isHostForItem(item) ? HOST_STATUSES : ASSIGNEE_STATUSES;
     const canCreateItems = Boolean(meetingId) && Boolean(currentUserId) && String(meetingHostId || '') === currentUserId;
     const agendaLookup = useMemo(() => {
         const entries: [string, string][] = agendaItems.map((item) => [item.id, item.title]);
@@ -139,7 +139,7 @@ export default function ActionItems({ items, sectionTitle = 'Action Items', empt
             setNewAgendaItemId(getPreferredAgendaItemId(agendaItems));
         }
     }, [agendaItems, newAgendaItemId]);
-    const [editData, setEditData] = useState<Partial<ActionItem> | null>(null);
+    const [editData, setEditData] = useState<Partial<Task> | null>(null);
     const [editingAgendaItems, setEditingAgendaItems] = useState<AgendaItemLink[] | null>(null);
 
     const groupedSections = useMemo(() => {
@@ -161,7 +161,7 @@ export default function ActionItems({ items, sectionTitle = 'Action Items', empt
         return groups.length > 0 ? groups : [{ key: '_all', title: null, items }];
     }, [agendaItems, agendaLookup, items]);
 
-    const startEditing = (item: ActionItem) => {
+    const startEditing = (item: Task) => {
         setEditingId(item.id || item._id || null);
         // Ensure assignee is correctly setup for the update request
         setEditData({ ...item, agendaItemId: item.agendaItemId || '' });
@@ -183,15 +183,15 @@ export default function ActionItems({ items, sectionTitle = 'Action Items', empt
         setEditData(null);
     };
 
-    const handleUpdateField = (field: keyof ActionItem, value: any) => {
+    const handleUpdateField = (field: keyof Task, value: any) => {
         setEditData(prev => prev ? { ...prev, [field]: value } : null);
     };
     useEffect(() => {
-        if (canCreateItems && addActionItemTrigger && addActionItemTrigger > 0) {
+        if (canCreateItems && addTaskTrigger && addTaskTrigger > 0) {
             setAdding(true);
             onAddTriggered?.();
         }
-    }, [addActionItemTrigger, canCreateItems, onAddTriggered]);
+    }, [addTaskTrigger, canCreateItems, onAddTriggered]);
 
     const resetFields = () => {
         setNewTitle('');
@@ -221,7 +221,7 @@ export default function ActionItems({ items, sectionTitle = 'Action Items', empt
                 body.assigneeName = newAssignee.name;
             }
 
-            const res = await (fetchWithAuth || fetch)(`${API_BASE}/action-items/${meetingId}`, {
+            const res = await (fetchWithAuth || fetch)(`${API_BASE}/tasks/${meetingId}`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(body),
@@ -232,7 +232,7 @@ export default function ActionItems({ items, sectionTitle = 'Action Items', empt
                 onRefresh?.();
             }
         } catch (err) {
-            console.error('Failed to create action item:', err);
+            console.error('Failed to create task:', err);
         }
     };
 
@@ -246,15 +246,7 @@ export default function ActionItems({ items, sectionTitle = 'Action Items', empt
     };
 
     // ── Custom feedback modal state ──────────────────────────────────────────
-    const feedbackTextareaRef = useRef<HTMLTextAreaElement | null>(null);
-    const [feedbackModal, setFeedbackModal] = useState<{
-        title: string;
-        subtitle: string;
-        placeholder: string;
-        required: boolean;
-        defaultValue: string;
-        resolve: (value: string | null) => void;
-    } | null>(null);
+    const [feedbackModal, setFeedbackModal] = useState<TaskFeedbackModalState | null>(null);
 
     const openFeedbackPrompt = useCallback((
         title: string,
@@ -276,7 +268,7 @@ export default function ActionItems({ items, sectionTitle = 'Action Items', empt
         setFeedbackModal(prev => { prev?.resolve(value); return null; });
     }, []);
 
-    const getHostFeedback = async (item: ActionItem, nextStatus: string): Promise<string | null | undefined> => {
+    const getHostFeedback = async (item: Task, nextStatus: string): Promise<string | null | undefined> => {
         if (!isHostForItem(item)) return undefined;
         // Rejection: host sends completed item back to pending — note is required
         if (item.status === 'completed' && nextStatus === 'pending') {
@@ -294,7 +286,7 @@ export default function ActionItems({ items, sectionTitle = 'Action Items', empt
         // Verification: host can optionally add a note for the assignee
         if (item.status === 'completed' && nextStatus === 'verified') {
             const response = await openFeedbackPrompt(
-                'Verify Action Item',
+                'Verify Task',
                 `Optionally leave a note for ${item.assignee || 'the assignee'} along with your verification. Leave blank to skip.`,
                 'Great work! Add any optional remarks...',
                 { required: false },
@@ -305,7 +297,7 @@ export default function ActionItems({ items, sectionTitle = 'Action Items', empt
         return undefined;
     };
 
-    const handleStatusChange = async (item: ActionItem, newStatus: string) => {
+    const handleStatusChange = async (item: Task, newStatus: string) => {
         const itemId = item.id || item._id;
         if (!itemId) return;
         const hostFeedback = await getHostFeedback(item, newStatus);
@@ -313,7 +305,7 @@ export default function ActionItems({ items, sectionTitle = 'Action Items', empt
         try {
             const payload: any = { status: newStatus };
             if (typeof hostFeedback === 'string') payload.hostFeedback = hostFeedback;
-            const res = await (fetchWithAuth || fetch)(`${API_BASE}/action-items/${itemId}`, {
+            const res = await (fetchWithAuth || fetch)(`${API_BASE}/tasks/${itemId}`, {
                 method: 'PUT',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(payload),
@@ -350,7 +342,7 @@ export default function ActionItems({ items, sectionTitle = 'Action Items', empt
                 agendaItemId: editData.agendaItemId || null,
             };
             if (typeof hostFeedback === 'string') payload.hostFeedback = hostFeedback;
-            const res = await (fetchWithAuth || fetch)(`${API_BASE}/action-items/${itemId}`, {
+            const res = await (fetchWithAuth || fetch)(`${API_BASE}/tasks/${itemId}`, {
                 method: 'PUT',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(payload),
@@ -363,20 +355,20 @@ export default function ActionItems({ items, sectionTitle = 'Action Items', empt
             setEditData(null);
             onRefresh?.();
         } catch (err) {
-            console.error('Failed to update action item:', err);
+            console.error('Failed to update task:', err);
         }
     };
 
     const handleDelete = async (itemId: string) => {
         try {
-            await (fetchWithAuth || fetch)(`${API_BASE}/action-items/${itemId}`, { method: 'DELETE' });
+            await (fetchWithAuth || fetch)(`${API_BASE}/tasks/${itemId}`, { method: 'DELETE' });
             onRefresh?.();
         } catch (err) {
             console.error('Failed to delete:', err);
         }
     };
 
-    const handleSendFeedback = async (item: ActionItem) => {
+    const handleSendFeedback = async (item: Task) => {
         const note = await openFeedbackPrompt(
             'Send Note to Assignee',
             `Send a message to ${item.assignee || 'the assignee'} about "${item.title}".`,
@@ -389,7 +381,7 @@ export default function ActionItems({ items, sectionTitle = 'Action Items', empt
         const itemId = item.id || item._id;
         if (!itemId) return;
         try {
-            const res = await (fetchWithAuth || fetch)(`${API_BASE}/action-items/${itemId}`, {
+            const res = await (fetchWithAuth || fetch)(`${API_BASE}/tasks/${itemId}`, {
                 method: 'PUT',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ hostFeedback: trimmed }),
@@ -406,7 +398,7 @@ export default function ActionItems({ items, sectionTitle = 'Action Items', empt
 
     return (
         <>
-        <div className="action-items-section">
+        <div className="tasks-section">
             <div className="section-header">
                 <div className="section-title-container">
                     <span className="section-title">{sectionTitle}</span>
@@ -414,10 +406,10 @@ export default function ActionItems({ items, sectionTitle = 'Action Items', empt
                 </div>
             </div>
 
-            <div className="action-items-body">
-                <div className="action-items-list">
+            <div className="tasks-body">
+                <div className="tasks-list">
                     {items.length === 0 && (
-                        <div className="action-items-empty-state">{emptyMessage}</div>
+                        <div className="tasks-empty-state">{emptyMessage}</div>
                     )}
                     {groupedSections.map((group) => (
                         <div key={group.key} style={{ marginBottom: '0.85rem' }}>
@@ -435,7 +427,7 @@ export default function ActionItems({ items, sectionTitle = 'Action Items', empt
 
                                 if (isEditing && editData) {
                                     return (
-                                        <div key={item.id || item._id || index} className="action-item-card glass-card animate-in" style={{ animationDelay: `${index * 0.06}s` }}>
+                                        <div key={item.id || item._id || index} className="task-card glass-card animate-in" style={{ animationDelay: `${index * 0.06}s` }}>
                                             <input className="input-field" value={editData.title || ''} onChange={e => handleUpdateField('title', e.target.value)} style={{ marginBottom: '4px' }} placeholder="Title" />
                                             <div className="inline-form-row">
                                                 <select className="input-field" value={editData.category || 'Technical'} onChange={e => handleUpdateField('category', e.target.value)}>
@@ -500,7 +492,7 @@ export default function ActionItems({ items, sectionTitle = 'Action Items', empt
                                 return (
                                     <div
                                         key={item.id || item._id || index}
-                                        className="action-item-card glass-card animate-in"
+                                        className="task-card glass-card animate-in"
                                         style={{ animationDelay: `${index * 0.06}s` }}
                                     >
                                         <div className="ai-card-top">
@@ -637,7 +629,7 @@ export default function ActionItems({ items, sectionTitle = 'Action Items', empt
                         <div className="glass-card inline-form-card" onKeyDown={(e: React.KeyboardEvent) => { if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); setAdding(false); resetFields(); } }}>
                             <input
                                 className="input-field"
-                                placeholder="Action item title..."
+                                placeholder="Task title..."
                                 value={newTitle}
                                 onChange={(e: React.ChangeEvent<HTMLInputElement>) => setNewTitle(e.target.value)}
                                 onKeyDown={(e: React.KeyboardEvent) => {
@@ -685,9 +677,9 @@ export default function ActionItems({ items, sectionTitle = 'Action Items', empt
                                     ))}
                                 </select>
                             )}
-                            <div className="action-item-deadline-block">
-                                <span className="action-item-deadline-label">Deadline</span>
-                                <div className="action-item-deadline-row">
+                            <div className="task-deadline-block">
+                                <span className="task-deadline-label">Deadline</span>
+                                <div className="task-deadline-row">
                                     <input
                                         type="date"
                                         className="input-field"
@@ -695,7 +687,7 @@ export default function ActionItems({ items, sectionTitle = 'Action Items', empt
                                         onChange={(e: React.ChangeEvent<HTMLInputElement>) => setNewDeadlineDate(e.target.value)}
                                         aria-label="Deadline date"
                                     />
-                                    <label className="action-item-time-toggle">
+                                    <label className="task-time-toggle">
                                         <input
                                             type="checkbox"
                                             checked={newDeadlineIncludeTime}
@@ -727,7 +719,7 @@ export default function ActionItems({ items, sectionTitle = 'Action Items', empt
                                     style={{ margin: '0 var(--lk-size-sm)', width: 'calc(100% - 2 * var(--lk-size-sm))', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
                                     onClick={() => setAdding(true)}
                                 >
-                                    <Icon icon={Add01Icon} size={16} /> Add Action Item
+                                    <Icon icon={Add01Icon} size={16} /> Add Task
                                 </button>
                             </ShortcutTooltip>
                         )
@@ -737,191 +729,7 @@ export default function ActionItems({ items, sectionTitle = 'Action Items', empt
         </div>
 
         {/* ── Custom feedback modal ────────────────────────────────────── */}
-        {feedbackModal && createPortal(
-            <div
-                className="fb-modal-overlay"
-                onClick={() => closeFeedbackModal(null)}
-                onKeyDown={(e) => { if (e.key === 'Escape') closeFeedbackModal(null); }}
-                tabIndex={-1}
-            >
-                <div
-                    className="fb-modal-card"
-                    onClick={(e) => e.stopPropagation()}
-                >
-                    {/* Header */}
-                    <div className="fb-modal-header">
-                        <div className="fb-modal-icon-wrap">
-                            <Icon icon={MessageAdd01Icon} size={18} />
-                        </div>
-                        <div className="fb-modal-titles">
-                            <div className="fb-modal-title">{feedbackModal.title}</div>
-                            <div className="fb-modal-subtitle">{feedbackModal.subtitle}</div>
-                        </div>
-                    </div>
-
-                    {/* Textarea */}
-                    <div className="fb-modal-body">
-                        <textarea
-                            ref={feedbackTextareaRef}
-                            className="fb-modal-textarea"
-                            placeholder={feedbackModal.placeholder}
-                            defaultValue={feedbackModal.defaultValue}
-                            rows={4}
-                            autoFocus
-                            onKeyDown={(e) => {
-                                if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
-                                    const val = feedbackTextareaRef.current?.value?.trim() || '';
-                                    if (!feedbackModal.required || val) closeFeedbackModal(val || '');
-                                }
-                            }}
-                        />
-                        {feedbackModal.required && (
-                            <div className="fb-modal-hint">* A note is required for this action</div>
-                        )}
-                        {!feedbackModal.required && (
-                            <div className="fb-modal-hint fb-modal-hint-optional">Optional — leave blank to skip · Ctrl+Enter to send</div>
-                        )}
-                    </div>
-
-                    {/* Actions */}
-                    <div className="fb-modal-actions">
-                        <button
-                            className="btn btn-secondary"
-                            type="button"
-                            onClick={() => closeFeedbackModal(null)}
-                        >
-                            Cancel
-                        </button>
-                        <button
-                            className="btn btn-primary"
-                            type="button"
-                            onClick={() => {
-                                const val = feedbackTextareaRef.current?.value?.trim() || '';
-                                if (feedbackModal.required && !val) {
-                                    feedbackTextareaRef.current?.focus();
-                                    feedbackTextareaRef.current?.classList.add('fb-shake');
-                                    setTimeout(() => feedbackTextareaRef.current?.classList.remove('fb-shake'), 500);
-                                    return;
-                                }
-                                closeFeedbackModal(val || '');
-                            }}
-                        >
-                            <Icon icon={MessageAdd01Icon} size={14} />
-                            Send Note
-                        </button>
-                    </div>
-                </div>
-
-                <style>{`
-                    .fb-modal-overlay {
-                        position: fixed; inset: 0; z-index: 9000;
-                        background: rgba(var(--flexoki-black-rgb), 0.55);
-                        backdrop-filter: blur(6px);
-                        display: flex; align-items: center; justify-content: center;
-                        animation: fbOverlayIn 0.2s ease;
-                    }
-                    @keyframes fbOverlayIn {
-                        from { opacity: 0; }
-                        to   { opacity: 1; }
-                    }
-                    .fb-modal-card {
-                        width: min(480px, calc(100vw - 2rem));
-                        background: var(--bg-secondary);
-                        border: 1px solid var(--border);
-                        border-radius: 16px;
-                        box-shadow: 0 24px 64px rgba(var(--flexoki-black-rgb), 0.4), 0 0 0 1px rgba(var(--ui-shine-rgb), 0.04);
-                        animation: fbCardIn 0.25s cubic-bezier(0.34,1.56,0.64,1);
-                        overflow: hidden;
-                    }
-                    @keyframes fbCardIn {
-                        from { opacity: 0; transform: scale(0.92) translateY(12px); }
-                        to   { opacity: 1; transform: scale(1) translateY(0); }
-                    }
-                    .fb-modal-header {
-                        display: flex;
-                        align-items: flex-start;
-                        gap: 0.875rem;
-                        padding: 1.25rem 1.375rem 1rem;
-                        border-bottom: 1px solid var(--border);
-                    }
-                    .fb-modal-icon-wrap {
-                        width: 36px; height: 36px; flex-shrink: 0;
-                        border-radius: 10px;
-                        background: var(--primary-muted);
-                        border: 1px solid var(--primary-border);
-                        color: var(--primary);
-                        display: flex; align-items: center; justify-content: center;
-                    }
-                    .fb-modal-titles { flex: 1; min-width: 0; }
-                    .fb-modal-title {
-                        font-size: 0.9375rem;
-                        font-weight: 600;
-                        color: var(--text-primary);
-                        letter-spacing: -0.016em;
-                        line-height: 1.3;
-                    }
-                    .fb-modal-subtitle {
-                        font-size: 0.75rem;
-                        color: var(--text-muted);
-                        margin-top: 3px;
-                        line-height: 1.45;
-                    }
-                    .fb-modal-body {
-                        padding: 1rem 1.375rem;
-                    }
-                    .fb-modal-textarea {
-                        width: 100%;
-                        min-height: 110px;
-                        background: var(--bg-elevated);
-                        border: 1.5px solid var(--border);
-                        border-radius: 10px;
-                        color: var(--text-primary);
-                        font-size: 0.875rem;
-                        font-family: inherit;
-                        line-height: 1.6;
-                        padding: 0.625rem 0.75rem;
-                        resize: vertical;
-                        outline: none;
-                        transition: border-color 0.18s ease, box-shadow 0.18s ease;
-                        box-sizing: border-box;
-                    }
-                    .fb-modal-textarea:focus {
-                        border-color: var(--primary);
-                        box-shadow: 0 0 0 3px var(--primary-muted);
-                    }
-                    .fb-modal-textarea.fb-shake {
-                        animation: fbShake 0.4s ease;
-                        border-color: var(--accent-rose);
-                        box-shadow: 0 0 0 3px rgba(var(--flexoki-red-400-rgb), 0.15);
-                    }
-                    @keyframes fbShake {
-                        0%,100% { transform: translateX(0); }
-                        20%     { transform: translateX(-6px); }
-                        60%     { transform: translateX(5px); }
-                        80%     { transform: translateX(-3px); }
-                    }
-                    .fb-modal-hint {
-                        font-size: 0.6875rem;
-                        color: var(--accent-rose);
-                        margin-top: 6px;
-                        font-weight: 500;
-                    }
-                    .fb-modal-hint-optional {
-                        color: var(--text-muted);
-                        font-weight: 400;
-                    }
-                    .fb-modal-actions {
-                        display: flex;
-                        gap: 0.5rem;
-                        justify-content: flex-end;
-                        padding: 0.875rem 1.375rem;
-                        border-top: 1px solid var(--border);
-                        background: var(--bg-elevated);
-                    }
-                `}</style>
-            </div>,
-            document.body,
-        )}
+        <TaskFeedbackModal modal={feedbackModal} onComplete={closeFeedbackModal} />
         </>
     );
 }

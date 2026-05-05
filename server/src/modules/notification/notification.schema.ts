@@ -4,9 +4,13 @@ const notificationSchema = new mongoose.Schema({
     userId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
     type: { type: String, required: true, enum: [
         'poll_invite', 'meeting_confirmed', 'rsvp_update',
-        'attendance_marked', 'action_item_assigned', 'brief_ready',
+        'attendance_marked', 'brief_ready',
         'meeting_summary_ready', 'rubric_score',
-        'action_item_completion_submitted', 'action_item_verified',
+        // Canonical task notification types.
+        'task_assigned', 'task_completion_submitted', 'task_verified',
+        'task_rejected', 'task_feedback',
+        // Legacy `action_item_*` types preserved so existing notifications in the DB still load.
+        'action_item_assigned', 'action_item_completion_submitted', 'action_item_verified',
         'action_item_rejected', 'action_item_feedback',
     ] },
     meetingId: { type: mongoose.Schema.Types.ObjectId, ref: 'Meeting', required: true },

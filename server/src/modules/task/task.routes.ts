@@ -1,14 +1,48 @@
 import express from 'express';
 const router = express.Router();
-import ActionItem = require('./action-item.schema');
+import Task = require('./task.schema');
 
 export = function ({ protect, usingMongo, Notification, emitToUser, inMemoryActionItems, io, Meeting, inMemoryMeetings, Agenda, inMemoryAgendas }: any) {
+    /** Legacy alias kept for in-memory mode where existing code paths still use the `inMemoryActionItems` map. */
+    const inMemoryTasks = inMemoryActionItems;
+
     const HOST_ALLOWED_STATUSES = ['draft', 'pending', 'in-progress', 'completed', 'verified', 'missing'];
     const ASSIGNEE_ALLOWED_STATUSES = ['pending', 'in-progress', 'completed'];
     const getUserId = (req: any) => String(req.user?.id || req.user?._id || '');
     const getHostId = (meeting: any) => String(meeting?.hostId?._id || meeting?.hostId || '');
-    const getAssigneeId = (item: any) => String(item?.assignee?._id || item?.assignee || '');
+    const getAssigneeIds = (item: any): string[] => {
+        const list = Array.isArray(item?.assignees) ? item.assignees : [];
+        const ids = list
+            .map((a: any) => String(a?._id || a))
+            .filter(Boolean);
+        if (ids.length > 0) return ids;
+        const legacy = String(item?.assignee?._id || item?.assignee || '');
+        return legacy ? [legacy] : [];
+    };
     const normalizeFeedback = (value: any) => typeof value === 'string' ? value.trim() : '';
+
+    const normalizeAssigneesInput = (body: any): {
+        ids: string[] | null;
+        legacyAssignee: string | null;
+        legacyAssigneeName: string | null;
+    } => {
+        if (Array.isArray(body.assignees)) {
+            const ids = body.assignees
+                .map((v: any) => (v == null ? '' : String(v)))
+                .filter((v: string) => Boolean(v));
+            return { ids, legacyAssignee: ids[0] || null, legacyAssigneeName: body.assigneeName || null };
+        }
+        if (body.assignee !== undefined || body.assigneeName !== undefined) {
+            const single = body.assignee ? String(body.assignee) : null;
+            return {
+                ids: single ? [single] : [],
+                legacyAssignee: single,
+                legacyAssigneeName: body.assigneeName || null,
+            };
+        }
+        return { ids: null, legacyAssignee: null, legacyAssigneeName: null };
+    };
+
     const getAgendaItemsForMeeting = async (meetingId: string) => {
         if (usingMongo() && Agenda) {
             const agendaDoc = await Agenda.findOne({ meetingId }).select('items activeItemId');
@@ -69,11 +103,36 @@ export = function ({ protect, usingMongo, Notification, emitToUser, inMemoryActi
                 status = 'missing';
             }
         }
+
+        // Build assignees from canonical array, falling back to legacy single fields.
+        const rawAssignees = Array.isArray(item.assignees) ? item.assignees : [];
+        let assignees = rawAssignees
+            .map((a: any) => ({
+                id: String(a?._id || a || ''),
+                name: a?.name || null,
+                email: a?.email || null,
+                profileImage: a?.profileImage || null,
+            }))
+            .filter((a: any) => a.id);
+        if (assignees.length === 0 && (item.assignee || item.assigneeName)) {
+            assignees = [{
+                id: (item.assignee?._id || item.assignee)?.toString() || '',
+                name: item.assigneeName || item.assignee?.name || null,
+                email: item.assignee?.email || null,
+                profileImage: item.assignee?.profileImage || null,
+            }];
+        }
+
+        const legacyDisplay = assignees.length > 0
+            ? (assignees[0].name || 'Unassigned')
+            : (item.assigneeName || item.assignee?.name || 'Unassigned');
+
         return {
             id: (item._id || item.id).toString(),
             title: item.title,
-            assignee: item.assigneeName || item.assignee?.name || 'Unassigned',
-            assigneeId: (item.assignee?._id || item.assignee)?.toString(),
+            assignees,
+            assignee: legacyDisplay,
+            assigneeId: assignees[0]?.id || (item.assignee?._id || item.assignee)?.toString(),
             category: item.category,
             status: status,
             deadline: item.deadline,
@@ -95,24 +154,29 @@ export = function ({ protect, usingMongo, Notification, emitToUser, inMemoryActi
         if (!io) return;
         const mId = meetingId.toString();
         let items = [];
-        if (usingMongo() && ActionItem) {
-            const dbItems = await ActionItem.find({ meetingId: mId })
+        if (usingMongo() && Task) {
+            const dbItems = await Task.find({ meetingId: mId })
                 .populate('meetingId', 'title hostId')
-                .populate('assignee', 'name email')
+                .populate('assignee', 'name email profileImage')
+                .populate('assignees', 'name email profileImage')
                 .sort({ createdAt: 1 });
             items = dbItems.map(processItem);
         } else {
-            items = inMemoryActionItems[meetingId] || [];
+            items = inMemoryTasks[meetingId] || [];
         }
-        io.to(`meeting:${mId}`).emit('action_items_sync', { meetingId: mId, items });
+        io.to(`meeting:${mId}`).emit('tasks_sync', { meetingId: mId, items });
     };
 
     router.get('/mine', protect, async (req: any, res: any) => {
         try {
-            if (usingMongo() && ActionItem) {
-                const items = await ActionItem.find({ assignee: getUserId(req) })
+            if (usingMongo() && Task) {
+                const userId = getUserId(req);
+                const items = await Task.find({
+                    $or: [{ assignees: userId }, { assignee: userId }],
+                })
                     .populate('meetingId', 'title hostId')
-                    .populate('assignee', 'name email')
+                    .populate('assignee', 'name email profileImage')
+                    .populate('assignees', 'name email profileImage')
                     .sort({ deadline: 1 });
                 return res.json(items.map(processItem));
             }
@@ -126,22 +190,27 @@ export = function ({ protect, usingMongo, Notification, emitToUser, inMemoryActi
         try {
             const userId = getUserId(req);
 
-            if (usingMongo() && ActionItem && Meeting) {
+            if (usingMongo() && Task && Meeting) {
                 const hostedMeetings = await Meeting.find({ hostId: userId }).select('_id');
                 const hostedMeetingIds = hostedMeetings.map((meeting: any) => meeting._id);
 
                 const [assignedToMe, assignedByMe] = await Promise.all([
-                    ActionItem.find({ assignee: userId })
+                    Task.find({ $or: [{ assignees: userId }, { assignee: userId }] })
                         .populate('meetingId', 'title host hostId')
-                        .populate('assignee', 'name email')
+                        .populate('assignee', 'name email profileImage')
+                        .populate('assignees', 'name email profileImage')
                         .sort({ createdAt: -1 }),
                     hostedMeetingIds.length > 0
-                        ? ActionItem.find({
+                        ? Task.find({
                             meetingId: { $in: hostedMeetingIds },
-                            assignee: { $nin: [null, userId] },
+                            $nor: [
+                                { assignees: userId },
+                                { assignee: userId },
+                            ],
                         })
                             .populate('meetingId', 'title host hostId')
-                            .populate('assignee', 'name email')
+                            .populate('assignee', 'name email profileImage')
+                            .populate('assignees', 'name email profileImage')
                             .sort({ createdAt: -1 })
                         : Promise.resolve([]),
                 ]);
@@ -157,32 +226,32 @@ export = function ({ protect, usingMongo, Notification, emitToUser, inMemoryActi
                     .filter((meeting: any) => String(meeting.hostId || '') === userId)
                     .map((meeting: any) => String(meeting.id || meeting._id)),
             );
-            const allItems = Object.entries(inMemoryActionItems || {}).flatMap(([meetingId, items]: [string, any]) =>
+            const allItems = Object.entries(inMemoryTasks || {}).flatMap(([meetingId, items]: [string, any]) =>
                 (items || []).map((item: any) => ({ ...item, meetingId })),
             );
 
-                return res.json({
-                    assignedToMe: allItems
-                        .filter((item: any) => String(item.assigneeId || '') === userId)
-                        .map((item: any) => {
-                            const meeting = (inMemoryMeetings || []).find((m: any) => String(m.id || m._id) === String(item.meetingId || ''));
-                            return {
-                                ...item,
-                                meetingTitle: item.meetingTitle || meeting?.title || null,
-                                meetingHostName: item.meetingHostName || meeting?.host || null,
-                            };
-                        }),
-                    assignedByMe: allItems
-                        .filter((item: any) => hostedMeetingIds.has(String(item.meetingId || '')) && String(item.assigneeId || '') !== userId)
-                        .map((item: any) => {
-                            const meeting = (inMemoryMeetings || []).find((m: any) => String(m.id || m._id) === String(item.meetingId || ''));
-                            return {
-                                ...item,
-                                meetingTitle: item.meetingTitle || meeting?.title || null,
-                                meetingHostName: item.meetingHostName || meeting?.host || null,
-                            };
-                        }),
-                });
+            return res.json({
+                assignedToMe: allItems
+                    .filter((item: any) => String(item.assigneeId || '') === userId)
+                    .map((item: any) => {
+                        const meeting = (inMemoryMeetings || []).find((m: any) => String(m.id || m._id) === String(item.meetingId || ''));
+                        return {
+                            ...item,
+                            meetingTitle: item.meetingTitle || meeting?.title || null,
+                            meetingHostName: item.meetingHostName || meeting?.host || null,
+                        };
+                    }),
+                assignedByMe: allItems
+                    .filter((item: any) => hostedMeetingIds.has(String(item.meetingId || '')) && String(item.assigneeId || '') !== userId)
+                    .map((item: any) => {
+                        const meeting = (inMemoryMeetings || []).find((m: any) => String(m.id || m._id) === String(item.meetingId || ''));
+                        return {
+                            ...item,
+                            meetingTitle: item.meetingTitle || meeting?.title || null,
+                            meetingHostName: item.meetingHostName || meeting?.host || null,
+                        };
+                    }),
+            });
         } catch (error: any) {
             res.status(500).json({ message: 'Server error', error: error.message });
         }
@@ -190,14 +259,15 @@ export = function ({ protect, usingMongo, Notification, emitToUser, inMemoryActi
 
     router.get('/:meetingId', protect, async (req: any, res: any) => {
         try {
-            if (usingMongo() && ActionItem) {
-                const items = await ActionItem.find({ meetingId: req.params.meetingId })
+            if (usingMongo() && Task) {
+                const items = await Task.find({ meetingId: req.params.meetingId })
                     .populate('meetingId', 'title host hostId')
-                    .populate('assignee', 'name email')
+                    .populate('assignee', 'name email profileImage')
+                    .populate('assignees', 'name email profileImage')
                     .sort({ createdAt: 1 });
                 return res.json(items.map(processItem));
             }
-            res.json(inMemoryActionItems[req.params.meetingId] || []);
+            res.json(inMemoryTasks[req.params.meetingId] || []);
         } catch (error: any) {
             res.status(500).json({ message: 'Server error', error: error.message });
         }
@@ -205,7 +275,8 @@ export = function ({ protect, usingMongo, Notification, emitToUser, inMemoryActi
 
     router.post('/:meetingId', protect, async (req: any, res: any) => {
         try {
-            const { title, assignee, assigneeName, category, status, deadline, agendaItemId, source, aiConfidence } = req.body;
+            const { title, category, status, deadline, agendaItemId, source, aiConfidence } = req.body;
+            const { ids: assigneeIds, legacyAssignee, legacyAssigneeName } = normalizeAssigneesInput(req.body);
 
             if (!usingMongo()) {
                 let resolvedAgendaItemId = null;
@@ -215,12 +286,13 @@ export = function ({ protect, usingMongo, Notification, emitToUser, inMemoryActi
                     return res.status(400).json({ message: error.message || 'Invalid agenda item selected' });
                 }
                 const item = {
-                    id: `ai-${Date.now()}`, title, assignee: assigneeName || 'Unassigned',
+                    id: `ai-${Date.now()}`, title,
+                    assignee: legacyAssigneeName || 'Unassigned',
                     category: category || 'Technical', status: status || 'pending',
                     deadline, agendaItemId: resolvedAgendaItemId,
                 };
-                if (!inMemoryActionItems[req.params.meetingId]) inMemoryActionItems[req.params.meetingId] = [];
-                inMemoryActionItems[req.params.meetingId].push(item);
+                if (!inMemoryTasks[req.params.meetingId]) inMemoryTasks[req.params.meetingId] = [];
+                inMemoryTasks[req.params.meetingId].push(item);
                 broadcastSync(req.params.meetingId);
                 return res.status(201).json(item);
             }
@@ -228,7 +300,7 @@ export = function ({ protect, usingMongo, Notification, emitToUser, inMemoryActi
             const meeting = await Meeting.findById(req.params.meetingId).select('hostId');
             if (!meeting) return res.status(404).json({ message: 'Meeting not found' });
             if (getHostId(meeting) !== getUserId(req)) {
-                return res.status(403).json({ message: 'Only the meeting host can create action items' });
+                return res.status(403).json({ message: 'Only the meeting host can create tasks' });
             }
 
             let resolvedAgendaItemId = null;
@@ -238,10 +310,13 @@ export = function ({ protect, usingMongo, Notification, emitToUser, inMemoryActi
                 return res.status(400).json({ message: error.message || 'Invalid agenda item selected' });
             }
 
-            const item = await ActionItem.create({
+            const finalAssignees = assigneeIds ?? [];
+            const item = await Task.create({
                 meetingId: req.params.meetingId,
-                title, assignee: assignee || null,
-                assigneeName: assigneeName || null,
+                title,
+                assignees: finalAssignees,
+                assignee: legacyAssignee || null,
+                assigneeName: legacyAssigneeName || null,
                 category: category || 'Technical',
                 status: status || 'pending',
                 deadline: deadline || null,
@@ -250,14 +325,19 @@ export = function ({ protect, usingMongo, Notification, emitToUser, inMemoryActi
                 aiConfidence: aiConfidence || null,
             });
 
-            if (assignee) await createNotification(
-                assignee,
-                'action_item_assigned',
-                req.params.meetingId,
-                `You've been assigned: "${title}"`,
-            );
+            for (const aid of finalAssignees) {
+                await createNotification(
+                    aid,
+                    'task_assigned',
+                    req.params.meetingId,
+                    `You've been assigned: "${title}"`,
+                );
+            }
 
-            const populated = await ActionItem.findById(item._id).populate('meetingId', 'title host hostId').populate('assignee', 'name email');
+            const populated = await Task.findById(item._id)
+                .populate('meetingId', 'title host hostId')
+                .populate('assignee', 'name email profileImage')
+                .populate('assignees', 'name email profileImage');
             res.status(201).json(processItem(populated));
             broadcastSync(req.params.meetingId);
         } catch (error: any) {
@@ -269,21 +349,22 @@ export = function ({ protect, usingMongo, Notification, emitToUser, inMemoryActi
         try {
             if (!usingMongo()) return res.status(400).json({ message: 'Database required' });
 
-            const item = await ActionItem.findById(req.params.id)
+            const item = await Task.findById(req.params.id)
                 .populate('meetingId', 'title host hostId')
-                .populate('assignee', 'name email');
-            if (!item) return res.status(404).json({ message: 'Action item not found' });
+                .populate('assignee', 'name email profileImage')
+                .populate('assignees', 'name email profileImage');
+            if (!item) return res.status(404).json({ message: 'Task not found' });
 
             const userId = getUserId(req);
             const isHost = getHostId((item as any).meetingId) === userId;
-            const isAssignee = getAssigneeId(item) === userId;
+            const isAssignee = getAssigneeIds(item).includes(userId);
             const requestedKeys = Object.keys(req.body).filter((key) => req.body[key] !== undefined);
             const statusOnlyKeys = ['status'];
-            const hostEditableKeys = ['title', 'assignee', 'assigneeName', 'category', 'deadline', 'status', 'hostFeedback', 'agendaItemId'];
+            const hostEditableKeys = ['title', 'assignee', 'assigneeName', 'assignees', 'category', 'deadline', 'status', 'hostFeedback', 'agendaItemId'];
             const allowedKeys = isHost ? hostEditableKeys : (isAssignee ? statusOnlyKeys : []);
 
             if (allowedKeys.length === 0) {
-                return res.status(403).json({ message: 'You do not have permission to edit this action item' });
+                return res.status(403).json({ message: 'You do not have permission to edit this task' });
             }
             if (requestedKeys.length === 0) {
                 return res.status(400).json({ message: 'No valid updates provided' });
@@ -293,7 +374,7 @@ export = function ({ protect, usingMongo, Notification, emitToUser, inMemoryActi
             if (hasDisallowedField) {
                 return res.status(403).json({
                     message: isHost
-                        ? 'Only supported action item fields can be updated'
+                        ? 'Only supported task fields can be updated'
                         : 'Only the assignee or host can update the status',
                 });
             }
@@ -303,11 +384,23 @@ export = function ({ protect, usingMongo, Notification, emitToUser, inMemoryActi
                 if (req.body[key] !== undefined) updates[key] = req.body[key];
             }
 
+            // Normalize assignees: if either `assignee` or `assignees` was passed, sync both representations.
+            if (
+                isHost
+                && (req.body.assignees !== undefined || req.body.assignee !== undefined || req.body.assigneeName !== undefined)
+            ) {
+                const { ids, legacyAssignee, legacyAssigneeName } = normalizeAssigneesInput(req.body);
+                if (ids != null) updates.assignees = ids;
+                if (req.body.assignee !== undefined || ids != null) updates.assignee = legacyAssignee || null;
+                if (req.body.assigneeName !== undefined) updates.assigneeName = legacyAssigneeName;
+                else if (ids != null && ids.length === 0) updates.assigneeName = null;
+            }
+
             const currentStatus = String((item as any).status || '');
             const nextStatus = req.body.status !== undefined ? String(req.body.status) : currentStatus;
             const meetingId = (item as any).meetingId._id.toString();
-            const assigneeId = getAssigneeId(item);
-            const assigneeName = (item as any).assigneeName || (item as any).assignee?.name || 'The assignee';
+            const previousAssigneeIds = getAssigneeIds(item);
+            const assigneeName = (item as any).assigneeName || (item as any).assignee?.name || (item as any).assignees?.[0]?.name || 'The assignee';
             const hostFeedback = normalizeFeedback(req.body.hostFeedback);
 
             if (isHost && req.body.agendaItemId !== undefined) {
@@ -319,13 +412,13 @@ export = function ({ protect, usingMongo, Notification, emitToUser, inMemoryActi
             }
 
             if (!isHost && currentStatus === 'verified') {
-                return res.status(403).json({ message: 'Verified action items can only be changed by the host' });
+                return res.status(403).json({ message: 'Verified tasks can only be changed by the host' });
             }
 
             if (req.body.status !== undefined) {
                 const allowedStatuses = isHost ? HOST_ALLOWED_STATUSES : ASSIGNEE_ALLOWED_STATUSES;
                 if (!allowedStatuses.includes(nextStatus)) {
-                    return res.status(400).json({ message: 'Invalid action item status' });
+                    return res.status(400).json({ message: 'Invalid task status' });
                 }
                 if (nextStatus !== 'verified') {
                     updates.verifiedAt = null;
@@ -334,18 +427,17 @@ export = function ({ protect, usingMongo, Notification, emitToUser, inMemoryActi
 
             if (isHost && req.body.status !== undefined) {
                 if (nextStatus === 'verified' && currentStatus !== 'completed') {
-                    return res.status(400).json({ message: 'Only completed action items can be marked as verified' });
+                    return res.status(400).json({ message: 'Only completed tasks can be marked as verified' });
                 }
 
                 if (currentStatus === 'completed' && nextStatus === 'pending') {
                     if (!hostFeedback) {
-                        return res.status(400).json({ message: 'A feedback message is required when sending an item back to pending' });
+                        return res.status(400).json({ message: 'A feedback message is required when sending a task back to pending' });
                     }
                     updates.hostFeedback = hostFeedback;
                     updates.verifiedAt = null;
                 } else if (nextStatus === 'verified') {
                     updates.verifiedAt = new Date();
-                    // Preserve optional verification note from host (if provided)
                     updates.hostFeedback = hostFeedback || null;
                 } else if (req.body.hostFeedback !== undefined) {
                     updates.hostFeedback = hostFeedback || null;
@@ -358,19 +450,35 @@ export = function ({ protect, usingMongo, Notification, emitToUser, inMemoryActi
                 updates.hostFeedback = null;
             }
 
-            await ActionItem.findByIdAndUpdate(req.params.id, updates, { new: true });
-            const updatedItem = await ActionItem.findById(req.params.id)
+            await Task.findByIdAndUpdate(req.params.id, updates, { new: true });
+            const updatedItem = await Task.findById(req.params.id)
                 .populate('meetingId', 'title host hostId')
-                .populate('assignee', 'name email');
+                .populate('assignee', 'name email profileImage')
+                .populate('assignees', 'name email profileImage');
 
-            if (!updatedItem) return res.status(404).json({ message: 'Action item not found' });
+            if (!updatedItem) return res.status(404).json({ message: 'Task not found' });
+
+            const newAssigneeIds = getAssigneeIds(updatedItem);
+            const addedAssignees = newAssigneeIds.filter((id) => !previousAssigneeIds.includes(id));
+
+            if (isHost && addedAssignees.length > 0) {
+                for (const aid of addedAssignees) {
+                    if (aid === userId) continue;
+                    await createNotification(
+                        aid,
+                        'task_assigned',
+                        meetingId,
+                        `You've been assigned: "${(updatedItem as any).title}"`,
+                    );
+                }
+            }
 
             if (!isHost && req.body.status !== undefined && nextStatus === 'completed') {
                 const hostId = getHostId((updatedItem as any).meetingId);
                 if (hostId && hostId !== userId) {
                     await createNotification(
                         hostId,
-                        'action_item_completion_submitted',
+                        'task_completion_submitted',
                         meetingId,
                         `${assigneeName} marked "${(updatedItem as any).title}" as completed. Please verify it.`,
                     );
@@ -378,25 +486,28 @@ export = function ({ protect, usingMongo, Notification, emitToUser, inMemoryActi
             }
 
             if (isHost && req.body.status !== undefined) {
-                if (nextStatus === 'verified' && assigneeId) {
+                if (nextStatus === 'verified' && newAssigneeIds.length > 0) {
                     const verifyNote = updates.hostFeedback ? ` Note: ${updates.hostFeedback}` : '';
-                    await createNotification(
-                        assigneeId,
-                        'action_item_verified',
-                        meetingId,
-                        `Your action item "${(updatedItem as any).title}" was verified by the host.${verifyNote}`,
-                    );
-                } else if (currentStatus === 'completed' && nextStatus === 'pending' && assigneeId) {
-                    await createNotification(
-                        assigneeId,
-                        'action_item_rejected',
-                        meetingId,
-                        `Host feedback on "${(updatedItem as any).title}": ${updates.hostFeedback}`,
-                    );
+                    for (const aid of newAssigneeIds) {
+                        await createNotification(
+                            aid,
+                            'task_verified',
+                            meetingId,
+                            `Your task "${(updatedItem as any).title}" was verified by the host.${verifyNote}`,
+                        );
+                    }
+                } else if (currentStatus === 'completed' && nextStatus === 'pending' && newAssigneeIds.length > 0) {
+                    for (const aid of newAssigneeIds) {
+                        await createNotification(
+                            aid,
+                            'task_rejected',
+                            meetingId,
+                            `Host feedback on "${(updatedItem as any).title}": ${updates.hostFeedback}`,
+                        );
+                    }
                 }
             }
 
-            // Standalone feedback: host sent hostFeedback without a status-triggered notification
             const feedbackNotificationAlreadySent =
                 (nextStatus === 'verified') ||
                 (currentStatus === 'completed' && nextStatus === 'pending');
@@ -404,16 +515,18 @@ export = function ({ protect, usingMongo, Notification, emitToUser, inMemoryActi
                 isHost &&
                 updates.hostFeedback &&
                 req.body.hostFeedback !== undefined &&
-                req.body.status === undefined &&   // pure feedback-only update
-                assigneeId &&
+                req.body.status === undefined &&
+                newAssigneeIds.length > 0 &&
                 !feedbackNotificationAlreadySent
             ) {
-                await createNotification(
-                    assigneeId,
-                    'action_item_feedback',
-                    meetingId,
-                    `Host note on "${(updatedItem as any).title}": ${updates.hostFeedback}`,
-                );
+                for (const aid of newAssigneeIds) {
+                    await createNotification(
+                        aid,
+                        'task_feedback',
+                        meetingId,
+                        `Host note on "${(updatedItem as any).title}": ${updates.hostFeedback}`,
+                    );
+                }
             }
 
             res.json(processItem(updatedItem));
@@ -426,17 +539,17 @@ export = function ({ protect, usingMongo, Notification, emitToUser, inMemoryActi
     router.delete('/:id', protect, async (req: any, res: any) => {
         try {
             if (!usingMongo()) return res.status(400).json({ message: 'Database required' });
-            const item = await ActionItem.findById(req.params.id);
+            const item = await Task.findById(req.params.id);
             if (!item) return res.status(404).json({ message: 'Not found' });
 
             const meeting = await Meeting.findById(item.meetingId).select('hostId');
             if (!meeting) return res.status(404).json({ message: 'Meeting not found' });
             if (getHostId(meeting) !== getUserId(req)) {
-                return res.status(403).json({ message: 'Only the meeting host can delete action items' });
+                return res.status(403).json({ message: 'Only the meeting host can delete tasks' });
             }
 
             const meetingId = item.meetingId;
-            await ActionItem.findByIdAndDelete(req.params.id);
+            await Task.findByIdAndDelete(req.params.id);
             broadcastSync(meetingId.toString());
             res.json({ message: 'Deleted' });
         } catch (error: any) {

@@ -70,6 +70,25 @@ export interface ArchiveParticipant {
     profileImage?: string | null;
 }
 
+export interface ArchiveTaskAssignee {
+    id: string;
+    name?: string | null;
+    email?: string | null;
+    profileImage?: string | null;
+}
+
+export interface ArchiveTask {
+    id: string;
+    title: string;
+    status: string;
+    /** Canonical multi-assignee list. Empty array = unassigned. */
+    assignees?: ArchiveTaskAssignee[];
+    /** Legacy single-assignee display name (kept so older data still renders). */
+    assignee?: string;
+    source?: string;
+    agendaItemId?: string | null;
+}
+
 export interface ArchiveDetail {
     meeting: {
         _id?: string;
@@ -86,7 +105,9 @@ export interface ArchiveDetail {
     agendaItems: Array<{ id: string; title: string; duration: number }>;
     transcriptsByAgenda: Record<string, Array<{ id: string; speaker: string; timestamp: string; text: string }>>;
     transcriptFlat?: TranscriptSegment[];
-    actionItems: Array<{ id: string; title: string; status: string; assignee?: string; source?: string; agendaItemId?: string | null }>;
+    tasks: ArchiveTask[];
+    /** Legacy alias kept for components that still consume the old field name. */
+    actionItems?: ArchiveTask[];
     pins: Array<{ id: string; type: string; url?: string; label?: string; transcriptTimestamp?: string }>;
     meetingSummary?: {
         overview: string;
@@ -200,15 +221,16 @@ export function parseArchiveSearchInput(input: string) {
     };
 }
 
-export function groupActionItemsByAgenda(detail: ArchiveDetail) {
+export function groupTasksByAgenda(detail: ArchiveDetail) {
+    const tasks = detail.tasks || detail.actionItems || [];
     const groups = detail.agendaItems.map((agendaItem) => ({
         key: agendaItem.id,
         title: agendaItem.title,
-        items: detail.actionItems.filter((item) => item.agendaItemId === agendaItem.id),
+        items: tasks.filter((item) => item.agendaItemId === agendaItem.id),
     })).filter((group) => group.items.length > 0);
 
     const agendaIds = new Set(detail.agendaItems.map((item) => item.id));
-    const unlinkedItems = detail.actionItems.filter((item) => !item.agendaItemId || !agendaIds.has(String(item.agendaItemId)));
+    const unlinkedItems = tasks.filter((item) => !item.agendaItemId || !agendaIds.has(String(item.agendaItemId)));
     if (unlinkedItems.length > 0) {
         groups.push({ key: "_unlinked", title: "General / Unlinked", items: unlinkedItems });
     }

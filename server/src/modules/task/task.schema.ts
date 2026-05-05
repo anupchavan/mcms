@@ -1,9 +1,13 @@
 import mongoose from 'mongoose';
 
-const actionItemSchema = new mongoose.Schema({
+const taskSchema = new mongoose.Schema({
     meetingId: { type: mongoose.Schema.Types.ObjectId, ref: 'Meeting', required: true },
     agendaItemId: { type: String, default: null },
     title: { type: String, required: true },
+    /** Canonical multi-assignee list. Empty = unassigned. */
+    assignees: { type: [{ type: mongoose.Schema.Types.ObjectId, ref: 'User' }], default: [] },
+    /** Legacy single-assignee fields. Reads still expose `assignee` for back-compat;
+     * new writes should populate `assignees`. */
     assignee: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null },
     assigneeName: { type: String, default: null },
     category: {
@@ -26,11 +30,14 @@ const actionItemSchema = new mongoose.Schema({
     timestamps: true,
 });
 
-/** Meeting action item views read one meeting's items in creation order. */
-actionItemSchema.index({ meetingId: 1, createdAt: 1 });
-/** "My tasks" filters by assignee and sorts by deadline. */
-actionItemSchema.index({ assignee: 1, deadline: 1 });
+/** Meeting task views read one meeting's items in creation order. */
+taskSchema.index({ meetingId: 1, createdAt: 1 });
+/** Legacy single-assignee index — kept for back-compat reads. */
+taskSchema.index({ assignee: 1, deadline: 1 });
+/** "My tasks" filters by any of the assignees and sorts by deadline. */
+taskSchema.index({ assignees: 1, deadline: 1 });
 /** Brief generation pulls recent pending / in-progress items globally. */
-actionItemSchema.index({ status: 1, createdAt: -1 });
+taskSchema.index({ status: 1, createdAt: -1 });
 
-export = mongoose.model('ActionItem', actionItemSchema);
+/** Explicit collection mapping preserves the existing `actionitems` collection so the rename is non-breaking for stored data. */
+export = mongoose.model('Task', taskSchema, 'actionitems');
