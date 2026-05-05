@@ -475,8 +475,8 @@ export = function ({ User, Meeting, protect, usingMongo, callAISummarize, callAI
 			if (!usingMongo()) return res.json({ segments: [], total: 0 });
 
 			const meeting = await Meeting.findById(req.params.meetingId);
-			if (!meeting || meeting.status !== 'completed') {
-				return res.status(404).json({ message: 'Meeting not found or not archived' });
+			if (!meeting) {
+				return res.status(404).json({ message: 'Meeting not found' });
 			}
 
 			const { q, speaker, limit = '80', skip = '0' } = req.query;

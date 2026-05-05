@@ -1167,6 +1167,8 @@ function ArchiveTranscriptExplorer({
     const [serverSkip, setServerSkip] = useState(0);
     const [loading, setLoading] = useState(false);
     const [useServer, setUseServer] = useState(false);
+    /** Set to false if the server query returns a non-OK response; falls back to local filter. */
+    const [serverAvailable, setServerAvailable] = useState(true);
     const [sectionOpen, setSectionOpen] = useState(true);
 
     useEffect(() => {
@@ -1199,7 +1201,7 @@ function ArchiveTranscriptExplorer({
 
     const needIndexedSearch = debounced.c.length >= 2 || debounced.s.length >= 1;
     const speakersKey = debounced.s.join("\u0001");
-    const preferServer = flat.length > 200 || useServer;
+    const preferServer = (flat.length > 200 || useServer) && serverAvailable;
 
     useEffect(() => {
         if (!needIndexedSearch || !preferServer) {
@@ -1215,9 +1217,16 @@ function ArchiveTranscriptExplorer({
         params.set("limit", "100");
         params.set("skip", "0");
         (fetchWithAuth || fetch)(`${API_BASE}/archive/${meetingId}/transcript-query?${params}`)
-            .then((r) => (r.ok ? r.json() : null))
+            .then((r) => {
+                if (!r.ok) {
+                    if (!cancelled) setServerAvailable(false);
+                    return null;
+                }
+                return r.json();
+            })
             .then((data) => {
                 if (cancelled || !data) return;
+                setServerAvailable(true);
                 setServerSegments(data.segments || []);
                 setServerTotal(typeof data.total === "number" ? data.total : 0);
                 setServerSkip((data.segments || []).length);
@@ -1297,12 +1306,12 @@ function ArchiveTranscriptExplorer({
                     onChange={setSelectedSpeakers}
                 />
             </div>
-            {flat.length > 200 && (
+            {/* {flat.length > 200 && (
                 <label style={{ display: "flex", alignItems: "center", gap: "0.35rem", fontSize: "0.75rem", marginBottom: "0.5rem", cursor: "pointer" }}>
                     <input type="checkbox" checked={useServer} onChange={(e) => setUseServer(e.target.checked)} />
                     Always use indexed (MongoDB) search for this meeting
                 </label>
-            )}
+            )} */}
             <div style={{ fontSize: "0.6875rem", color: "var(--text-muted)", marginBottom: "0.5rem" }}>
                 {loading && "Searching… "}
                 Showing {displayed.length}
