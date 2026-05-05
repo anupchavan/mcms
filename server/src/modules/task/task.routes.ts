@@ -140,6 +140,7 @@ export = function ({ protect, usingMongo, Notification, emitToUser, inMemoryActi
             source: item.source,
             aiConfidence: item.aiConfidence,
             meetingId: (item.meetingId?._id || item.meetingId)?.toString(),
+            meetingShortId: item.meetingId?.id || null,
             meetingTitle: item.meetingId?.title || null,
             meetingHostName: item.meetingId?.host || null,
             meetingHostId: (item.meetingId?.hostId?._id || item.meetingId?.hostId)?.toString() || null,
@@ -147,6 +148,8 @@ export = function ({ protect, usingMongo, Notification, emitToUser, inMemoryActi
             completionSubmittedAt: item.completionSubmittedAt || null,
             verifiedAt: item.verifiedAt || null,
             hostFeedback: item.hostFeedback || null,
+            archived: item.archived || false,
+            archivedAt: item.archivedAt || null,
         };
     };
 
@@ -156,7 +159,7 @@ export = function ({ protect, usingMongo, Notification, emitToUser, inMemoryActi
         let items = [];
         if (usingMongo() && Task) {
             const dbItems = await Task.find({ meetingId: mId })
-                .populate('meetingId', 'title hostId')
+                .populate('meetingId', 'title hostId id')
                 .populate('assignee', 'name email profileImage')
                 .populate('assignees', 'name email profileImage')
                 .sort({ createdAt: 1 });
@@ -174,7 +177,7 @@ export = function ({ protect, usingMongo, Notification, emitToUser, inMemoryActi
                 const items = await Task.find({
                     $or: [{ assignees: userId }, { assignee: userId }],
                 })
-                    .populate('meetingId', 'title hostId')
+                    .populate('meetingId', 'title hostId id')
                     .populate('assignee', 'name email profileImage')
                     .populate('assignees', 'name email profileImage')
                     .sort({ deadline: 1 });
@@ -195,20 +198,21 @@ export = function ({ protect, usingMongo, Notification, emitToUser, inMemoryActi
                 const hostedMeetingIds = hostedMeetings.map((meeting: any) => meeting._id);
 
                 const [assignedToMe, assignedByMe] = await Promise.all([
-                    Task.find({ $or: [{ assignees: userId }, { assignee: userId }] })
-                        .populate('meetingId', 'title host hostId')
+                    Task.find({ $or: [{ assignees: userId }, { assignee: userId }], archived: { $ne: true } })
+                        .populate('meetingId', 'title host hostId id')
                         .populate('assignee', 'name email profileImage')
                         .populate('assignees', 'name email profileImage')
                         .sort({ createdAt: -1 }),
                     hostedMeetingIds.length > 0
                         ? Task.find({
                             meetingId: { $in: hostedMeetingIds },
+                            archived: { $ne: true },
                             $nor: [
                                 { assignees: userId },
                                 { assignee: userId },
                             ],
                         })
-                            .populate('meetingId', 'title host hostId')
+                            .populate('meetingId', 'title host hostId id')
                             .populate('assignee', 'name email profileImage')
                             .populate('assignees', 'name email profileImage')
                             .sort({ createdAt: -1 })
@@ -257,11 +261,38 @@ export = function ({ protect, usingMongo, Notification, emitToUser, inMemoryActi
         }
     });
 
+    router.get('/mine/archived', protect, async (req: any, res: any) => {
+        try {
+            const userId = getUserId(req);
+            if (usingMongo() && Task && Meeting) {
+                const hostedMeetings = await Meeting.find({ hostId: userId }).select('_id');
+                const hostedMeetingIds = hostedMeetings.map((m: any) => m._id);
+                const query: any = {
+                    archived: true,
+                    $or: [
+                        { assignees: userId },
+                        { assignee: userId },
+                        ...(hostedMeetingIds.length > 0 ? [{ meetingId: { $in: hostedMeetingIds } }] : []),
+                    ],
+                };
+                const items = await Task.find(query)
+                    .populate('meetingId', 'title host hostId id')
+                    .populate('assignee', 'name email profileImage')
+                    .populate('assignees', 'name email profileImage')
+                    .sort({ archivedAt: -1, createdAt: -1 });
+                return res.json(items.map(processItem));
+            }
+            res.json([]);
+        } catch (error: any) {
+            res.status(500).json({ message: 'Server error', error: error.message });
+        }
+    });
+
     router.get('/:meetingId', protect, async (req: any, res: any) => {
         try {
             if (usingMongo() && Task) {
                 const items = await Task.find({ meetingId: req.params.meetingId })
-                    .populate('meetingId', 'title host hostId')
+                    .populate('meetingId', 'title host hostId id')
                     .populate('assignee', 'name email profileImage')
                     .populate('assignees', 'name email profileImage')
                     .sort({ createdAt: 1 });
@@ -335,7 +366,7 @@ export = function ({ protect, usingMongo, Notification, emitToUser, inMemoryActi
             }
 
             const populated = await Task.findById(item._id)
-                .populate('meetingId', 'title host hostId')
+                .populate('meetingId', 'title host hostId id')
                 .populate('assignee', 'name email profileImage')
                 .populate('assignees', 'name email profileImage');
             res.status(201).json(processItem(populated));
@@ -350,7 +381,7 @@ export = function ({ protect, usingMongo, Notification, emitToUser, inMemoryActi
             if (!usingMongo()) return res.status(400).json({ message: 'Database required' });
 
             const item = await Task.findById(req.params.id)
-                .populate('meetingId', 'title host hostId')
+                .populate('meetingId', 'title host hostId id')
                 .populate('assignee', 'name email profileImage')
                 .populate('assignees', 'name email profileImage');
             if (!item) return res.status(404).json({ message: 'Task not found' });
@@ -360,7 +391,7 @@ export = function ({ protect, usingMongo, Notification, emitToUser, inMemoryActi
             const isAssignee = getAssigneeIds(item).includes(userId);
             const requestedKeys = Object.keys(req.body).filter((key) => req.body[key] !== undefined);
             const statusOnlyKeys = ['status'];
-            const hostEditableKeys = ['title', 'assignee', 'assigneeName', 'assignees', 'category', 'deadline', 'status', 'hostFeedback', 'agendaItemId'];
+            const hostEditableKeys = ['title', 'assignee', 'assigneeName', 'assignees', 'category', 'deadline', 'status', 'hostFeedback', 'agendaItemId', 'archived'];
             const allowedKeys = isHost ? hostEditableKeys : (isAssignee ? statusOnlyKeys : []);
 
             if (allowedKeys.length === 0) {
@@ -402,6 +433,12 @@ export = function ({ protect, usingMongo, Notification, emitToUser, inMemoryActi
             const previousAssigneeIds = getAssigneeIds(item);
             const assigneeName = (item as any).assigneeName || (item as any).assignee?.name || (item as any).assignees?.[0]?.name || 'The assignee';
             const hostFeedback = normalizeFeedback(req.body.hostFeedback);
+
+            // Archive/unarchive — host only; stamp archivedAt automatically.
+            if (isHost && req.body.archived !== undefined) {
+                updates.archived = Boolean(req.body.archived);
+                updates.archivedAt = req.body.archived ? new Date() : null;
+            }
 
             if (isHost && req.body.agendaItemId !== undefined) {
                 try {
@@ -452,7 +489,7 @@ export = function ({ protect, usingMongo, Notification, emitToUser, inMemoryActi
 
             await Task.findByIdAndUpdate(req.params.id, updates, { new: true });
             const updatedItem = await Task.findById(req.params.id)
-                .populate('meetingId', 'title host hostId')
+                .populate('meetingId', 'title host hostId id')
                 .populate('assignee', 'name email profileImage')
                 .populate('assignees', 'name email profileImage');
 

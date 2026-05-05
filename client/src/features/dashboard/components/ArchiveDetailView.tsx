@@ -531,7 +531,7 @@ export default function ArchiveDetailView({ meetingId, fetchWithAuth }: ArchiveD
 
                     <ArchiveTranscriptExplorer meetingId={meetingId} detail={detail} fetchWithAuth={fetchWithAuth} />
 
-                    {detail.agendaItems.length > 0 && (
+                    {/* {detail.agendaItems.length > 0 && (
                         <ArchiveSection title="Agenda & Transcript">
                             {detail.agendaItems.map((item, idx) => {
                                 const segments = detail.transcriptsByAgenda[item.id] || [];
@@ -548,7 +548,7 @@ export default function ArchiveDetailView({ meetingId, fetchWithAuth }: ArchiveD
                                 />
                             )}
                         </ArchiveSection>
-                    )}
+                    )} */}
 
                     {(() => {
                         const tasks = detail.tasks || [];

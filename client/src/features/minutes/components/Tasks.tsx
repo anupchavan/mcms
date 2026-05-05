@@ -4,41 +4,28 @@ import Icon from '../../../shared/components/Icon';
 import ShortcutTooltip from '../../../shared/components/ShortcutTooltip';
 import { useAuth } from '../../../stores/AuthContext';
 import {
-    CheckmarkCircle01Icon, Clock01Icon, AlertCircleIcon,
-    ArrowRight01Icon,
-    Add01Icon, Delete02Icon, SparklesIcon, PencilEdit02Icon,
-    Video01Icon, MessageAdd01Icon,
-    Calendar02Icon,
+    Add01Icon, Delete02Icon, SparklesIcon,
+    MessageAdd01Icon,
 } from '@hugeicons/core-free-icons';
-
+import { TaskStatusSelect, TaskAssigneePicker, STATUS_LOOKUP } from '../../dashboard/components/ArchiveTaskTable';
+import type { ArchiveParticipant } from '../../dashboard/components/archiveHelpers';
 
 const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:5001/api';
 
-const categoryChips = {
+const categoryChips: Record<string, string> = {
     'Technical': 'chip-blue',
     'Administrative': 'chip-purple',
     'Decision': 'chip-amber',
     'Follow-up': 'chip-cyan',
 };
 
-const statusConfig = {
-    'completed': { icon: Clock01Icon, color: 'var(--accent-amber)', label: 'Awaiting Verify' },
-    'verified': { icon: CheckmarkCircle01Icon, color: 'var(--accent-emerald)', label: 'Verified' },
-    'in-progress': { icon: Clock01Icon, color: 'var(--accent-amber)', label: 'In Progress' },
-    'pending': { icon: AlertCircleIcon, color: 'var(--text-muted)', label: 'Pending' },
-    'draft': { icon: AlertCircleIcon, color: 'var(--text-tertiary)', label: 'Draft' },
-    'missing': { icon: AlertCircleIcon, color: 'var(--accent-red)', label: 'Missing' },
-};
-
 const CATEGORIES = ['Technical', 'Administrative', 'Decision', 'Follow-up'];
 const HOST_STATUSES = ['draft', 'pending', 'in-progress', 'completed', 'verified', 'missing'];
 const ASSIGNEE_STATUSES = ['pending', 'in-progress', 'completed'];
 
-function deadlineToApi(dateStr: string, timeStr: string, includeTime: boolean): string | null {
+function deadlineToApi(dateStr: string): string | null {
     const d = dateStr?.trim();
-    if (!d) return null;
-    if (includeTime && timeStr?.trim()) return `${d}T${timeStr.trim()}`;
-    return d;
+    return d || null;
 }
 
 function formatDateOnlyDisplay(dateValue: string | undefined): string {
@@ -57,9 +44,10 @@ interface Task {
     title: string;
     category: string;
     status: string;
-    assignee?: string;      // The display name
-    assigneeId?: string;    // The actual User ID (ObjectId)
-    assigneeName?: string;  // Explicit display name field
+    assignee?: string;
+    assigneeId?: string;
+    assigneeName?: string;
+    assignees?: Array<{ id: string; name?: string | null; email?: string | null; profileImage?: string | null }>;
     deadline?: string;
     assignedAt?: string;
     source?: string;
@@ -99,54 +87,65 @@ function getPreferredAgendaItemId(agendaItems: AgendaItemLink[]): string {
     return activeItem?.id || agendaItems[0].id || '';
 }
 
+/** Convert raw participants to ArchiveParticipant shape expected by TaskAssigneePicker */
+function toArchiveParticipants(participants: any[]): ArchiveParticipant[] {
+    return (participants || []).map((p) => ({
+        _id: String(p._id || p.id || ''),
+        name: p.name || null,
+        email: p.email || null,
+        profileImage: p.profileImage || null,
+    }));
+}
+
 export default function Tasks({ items, sectionTitle = 'Tasks', emptyMessage = 'No tasks found.', meetingId, meetingHostId, fetchWithAuth, onRefresh, addTaskTrigger, onAddTriggered, participants, agendaItems = [] }: TasksProps) {
     const { user } = useAuth() || {};
     const currentUserId = String(user?.id || user?._id || '');
     const getItemHostId = (item: Task) => String(item.meetingHostId || meetingHostId || '');
     const isHostForItem = (item: Task) => Boolean(currentUserId) && getItemHostId(item) === currentUserId;
-    const isAssigneeForItem = (item: Task) => Boolean(currentUserId) && String(item.assigneeId || '') === currentUserId;
+    const isAssigneeForItem = (item: Task) => {
+        if (!currentUserId) return false;
+        if (String(item.assigneeId || '') === currentUserId) return true;
+        return (item.assignees || []).some((a) => String(a.id) === currentUserId);
+    };
     const canEditStatus = (item: Task) => isHostForItem(item) || (isAssigneeForItem(item) && item.status !== 'verified');
-    const canEditDetails = (item: Task) => isHostForItem(item);
-    const getEditableStatuses = (item: Task) => isHostForItem(item) ? HOST_STATUSES : ASSIGNEE_STATUSES;
     const canCreateItems = Boolean(meetingId) && Boolean(currentUserId) && String(meetingHostId || '') === currentUserId;
+
     const agendaLookup = useMemo(() => {
-        const entries: [string, string][] = agendaItems.map((item) => [item.id, item.title]);
-        return new Map<string, string>(entries);
+        return new Map<string, string>(agendaItems.map((item) => [item.id, item.title]));
     }, [agendaItems]);
+
+    // ── Create form state ────────────────────────────────────────────
     const [adding, setAdding] = useState(false);
     const [newTitle, setNewTitle] = useState('');
     const [newCategory, setNewCategory] = useState('Technical');
     const [newDeadlineDate, setNewDeadlineDate] = useState('');
-    const [newDeadlineTime, setNewDeadlineTime] = useState('');
-    const [newDeadlineIncludeTime, setNewDeadlineIncludeTime] = useState(false);
-    const [newAssignee, setNewAssignee] = useState<{ id: string; name: string } | null>(null);
     const [newAgendaItemId, setNewAgendaItemId] = useState('');
-    const [editingId, setEditingId] = useState<string | null>(null);
+    const [newAssigneeIds, setNewAssigneeIds] = useState<string[]>([]);
+
+    const archiveParticipants = useMemo(() => toArchiveParticipants(participants || []), [participants]);
 
     useEffect(() => {
         if (participants && participants.length > 0) {
-            // Only auto-select if no selection exists, or if current selection is no longer in the list
-            if (!newAssignee || !participants.find(p => (p._id || p.id) === newAssignee.id)) {
-                setNewAssignee({ id: participants[0]._id || participants[0].id, name: participants[0].name });
+            if (newAssigneeIds.length === 0) {
+                const first = participants[0];
+                setNewAssigneeIds([String(first._id || first.id)]);
             }
         } else {
-            setNewAssignee(null);
+            setNewAssigneeIds([]);
         }
     }, [participants]);
+
     useEffect(() => {
         const hasSelectedAgenda = newAgendaItemId && agendaItems.some((item) => item.id === newAgendaItemId);
         if (!hasSelectedAgenda) {
             setNewAgendaItemId(getPreferredAgendaItemId(agendaItems));
         }
     }, [agendaItems, newAgendaItemId]);
-    const [editData, setEditData] = useState<Partial<Task> | null>(null);
-    const [editingAgendaItems, setEditingAgendaItems] = useState<AgendaItemLink[] | null>(null);
 
     const groupedSections = useMemo(() => {
         if (!agendaItems.length) {
             return [{ key: '_all', title: null, items }];
         }
-
         const groups = agendaItems.map((agendaItem) => ({
             key: agendaItem.id,
             title: agendaItem.title,
@@ -157,95 +156,10 @@ export default function Tasks({ items, sectionTitle = 'Tasks', emptyMessage = 'N
         if (unlinkedItems.length > 0) {
             groups.push({ key: '_unlinked', title: 'General / Unlinked', items: unlinkedItems });
         }
-
         return groups.length > 0 ? groups : [{ key: '_all', title: null, items }];
     }, [agendaItems, agendaLookup, items]);
 
-    const startEditing = (item: Task) => {
-        setEditingId(item.id || item._id || null);
-        // Ensure assignee is correctly setup for the update request
-        setEditData({ ...item, agendaItemId: item.agendaItemId || '' });
-        // If parent agenda list is not provided (e.g. tasks view), try fetching agenda for the item's meeting
-        const meetingId = (item as any).meetingId || (item as any).meeting || (item as any).meeting_id || null;
-        if ((!agendaItems || agendaItems.length === 0) && meetingId && fetchWithAuth) {
-            setEditingAgendaItems(null);
-            (fetchWithAuth || fetch)(`${API_BASE}/agenda/${meetingId}`).then(res => {
-                if (!res.ok) return null;
-                return res.json();
-            }).then((data: any) => {
-                if (Array.isArray(data)) setEditingAgendaItems(data.map((a: any) => ({ id: a.id || a._id || a._id, title: a.title })));
-            }).catch(() => {});
-        }
-    };
-
-    const cancelEditing = () => {
-        setEditingId(null);
-        setEditData(null);
-    };
-
-    const handleUpdateField = (field: keyof Task, value: any) => {
-        setEditData(prev => prev ? { ...prev, [field]: value } : null);
-    };
-    useEffect(() => {
-        if (canCreateItems && addTaskTrigger && addTaskTrigger > 0) {
-            setAdding(true);
-            onAddTriggered?.();
-        }
-    }, [addTaskTrigger, canCreateItems, onAddTriggered]);
-
-    const resetFields = () => {
-        setNewTitle('');
-        setNewDeadlineDate('');
-        setNewDeadlineTime('');
-        setNewDeadlineIncludeTime(false);
-        setNewAgendaItemId(getPreferredAgendaItemId(agendaItems));
-        if (participants && participants.length > 0) {
-            // Re-select first participant if possible
-            setNewAssignee({ id: participants[0]._id || participants[0].id, name: participants[0].name });
-        } else {
-            setNewAssignee(null);
-        }
-    };
-
-    const handleCreate = async () => {
-        const deadline = deadlineToApi(newDeadlineDate, newDeadlineTime, newDeadlineIncludeTime);
-        try {
-            const body: any = { 
-                title: newTitle.trim(), 
-                category: newCategory, 
-                deadline: deadline || null,
-                agendaItemId: newAgendaItemId || null,
-            };
-            if (newAssignee) {
-                body.assignee = newAssignee.id;
-                body.assigneeName = newAssignee.name;
-            }
-
-            const res = await (fetchWithAuth || fetch)(`${API_BASE}/tasks/${meetingId}`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(body),
-            });
-            if (res.ok) {
-                resetFields();
-                setAdding(false);
-                onRefresh?.();
-            }
-        } catch (err) {
-            console.error('Failed to create task:', err);
-        }
-    };
-
-    const readErrorMessage = async (res: Response) => {
-        try {
-            const data = await res.json();
-            return data?.message || 'Request failed';
-        } catch {
-            return 'Request failed';
-        }
-    };
-
-    // ── Custom feedback modal state ──────────────────────────────────────────
+    // ── Feedback modal ────────────────────────────────────────────────
     const [feedbackModal, setFeedbackModal] = useState<TaskFeedbackModalState | null>(null);
 
     const openFeedbackPrompt = useCallback((
@@ -255,12 +169,7 @@ export default function Tasks({ items, sectionTitle = 'Tasks', emptyMessage = 'N
         opts: { defaultValue?: string; required?: boolean } = {},
     ): Promise<string | null> => {
         return new Promise((resolve) => {
-            setFeedbackModal({
-                title, subtitle, placeholder,
-                required: opts.required ?? false,
-                defaultValue: opts.defaultValue ?? '',
-                resolve,
-            });
+            setFeedbackModal({ title, subtitle, placeholder, required: opts.required ?? false, defaultValue: opts.defaultValue ?? '', resolve });
         });
     }, []);
 
@@ -268,9 +177,13 @@ export default function Tasks({ items, sectionTitle = 'Tasks', emptyMessage = 'N
         setFeedbackModal(prev => { prev?.resolve(value); return null; });
     }, []);
 
+    const readErrorMessage = async (res: Response) => {
+        try { const data = await res.json(); return data?.message || 'Request failed'; }
+        catch { return 'Request failed'; }
+    };
+
     const getHostFeedback = async (item: Task, nextStatus: string): Promise<string | null | undefined> => {
         if (!isHostForItem(item)) return undefined;
-        // Rejection: host sends completed item back to pending — note is required
         if (item.status === 'completed' && nextStatus === 'pending') {
             const response = await openFeedbackPrompt(
                 'Send Back to Pending',
@@ -283,11 +196,10 @@ export default function Tasks({ items, sectionTitle = 'Tasks', emptyMessage = 'N
             if (!trimmed) return null;
             return trimmed;
         }
-        // Verification: host can optionally add a note for the assignee
         if (item.status === 'completed' && nextStatus === 'verified') {
             const response = await openFeedbackPrompt(
                 'Verify Task',
-                `Optionally leave a note for ${item.assignee || 'the assignee'} along with your verification. Leave blank to skip.`,
+                `Optionally leave a note for ${item.assignee || 'the assignee'}.`,
                 'Great work! Add any optional remarks...',
                 { required: false },
             );
@@ -310,62 +222,30 @@ export default function Tasks({ items, sectionTitle = 'Tasks', emptyMessage = 'N
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(payload),
             });
-            if (!res.ok) {
-                window.alert(await readErrorMessage(res));
-                return;
-            }
+            if (!res.ok) { window.alert(await readErrorMessage(res)); return; }
             onRefresh?.();
-        } catch (err) {
-            console.error('Failed to update status:', err);
-        }
+        } catch (err) { console.error('Failed to update status:', err); }
     };
 
-    const handleUpdate = async (itemId: string) => {
-        if (!editData || !editData.title?.trim()) return;
-        const currentItem = items.find(item => String(item.id || item._id) === String(itemId));
-        const hostFeedback = currentItem ? await getHostFeedback(currentItem, editData.status || 'pending') : undefined;
-        if (hostFeedback === null) return;
+    const handleAssigneeChange = async (item: Task, assigneeIds: string[]) => {
+        const itemId = item.id || item._id;
+        if (!itemId) return;
         try {
-            const assigneeId = typeof editData.assigneeId === 'string' && editData.assigneeId.trim()
-                ? editData.assigneeId
-                : null;
-            const assigneeName = assigneeId
-                ? (editData.assigneeName || editData.assignee || null)
-                : null;
-            const payload: any = {
-                title: editData.title.trim(),
-                category: editData.category || 'Technical',
-                status: editData.status || 'pending',
-                deadline: editData.deadline || null,
-                assignee: assigneeId,
-                assigneeName,
-                agendaItemId: editData.agendaItemId || null,
-            };
-            if (typeof hostFeedback === 'string') payload.hostFeedback = hostFeedback;
             const res = await (fetchWithAuth || fetch)(`${API_BASE}/tasks/${itemId}`, {
                 method: 'PUT',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(payload),
+                body: JSON.stringify({ assignees: assigneeIds }),
             });
-            if (!res.ok) {
-                window.alert(await readErrorMessage(res));
-                return;
-            }
-            setEditingId(null);
-            setEditData(null);
+            if (!res.ok) { window.alert(await readErrorMessage(res)); return; }
             onRefresh?.();
-        } catch (err) {
-            console.error('Failed to update task:', err);
-        }
+        } catch (err) { console.error('Failed to update assignees:', err); }
     };
 
     const handleDelete = async (itemId: string) => {
         try {
             await (fetchWithAuth || fetch)(`${API_BASE}/tasks/${itemId}`, { method: 'DELETE' });
             onRefresh?.();
-        } catch (err) {
-            console.error('Failed to delete:', err);
-        }
+        } catch (err) { console.error('Failed to delete:', err); }
     };
 
     const handleSendFeedback = async (item: Task) => {
@@ -386,15 +266,52 @@ export default function Tasks({ items, sectionTitle = 'Tasks', emptyMessage = 'N
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ hostFeedback: trimmed }),
             });
-            if (!res.ok) {
-                window.alert(await readErrorMessage(res));
-                return;
-            }
+            if (!res.ok) { window.alert(await readErrorMessage(res)); return; }
             onRefresh?.();
-        } catch (err) {
-            console.error('Failed to send feedback:', err);
+        } catch (err) { console.error('Failed to send feedback:', err); }
+    };
+
+    const resetFields = () => {
+        setNewTitle('');
+        setNewDeadlineDate('');
+        setNewAgendaItemId(getPreferredAgendaItemId(agendaItems));
+        if (participants && participants.length > 0) {
+            setNewAssigneeIds([String(participants[0]._id || participants[0].id)]);
+        } else {
+            setNewAssigneeIds([]);
         }
     };
+
+    const handleCreate = async () => {
+        if (!newTitle.trim()) return;
+        try {
+            const body: any = {
+                title: newTitle.trim(),
+                category: newCategory,
+                deadline: deadlineToApi(newDeadlineDate),
+                agendaItemId: newAgendaItemId || null,
+                assignees: newAssigneeIds,
+            };
+            // Legacy single-assignee fields for backward compat
+            if (newAssigneeIds.length > 0) {
+                const p = (participants || []).find((pp: any) => String(pp._id || pp.id) === newAssigneeIds[0]);
+                if (p) { body.assignee = p._id || p.id; body.assigneeName = p.name; }
+            }
+            const res = await (fetchWithAuth || fetch)(`${API_BASE}/tasks/${meetingId}`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(body),
+            });
+            if (res.ok) { resetFields(); setAdding(false); onRefresh?.(); }
+        } catch (err) { console.error('Failed to create task:', err); }
+    };
+
+    useEffect(() => {
+        if (canCreateItems && addTaskTrigger && addTaskTrigger > 0) {
+            setAdding(true);
+            onAddTriggered?.();
+        }
+    }, [addTaskTrigger, canCreateItems, onAddTriggered]);
 
     return (
         <>
@@ -411,6 +328,7 @@ export default function Tasks({ items, sectionTitle = 'Tasks', emptyMessage = 'N
                     {items.length === 0 && (
                         <div className="tasks-empty-state">{emptyMessage}</div>
                     )}
+
                     {groupedSections.map((group) => (
                         <div key={group.key} style={{ marginBottom: '0.85rem' }}>
                             {group.title && (
@@ -420,294 +338,156 @@ export default function Tasks({ items, sectionTitle = 'Tasks', emptyMessage = 'N
                                 </div>
                             )}
                             {group.items.map((item, index) => {
-                                const status = statusConfig[item.status] || statusConfig.pending;
-                                const isEditing = editingId === (item.id || item._id);
-                                const allowStatusEdit = canEditStatus(item);
-                                const allowDetailEdit = canEditDetails(item);
+                                const itemId = item.id || item._id || '';
+                                const isHost = isHostForItem(item);
+                                const canStatus = canEditStatus(item);
+                                const allowedStatuses = isHost ? HOST_STATUSES : ASSIGNEE_STATUSES;
 
-                                if (isEditing && editData) {
-                                    return (
-                                        <div key={item.id || item._id || index} className="task-card glass-card animate-in" style={{ animationDelay: `${index * 0.06}s` }}>
-                                            <input className="input-field" value={editData.title || ''} onChange={e => handleUpdateField('title', e.target.value)} style={{ marginBottom: '4px' }} placeholder="Title" />
-                                            <div className="inline-form-row">
-                                                <select className="input-field" value={editData.category || 'Technical'} onChange={e => handleUpdateField('category', e.target.value)}>
-                                                    {CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
-                                                </select>
-                                                <select className="input-field" value={editData.status || 'pending'} onChange={e => handleUpdateField('status', e.target.value)}>
-                                                    {HOST_STATUSES.map(s => <option key={s} value={s}>{statusConfig[s]?.label || s}</option>)}
-                                                </select>
-                                            </div>
-                                            <div className="inline-form-row" style={{ marginTop: '4px', marginBottom: '4px' }}>
-                                                {participants && participants.length > 0 ? (
-                                                    <select
-                                                        className="input-field"
-                                                        value={editData.assigneeId || ''}
-                                                        onChange={e => {
-                                                            const p = participants.find(part => (part._id || part.id) === e.target.value);
-                                                            setEditData(prev => prev ? {
-                                                                ...prev,
-                                                                assignee: p ? (p._id || p.id) : null,
-                                                                assigneeId: p ? (p._id || p.id) : '',
-                                                                assigneeName: p ? p.name : null,
-                                                            } : null);
-                                                        }}
-                                                        style={{ flex: 1 }}
-                                                    >
-                                                        <option value="">Unassigned</option>
-                                                        {participants.map(p => (
-                                                            <option key={p._id || p.id} value={p._id || p.id}>{p.name}</option>
-                                                        ))}
-                                                    </select>
-                                                ) : (
-                                                    <input className="input-field" placeholder="Assigned to" value={editData.assignee || ''} onChange={e => handleUpdateField('assignee', e.target.value)} style={{ flex: 1 }} />
-                                                )}
-                                            </div>
-                                            {(agendaItems.length > 0 || (editingAgendaItems && editingAgendaItems.length > 0)) && (
-                                                (() => {
-                                                    const available = (agendaItems && agendaItems.length > 0) ? agendaItems : (editingAgendaItems || []);
-                                                    return (
-                                                        <select
-                                                            className="input-field"
-                                                            value={String(editData.agendaItemId || '')}
-                                                            onChange={e => handleUpdateField('agendaItemId', e.target.value)}
-                                                            style={{ marginBottom: '4px' }}
-                                                        >
-                                                            <option value="">General / Unlinked</option>
-                                                            {available.map((agendaItem) => (
-                                                                <option key={agendaItem.id} value={agendaItem.id}>{agendaItem.title}</option>
-                                                            ))}
-                                                        </select>
-                                                    );
-                                                })()
-                                            )}
-                                            <input className="input-field" placeholder="Deadline (YYYY-MM-DD)" value={editData.deadline || ''} onChange={e => handleUpdateField('deadline', e.target.value)} style={{ marginBottom: '4px' }} />
-                                            <div className="inline-form-row">
-                                                <button className="btn btn-sm btn-primary" onClick={() => handleUpdate(item.id || item._id!)}>Save</button>
-                                                <button className="btn btn-sm btn-secondary" onClick={cancelEditing}>Cancel</button>
-                                            </div>
-                                        </div>
-                                    );
-                                }
+                                // Build current assignee ids from canonical assignees array
+                                const currentAssigneeIds = (item.assignees && item.assignees.length > 0)
+                                    ? item.assignees.map((a) => String(a.id))
+                                    : item.assigneeId ? [item.assigneeId] : [];
+
+                                const assigneeDisplayName = (item.assignees && item.assignees.length > 0)
+                                    ? item.assignees.map((a) => a.name || a.email || 'User').join(', ')
+                                    : item.assignee || 'Unassigned';
 
                                 return (
                                     <div
-                                        key={item.id || item._id || index}
+                                        key={itemId || index}
                                         className="task-card glass-card animate-in"
                                         style={{ animationDelay: `${index * 0.06}s` }}
                                     >
-                                        <div className="ai-card-top">
-                                            <Icon icon={status.icon} size={16} style={{ color: status.color, flexShrink: 0 }} />
-                                            <span className="ai-card-title">{item.title}</span>
-                                            {item.source === 'ai-extracted' && (
-                                                <span className="chip chip-purple" style={{ fontSize: '0.5625rem', padding: '1px 5px' }}>
-                                                    <Icon icon={SparklesIcon} size={8} /> AI
-                                                </span>
-                                            )}
-                                            <div style={{ marginLeft: 'auto', display: 'flex', gap: '2px' }}>
-                                                {allowDetailEdit && item.assigneeId && (
-                                                    <button
-                                                        className="btn-icon btn-icon-sm"
-                                                        onClick={() => handleSendFeedback(item)}
-                                                        title="Send note to assignee"
-                                                    >
-                                                        <Icon icon={MessageAdd01Icon} size={10} />
+                                        {/* ── Card header: title + actions ── */}
+                                        <div className="live-task-card-header">
+                                            <span className="live-task-card-title">
+                                                {item.title}
+                                                {item.source === 'ai-extracted' && (
+                                                    <span className="chip chip-purple" style={{ fontSize: '0.5625rem', padding: '1px 5px', marginLeft: '0.4rem' }}>
+                                                        <Icon icon={SparklesIcon} size={8} /> AI
+                                                    </span>
+                                                )}
+                                            </span>
+                                            <div className="live-task-card-actions">
+                                                {isHost && item.assigneeId && (
+                                                    <button className="btn-icon btn-icon-sm" onClick={() => handleSendFeedback(item)} title="Send note to assignee">
+                                                        <Icon icon={MessageAdd01Icon} size={11} />
                                                     </button>
                                                 )}
-                                                {allowDetailEdit && (
-                                                    <button
-                                                        className="btn-icon btn-icon-sm"
-                                                        onClick={() => startEditing(item)}
-                                                        title="Edit item"
-                                                    >
-                                                        <Icon icon={PencilEdit02Icon} size={10} />
-                                                    </button>
-                                                )}
-                                                {meetingId && allowDetailEdit && (
-                                                    <button
-                                                        className="btn-icon btn-icon-sm"
-                                                        onClick={() => handleDelete(item.id || item._id)}
-                                                        title="Delete"
-                                                    >
-                                                        <Icon icon={Delete02Icon} size={10} />
+                                                {meetingId && isHost && (
+                                                    <button className="btn-icon btn-icon-sm" onClick={() => handleDelete(itemId)} title="Delete task">
+                                                        <Icon icon={Delete02Icon} size={11} />
                                                     </button>
                                                 )}
                                             </div>
                                         </div>
 
-                                        <div className="ai-card-meta">
-                                            <span className={`chip ${categoryChips[item.category] || 'chip-blue'}`}>
-                                                {item.category}
-                                            </span>
-                                            {allowStatusEdit ? (
-                                                <label className="ai-status-control" title="Update status">
-                                                    <span className="ai-status-label">Status</span>
-                                                    <select
-                                                        className={`input-field ai-status-select st-${item.status}`}
-                                                        value={item.status}
-                                                        onChange={(e) => {
-                                                            const nextStatus = e.target.value;
-                                                            if (nextStatus === item.status) return;
-                                                            handleStatusChange(item, nextStatus);
-                                                        }}
-                                                        aria-label={`Update status for ${item.title}`}
-                                                    >
-                                                        {getEditableStatuses(item).map((statusKey) => {
-                                                            const option = statusConfig[statusKey] || statusConfig.pending;
-                                                            return (
-                                                                <option key={statusKey} value={statusKey}>
-                                                                    {option.label}
-                                                                </option>
-                                                            );
-                                                        })}
-                                                    </select>
-                                                </label>
+                                        {/* ── Assigned to ── */}
+                                        <div className="live-task-card-field">
+                                            <span className="live-task-card-label">Assigned to</span>
+                                            {isHost && archiveParticipants.length > 0 ? (
+                                                <TaskAssigneePicker
+                                                    participants={archiveParticipants}
+                                                    value={currentAssigneeIds}
+                                                    selectedAssignees={(item.assignees || []).map(a => ({ id: a.id, name: a.name ?? null, email: a.email ?? null, profileImage: a.profileImage ?? null }))}
+                                                    onChange={(ids) => handleAssigneeChange(item, ids)}
+                                                />
                                             ) : (
-                                                <span className={`chip ai-status-chip st-${item.status}`}>
-                                                    {status.label}
-                                                </span>
+                                                <span className="live-task-card-value">{assigneeDisplayName}</span>
                                             )}
-                                            {item.meetingTitle && (
-                                                <span className="ai-card-meta-item" title={`${item.meetingTitle}${item.meetingHostName ? ' — ' + item.meetingHostName : ''}`}>
-                                                    <Icon icon={Video01Icon} size={10} />
-                                                    <span className="ai-card-meta-label">Meeting:</span>
-                                                    <span className="ai-card-meta-value">
-                                                        {item.meetingTitle}
-                                                        {item.meetingHostName ? (
-                                                            <span style={{ marginLeft: 6, color: 'var(--text-secondary)', fontWeight: 500 }}>— {item.meetingHostName}</span>
-                                                        ) : null}
-                                                    </span>
+                                        </div>
+
+                                        {/* ── Type and Deadline ── */}
+                                        <div className="live-task-card-row">
+                                            <div className="live-task-card-field">
+                                                <span className="live-task-card-label">Type</span>
+                                                <span className={`chip ${categoryChips[item.category] || 'chip-blue'}`} style={{ fontSize: '0.6875rem' }}>
+                                                    {item.category || 'Technical'}
                                                 </span>
-                                            )}
-                                            {String(item.agendaItemId || '').trim() && (
-                                                <span className="ai-card-meta-item" title={agendaLookup.get(String(item.agendaItemId)) || 'General / Unlinked'}>
-                                                    <Icon icon={Calendar02Icon} size={10} />
-                                                    <span className="ai-card-meta-label">Agenda:</span>
-                                                    <span className="ai-card-meta-value">{agendaLookup.get(String(item.agendaItemId)) || 'General / Unlinked'}</span>
+                                            </div>
+                                            <div className="live-task-card-field">
+                                                <span className="live-task-card-label">Deadline</span>
+                                                <span className="live-task-card-value">
+                                                    {item.deadline ? formatDateOnlyDisplay(item.deadline) : '—'}
                                                 </span>
-                                            )}
-                                            <span className="ai-card-meta-item" title={item.assignee || 'Unassigned'}>
-                                                <Icon icon={ArrowRight01Icon} size={10} />
-                                                <span className="ai-card-meta-label">Assigned to:</span>
-                                                <span className="ai-card-meta-value">{item.assignee || 'Unassigned'}</span>
-                                            </span>
-                                            {item.assignedAt && (
-                                                <span className="ai-card-meta-item">
-                                                    <Icon icon={Clock01Icon} size={10} />
-                                                    <span className="ai-card-meta-label">Assigned on:</span>
-                                                    <span className="ai-card-meta-value">{formatDateOnlyDisplay(item.assignedAt)}</span>
-                                                </span>
-                                            )}
-                                            {item.deadline && (
-                                                <span className="ai-card-deadline ai-card-meta-item">
-                                                    <Icon icon={Clock01Icon} size={10} />
-                                                    <span className="ai-card-meta-label">Deadline:</span>
-                                                    <span className="ai-card-meta-value">{formatDateOnlyDisplay(item.deadline)}</span>
-                                                </span>
-                                            )}
-                                            {item.verifiedAt && (
-                                                <span className="ai-card-meta-item">
-                                                    <Icon icon={CheckmarkCircle01Icon} size={10} />
-                                                    <span className="ai-card-meta-label">Verified:</span>
-                                                    <span className="ai-card-meta-value">{formatDateOnlyDisplay(item.verifiedAt)}</span>
+                                            </div>
+                                        </div>
+
+                                        {/* ── Status ── */}
+                                        <div className="live-task-card-field">
+                                            <span className="live-task-card-label">Status</span>
+                                            {canStatus ? (
+                                                <TaskStatusSelect
+                                                    value={item.status}
+                                                    onChange={(next) => handleStatusChange(item, next)}
+                                                    allowedStatuses={allowedStatuses}
+                                                />
+                                            ) : (
+                                                <span className={STATUS_LOOKUP[item.status]?.statusLabelClass || ''}>
+                                                    {STATUS_LOOKUP[item.status]?.label || item.status}
                                                 </span>
                                             )}
                                         </div>
 
+                                        {/* ── Host feedback ── */}
                                         {item.hostFeedback && (
                                             <div className="ai-card-feedback">
                                                 <strong>Host feedback:</strong> {item.hostFeedback}
                                             </div>
                                         )}
-
                                     </div>
                                 );
                             })}
                         </div>
                     ))}
 
+                    {/* ── Create form ── */}
                     {canCreateItems && adding ? (
                         <div className="glass-card inline-form-card" onKeyDown={(e: React.KeyboardEvent) => { if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); setAdding(false); resetFields(); } }}>
                             <input
                                 className="input-field"
                                 placeholder="Task title..."
                                 value={newTitle}
-                                onChange={(e: React.ChangeEvent<HTMLInputElement>) => setNewTitle(e.target.value)}
-                                onKeyDown={(e: React.KeyboardEvent) => {
-                                    if (e.key === 'Enter') handleCreate();
-                                    if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); setAdding(false); resetFields(); }
-                                }}
+                                onChange={(e) => setNewTitle(e.target.value)}
+                                onKeyDown={(e) => { if (e.key === 'Enter') handleCreate(); if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); setAdding(false); resetFields(); } }}
                                 autoFocus
                                 style={{ marginBottom: '0.25rem' }}
                             />
                             <div className="inline-form-row">
-                                <select
-                                    className="input-field"
-                                    value={newCategory}
-                                    onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setNewCategory(e.target.value)}
-                                    style={{ flex: 1 }}
-                                >
+                                <select className="input-field" value={newCategory} onChange={(e) => setNewCategory(e.target.value)} style={{ flex: 1 }}>
                                     {CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
                                 </select>
-                                {participants && participants.length > 0 && (
-                                    <select
-                                        className="input-field"
-                                        value={newAssignee?.id || ''}
-                                        onChange={(e: React.ChangeEvent<HTMLSelectElement>) => {
-                                            const p = participants.find(part => (part._id || part.id) === e.target.value);
-                                            if (p) setNewAssignee({ id: p._id || p.id, name: p.name });
-                                        }}
-                                        style={{ flex: 1 }}
-                                    >
-                                        {participants.map(p => (
-                                            <option key={p._id || p.id} value={p._id || p.id}>{p.name}</option>
-                                        ))}
-                                    </select>
+                                {archiveParticipants.length > 0 && (
+                                    <TaskAssigneePicker
+                                        participants={archiveParticipants}
+                                        value={newAssigneeIds}
+                                        selectedAssignees={newAssigneeIds.map(id => {
+                                            const p = archiveParticipants.find(pp => String(pp._id) === id);
+                                            return { id, name: p?.name ?? null, email: p?.email ?? null, profileImage: p?.profileImage ?? null };
+                                        })}
+                                        onChange={setNewAssigneeIds}
+                                    />
                                 )}
                             </div>
                             {agendaItems.length > 0 && (
-                                <select
-                                    className="input-field"
-                                    value={newAgendaItemId}
-                                    onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setNewAgendaItemId(e.target.value)}
-                                    style={{ marginBottom: '0.25rem' }}
-                                >
+                                <select className="input-field" value={newAgendaItemId} onChange={(e) => setNewAgendaItemId(e.target.value)} style={{ marginBottom: '0.25rem' }}>
                                     <option value="">General / Unlinked</option>
-                                    {agendaItems.map((agendaItem) => (
-                                        <option key={agendaItem.id} value={agendaItem.id}>{agendaItem.title}</option>
-                                    ))}
+                                    {agendaItems.map((a) => <option key={a.id} value={a.id}>{a.title}</option>)}
                                 </select>
                             )}
                             <div className="task-deadline-block">
                                 <span className="task-deadline-label">Deadline</span>
-                                <div className="task-deadline-row">
-                                    <input
-                                        type="date"
-                                        className="input-field"
-                                        value={newDeadlineDate}
-                                        onChange={(e: React.ChangeEvent<HTMLInputElement>) => setNewDeadlineDate(e.target.value)}
-                                        aria-label="Deadline date"
-                                    />
-                                    <label className="task-time-toggle">
-                                        <input
-                                            type="checkbox"
-                                            checked={newDeadlineIncludeTime}
-                                            onChange={(e: React.ChangeEvent<HTMLInputElement>) => setNewDeadlineIncludeTime(e.target.checked)}
-                                        />
-                                        <span>Time</span>
-                                    </label>
-                                    {newDeadlineIncludeTime && (
-                                        <input
-                                            type="time"
-                                            className="input-field"
-                                            value={newDeadlineTime}
-                                            onChange={(e: React.ChangeEvent<HTMLInputElement>) => setNewDeadlineTime(e.target.value)}
-                                            aria-label="Deadline time"
-                                        />
-                                    )}
-                                </div>
+                                <input
+                                    type="date"
+                                    className="input-field"
+                                    value={newDeadlineDate}
+                                    onChange={(e) => setNewDeadlineDate(e.target.value)}
+                                    aria-label="Deadline date"
+                                    style={{ flex: 1 }}
+                                />
                             </div>
                             <div className="inline-form-row" style={{ marginTop: '0.35rem' }}>
-                                <button className="btn btn-sm btn-primary" onClick={handleCreate} disabled={!newTitle.trim() || !newAssignee}>Add</button>
+                                <button className="btn btn-sm btn-primary" onClick={handleCreate} disabled={!newTitle.trim()}>Add</button>
                                 <button className="btn btn-sm btn-secondary" onClick={() => { setAdding(false); resetFields(); }}>Cancel</button>
                             </div>
                         </div>
@@ -728,7 +508,6 @@ export default function Tasks({ items, sectionTitle = 'Tasks', emptyMessage = 'N
             </div>
         </div>
 
-        {/* ── Custom feedback modal ────────────────────────────────────── */}
         <TaskFeedbackModal modal={feedbackModal} onComplete={closeFeedbackModal} />
         </>
     );

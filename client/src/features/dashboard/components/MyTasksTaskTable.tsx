@@ -8,15 +8,31 @@ import {
 import { Link } from "react-router-dom";
 import { useAuth } from "../../../stores/AuthContext";
 import { TaskFeedbackModal, type TaskFeedbackModalState } from "../../minutes/components/TaskFeedbackModal";
+import { TaskStatusSelect, TaskAssigneePicker } from "./ArchiveTaskTable";
 import { UserAvatar } from "../../../shared/components/UserAvatar";
-import { TaskStatusSelect } from "./ArchiveTaskTable";
+import Icon from "../../../shared/components/Icon";
+import { Archive01Icon, Delete01Icon } from "@hugeicons/core-free-icons";
+import type { ArchiveParticipant } from "./archiveHelpers";
 
 const API_BASE = import.meta.env.VITE_API_URL || "http://localhost:5001/api";
 
-const STACK_MAX_VISIBLE_DISCS = 3;
-
 const HOST_STATUSES = ["draft", "pending", "in-progress", "completed", "verified", "missing"];
 const ASSIGNEE_STATUSES = ["pending", "in-progress", "completed"];
+
+const MONTH_ABBR = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+
+const CATEGORY_CHIP: Record<string, string> = {
+    Technical: "chip-blue",
+    Administrative: "chip-purple",
+    Decision: "chip-amber",
+    "Follow-up": "chip-cyan",
+};
+
+function formatDeadline(v: string): string {
+    const d = new Date(v);
+    if (Number.isNaN(d.getTime())) return v;
+    return `${String(d.getDate()).padStart(2, "0")} ${MONTH_ABBR[d.getMonth()]} ${d.getFullYear()}`;
+}
 
 /** Shape returned by `GET /tasks/mine/overview` after `processItem`. */
 export interface MineOverviewTask {
@@ -31,21 +47,28 @@ export interface MineOverviewTask {
     }>;
     assignee?: string;
     assigneeId?: string;
+    category?: string | null;
+    deadline?: string | null;
     meetingId?: string | null;
+    meetingShortId?: string | null;
     meetingTitle?: string | null;
     meetingHostId?: string | null;
     assignedAt?: string | null;
+    verifiedAt?: string | null;
     hostFeedback?: string | null;
+    archived?: boolean;
+    archivedAt?: string | null;
 }
 
+/** DD MMM YYYY — e.g. "05 May 2026" */
 function formatDateAssigned(dateValue: string | undefined | null): string {
     if (!dateValue) return "—";
     const date = new Date(dateValue);
     if (Number.isNaN(date.getTime())) return "—";
-    const year = date.getFullYear();
-    const month = String(date.getMonth() + 1).padStart(2, "0");
     const day = String(date.getDate()).padStart(2, "0");
-    return `${year}-${month}-${day}`;
+    const month = MONTH_ABBR[date.getMonth()];
+    const year = date.getFullYear();
+    return `${day} ${month} ${year}`;
 }
 
 async function readErrorMessage(res: Response): Promise<string> {
@@ -110,9 +133,16 @@ export function MyTasksTaskTable({ tasks, emptyMessage, fetchWithAuth, onRefresh
                     <div className="my-tasks-task-table-cell my-tasks-task-table-cell--assignees" role="columnheader">
                         Assigned
                     </div>
+                    <div className="my-tasks-task-table-cell my-tasks-task-table-cell--type" role="columnheader">
+                        Type
+                    </div>
+                    <div className="my-tasks-task-table-cell my-tasks-task-table-cell--deadline" role="columnheader">
+                        Deadline
+                    </div>
                     <div className="my-tasks-task-table-cell my-tasks-task-table-cell--status" role="columnheader">
                         Status
                     </div>
+                    <div className="my-tasks-task-table-cell my-tasks-task-table-cell--actions" role="columnheader" aria-label="Actions" />
                 </div>
                 <div className="my-tasks-task-table-body">
                     {tasks.length === 0 ? (
@@ -160,6 +190,11 @@ function MyTasksTaskRow({
     const titleEverFocusedRef = useRef(false);
     const [savingTitle, setSavingTitle] = useState(false);
 
+    // Participants for the assignee picker — lazily fetched the first time the row mounts
+    // as a host, so the picker is ready without a click-to-load pattern.
+    const [meetingParticipants, setMeetingParticipants] = useState<ArchiveParticipant[]>([]);
+    const participantsFetchedRef = useRef(false);
+
     const meetingHostId = String(task.meetingHostId || "");
     const isHost = Boolean(currentUserId) && meetingHostId === currentUserId;
     const assigneeIds = useMemo(
@@ -169,6 +204,41 @@ function MyTasksTaskRow({
     const isAssignee = Boolean(currentUserId) && assigneeIds.includes(currentUserId);
     const canEditStatus = isHost || (isAssignee && task.status !== "verified");
     const canEditTitle = isHost;
+
+    // Fetch participants for this meeting so the host can use the assignee picker.
+    // Mirrors the allParticipants logic in ArchiveDetailView: host first (from the
+    // populated hostId object), then the rest of the participants array, deduplicated.
+    useEffect(() => {
+        if (!isHost || !task.meetingId || participantsFetchedRef.current) return;
+        participantsFetchedRef.current = true;
+        (async () => {
+            try {
+                const res = await (fetchWithAuth || fetch)(`${API_BASE}/archive/${task.meetingId}`);
+                if (!res.ok) return;
+                const data = await res.json();
+                const meeting = data.meeting || {};
+
+                // Host may be a populated object on meeting.hostId
+                const hostObj: ArchiveParticipant | null =
+                    meeting.hostId && typeof meeting.hostId === "object"
+                        ? { ...meeting.hostId, _id: String(meeting.hostId._id) }
+                        : null;
+
+                const rawParticipants: ArchiveParticipant[] = (meeting.participants || []).map(
+                    (p: ArchiveParticipant) => ({ ...p, _id: String(p._id) }),
+                );
+
+                // Deduplicate: remove host from the participants list if already present
+                const others = hostObj
+                    ? rawParticipants.filter((p) => p._id !== hostObj._id)
+                    : rawParticipants;
+
+                setMeetingParticipants(hostObj ? [hostObj, ...others] : others);
+            } catch {
+                // Non-critical — picker will just show an empty list
+            }
+        })();
+    }, [isHost, task.meetingId, fetchWithAuth]);
 
     useEffect(() => {
         if (!titleEverFocusedRef.current) setTitleDraft(task.title);
@@ -240,33 +310,28 @@ function MyTasksTaskRow({
         await persistPatch(payload);
     };
 
+    const handleAssigneesChange = useCallback(
+        async (ids: string[]) => {
+            await persistPatch({ assignees: ids });
+        },
+        [persistPatch],
+    );
+
     const editableStatuses = isHost ? HOST_STATUSES : ASSIGNEE_STATUSES;
 
+    // Only use task.assignees (the canonical multi-assignee list).
+    // We intentionally ignore the legacy task.assigneeId / task.assignee fields here
+    // to avoid showing stale or host-referencing data as if the task were assigned.
     const renderableAssignees = useMemo(() => {
-        const raw = task.assignees || [];
-        if (raw.length > 0) {
-            return raw.map((a) => ({
-                id: String(a.id),
-                name: a.name || a.email || "User",
-                profileImage: a.profileImage ?? null,
-            }));
-        }
-        if (task.assigneeId) {
-            return [
-                {
-                    id: String(task.assigneeId),
-                    name: task.assignee || "User",
-                    profileImage: null as string | null,
-                },
-            ];
-        }
-        return [];
-    }, [task.assignees, task.assignee, task.assigneeId]);
+        return (task.assignees || []).map((a) => ({
+            id: String(a.id),
+            name: a.name || a.email || "User",
+            profileImage: a.profileImage ?? null,
+        }));
+    }, [task.assignees]);
 
-    const stackVisible = renderableAssignees.slice(0, STACK_MAX_VISIBLE_DISCS);
-    const stackOverflow = renderableAssignees.length - stackVisible.length;
-
-    const meetingHref = task.meetingId ? `/archives/${encodeURIComponent(task.meetingId)}` : null;
+    const meetingHref = (task.meetingShortId || task.meetingId)
+        ? `/archives/${encodeURIComponent(task.meetingShortId || task.meetingId!)}` : null;
 
     return (
         <div className="my-tasks-task-table-row" role="row">
@@ -311,40 +376,69 @@ function MyTasksTaskRow({
                 {formatDateAssigned(task.assignedAt)}
             </div>
             <div className="my-tasks-task-table-cell my-tasks-task-table-cell--assignees" role="cell">
-                {renderableAssignees.length === 0 ? (
-                    <span className="archive-task-unassigned">Unassigned</span>
+                {isHost ? (
+                    // Hosts get the full assignee picker — same component used in the archive page.
+                    <TaskAssigneePicker
+                        participants={meetingParticipants}
+                        value={assigneeIds}
+                        selectedAssignees={(task.assignees || []).map((a) => ({
+                            id: String(a.id),
+                            name: a.name ?? null,
+                            email: a.email ?? null,
+                            profileImage: a.profileImage ?? null,
+                        }))}
+                        onChange={handleAssigneesChange}
+                        disabled={false}
+                    />
                 ) : (
-                    <div
-                        className="archive-filter-stack archive-filter-stack--task-assignee-trigger"
-                        aria-label={`Assignees: ${renderableAssignees.map((a) => a.name).join(", ")}`}
-                    >
-                        {stackVisible.map((opt, idx) => (
-                            <div
-                                key={opt.id}
-                                className={`archive-filter-stack-slot${idx > 0 ? " archive-filter-stack-slot--overlap" : ""}`}
-                                style={{ zIndex: idx + 1 }}
-                            >
-                                <span className="archive-filter-stack-disc">
-                                    <UserAvatar
-                                        name={opt.name}
-                                        profileImage={opt.profileImage}
-                                        userId={opt.id}
-                                        size={18}
-                                        style={{ border: "none", borderRadius: "50%" }}
-                                    />
-                                </span>
-                            </div>
-                        ))}
-                        {stackOverflow > 0 ? (
-                            <div
-                                className="archive-filter-stack-slot archive-filter-stack-slot--overlap"
-                                style={{ zIndex: stackVisible.length + 1 }}
-                            >
-                                <span className="archive-filter-stack-more">+{stackOverflow}</span>
-                            </div>
-                        ) : null}
-                    </div>
+                    // Non-hosts see a read-only avatar stack (or "Unassigned").
+                    renderableAssignees.length === 0 ? (
+                        <span className="archive-task-unassigned">Unassigned</span>
+                    ) : (
+                        <div
+                            className="archive-filter-stack archive-filter-stack--task-assignee-trigger"
+                            aria-label={`Assignees: ${renderableAssignees.map((a) => a.name).join(", ")}`}
+                        >
+                            {renderableAssignees.slice(0, 3).map((opt, idx) => (
+                                <div
+                                    key={opt.id}
+                                    className={`archive-filter-stack-slot${idx > 0 ? " archive-filter-stack-slot--overlap" : ""}`}
+                                    style={{ zIndex: idx + 1 }}
+                                >
+                                    <span className="archive-filter-stack-disc" aria-hidden>
+                                        <UserAvatar
+                                            name={opt.name}
+                                            profileImage={opt.profileImage}
+                                            userId={opt.id}
+                                            size={18}
+                                            style={{ border: "none", borderRadius: "50%" }}
+                                        />
+                                    </span>
+                                </div>
+                            ))}
+                            {renderableAssignees.length > 3 ? (
+                                <div
+                                    className="archive-filter-stack-slot archive-filter-stack-slot--overlap"
+                                    style={{ zIndex: 4 }}
+                                >
+                                    <span className="archive-filter-stack-more">+{renderableAssignees.length - 3}</span>
+                                </div>
+                            ) : null}
+                        </div>
+                    )
                 )}
+            </div>
+            <div className="my-tasks-task-table-cell my-tasks-task-table-cell--type" role="cell">
+                {task.category ? (
+                    <span className={`chip ${CATEGORY_CHIP[task.category] || "chip-blue"}`} style={{ fontSize: "0.6875rem" }}>
+                        {task.category}
+                    </span>
+                ) : <span style={{ color: "var(--text-muted)" }}>—</span>}
+            </div>
+            <div className="my-tasks-task-table-cell my-tasks-task-table-cell--deadline" role="cell">
+                <span style={{ fontSize: "0.8125rem", color: task.deadline ? "var(--text-primary)" : "var(--text-muted)" }}>
+                    {task.deadline ? formatDeadline(task.deadline) : "—"}
+                </span>
             </div>
             <div className="my-tasks-task-table-cell my-tasks-task-table-cell--status" role="cell">
                 <TaskStatusSelect
@@ -353,6 +447,35 @@ function MyTasksTaskRow({
                     disabled={!canEditStatus}
                     allowedStatuses={editableStatuses}
                 />
+            </div>
+            <div className="my-tasks-task-table-cell my-tasks-task-table-cell--actions" role="cell">
+                {isHost && (
+                    <div className="task-row-actions">
+                        <button
+                            type="button"
+                            className="task-action-btn task-action-btn--archive"
+                            title="Archive task"
+                            onClick={async () => {
+                                await persistPatch({ archived: true });
+                            }}
+                        >
+                            <Icon icon={Archive01Icon} size={14} />
+                        </button>
+                        <button
+                            type="button"
+                            className="task-action-btn task-action-btn--delete"
+                            title="Delete task"
+                            onClick={async () => {
+                                if (!window.confirm("Permanently delete this task?")) return;
+                                const res = await (fetchWithAuth || fetch)(`${API_BASE}/tasks/${task.id}`, { method: "DELETE" });
+                                if (res.ok) onRefresh?.();
+                                else window.alert(await readErrorMessage(res));
+                            }}
+                        >
+                            <Icon icon={Delete01Icon} size={14} />
+                        </button>
+                    </div>
+                )}
             </div>
         </div>
     );

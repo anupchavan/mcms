@@ -36,7 +36,7 @@ export = function ({ Meeting, User, protect, usingMongo }: any) {
 
             const meetings = await Meeting.find({
                 $or: [{ hostId: userId }, { participants: userId }],
-            }).select('confirmedDate confirmedTime date time status hostId');
+            }).select('confirmedDate confirmedTime date time status hostId durationMinutes');
 
             const totalMeetings = meetings.length;
 
@@ -68,9 +68,11 @@ export = function ({ Meeting, User, protect, usingMongo }: any) {
 
             const tasks = await Task.find({
                 $or: [{ assignees: userId }, { assignee: userId }],
+                archived: { $ne: true },
             });
             const tasksTotal = tasks.length;
-            const tasksCompleted = tasks.filter((i: any) => i.status === 'verified').length;
+            // Count both submitted (completed) and host-verified tasks as "done".
+            const tasksCompleted = tasks.filter((i: any) => ['completed', 'verified'].includes(i.status)).length;
 
             const dayMap: Record<number, string> = { 0: 'Sun', 1: 'Mon', 2: 'Tue', 3: 'Wed', 4: 'Thu', 5: 'Fri', 6: 'Sat' };
             const heatmap: Record<string, number> = { Mon: 0, Tue: 0, Wed: 0, Thu: 0, Fri: 0 };
@@ -94,16 +96,28 @@ export = function ({ Meeting, User, protect, usingMongo }: any) {
             const recentAttendance = attendanceRecords.filter((r: any) => r.joinTimestamp >= fourWeeksAgo);
             const weekBuckets = [0, 0, 0, 0];
             const weekTotals = [0, 0, 0, 0];
+            // Hosted meetings that fall in the window — host is considered always present
+            const hostedMeetingIds = new Set(
+                meetings
+                    .filter((m: any) => String(m.hostId?._id || m.hostId) === userId)
+                    .map((m: any) => String(m._id)),
+            );
             for (const meeting of meetings) {
                 const mDate = new Date((meeting as any).confirmedDate || (meeting as any).date);
                 if (mDate >= fourWeeksAgo) {
                     const weekIdx = Math.min(3, Math.floor((now.getTime() - mDate.getTime()) / (7 * 24 * 3600000)));
                     weekTotals[3 - weekIdx]++;
+                    if (hostedMeetingIds.has(String((meeting as any)._id))) {
+                        weekBuckets[3 - weekIdx]++;
+                    }
                 }
             }
+            // Also count attendance records for meetings NOT hosted by this user (participant attendance)
             for (const rec of recentAttendance) {
-                const weekIdx = Math.min(3, Math.floor((now.getTime() - (rec as any).joinTimestamp) / (7 * 24 * 3600000)));
-                weekBuckets[3 - weekIdx]++;
+                if (!hostedMeetingIds.has(String((rec as any).meetingId))) {
+                    const weekIdx = Math.min(3, Math.floor((now.getTime() - (rec as any).joinTimestamp) / (7 * 24 * 3600000)));
+                    weekBuckets[3 - weekIdx]++;
+                }
             }
             const monthlyAttendance = [0, 1, 2, 3].map(i => ({
                 week: `W${i + 1}`, attended: weekBuckets[i], total: weekTotals[i] || weekBuckets[i],
@@ -126,7 +140,15 @@ export = function ({ Meeting, User, protect, usingMongo }: any) {
                 speakingTime = Math.round(totalWords / WORDS_PER_MINUTE);
             }
 
-            const avgMeetingDuration = totalMeetings > 0 ? Math.round((totalHours / totalMeetings) * 60) : 0;
+            // avgMeetingDuration: use actual attendance duration when available, else scheduled durationMinutes
+            const avgMeetingDuration = (() => {
+                if (totalHours > 0 && totalMeetings > 0) return Math.round((totalHours / totalMeetings) * 60);
+                if (totalMeetings > 0) {
+                    const totalScheduled = meetings.reduce((s: number, m: any) => s + ((m as any).durationMinutes || 30), 0);
+                    return Math.round(totalScheduled / totalMeetings);
+                }
+                return 0;
+            })();
 
             const badges: Array<{ name: string; iconKey: string; description: string }> = [];
             if (tasksTotal > 0 && (tasksCompleted / tasksTotal) >= 0.9) {
