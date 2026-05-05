@@ -371,12 +371,12 @@ export default function Tasks({ items, sectionTitle = 'Tasks', emptyMessage = 'N
                                             <div className="live-task-card-actions">
                                                 {isHost && item.assigneeId && (
                                                     <button className="btn-icon btn-icon-sm" onClick={() => handleSendFeedback(item)} title="Send note to assignee">
-                                                        <Icon icon={MessageAdd01Icon} size={11} />
+                                                        <Icon icon={MessageAdd01Icon} size={14} />
                                                     </button>
                                                 )}
                                                 {meetingId && isHost && (
                                                     <button className="btn-icon btn-icon-sm" onClick={() => handleDelete(itemId)} title="Delete task">
-                                                        <Icon icon={Delete02Icon} size={11} />
+                                                        <Icon icon={Delete02Icon} size={14} />
                                                     </button>
                                                 )}
                                             </div>
@@ -411,9 +411,7 @@ export default function Tasks({ items, sectionTitle = 'Tasks', emptyMessage = 'N
                                                     {item.deadline ? formatDateOnlyDisplay(item.deadline) : '—'}
                                                 </span>
                                             </div>
-                                        </div>
 
-                                        {/* ── Status ── */}
                                         <div className="live-task-card-field">
                                             <span className="live-task-card-label">Status</span>
                                             {canStatus ? (
@@ -428,6 +426,9 @@ export default function Tasks({ items, sectionTitle = 'Tasks', emptyMessage = 'N
                                                 </span>
                                             )}
                                         </div>
+                                        </div>
+
+
 
                                         {/* ── Host feedback ── */}
                                         {item.hostFeedback && (

@@ -427,6 +427,24 @@ export default function LiveMeetingPage({ isPersonalRoom = false }: LiveMeetingP
         socket.emit("unpin_chat_message", { meetingId: internalMeetingId });
     }, [socket, selectedMeeting, isHost, chatSessionActive, internalMeetingId]);
 
+    // Minutes = unassigned tasks (no assigneeId and empty assignees array)
+    const minutesTasks = useMemo(
+        () => tasks.filter(t => !t.assigneeId && (!t.assignees || t.assignees.length === 0)),
+        [tasks],
+    );
+
+    const handleAddMinute = useCallback(async (title: string) => {
+        if (!internalMeetingId || !title.trim()) return;
+        try {
+            await fetchWithAuth(`${API_BASE}/tasks/${internalMeetingId}`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ title: title.trim(), category: 'Administrative', assignees: [] }),
+            });
+            fetchTasks(internalMeetingId);
+        } catch (err) { console.error('Failed to create minute item:', err); }
+    }, [internalMeetingId, fetchWithAuth, fetchTasks]);
+
     const handleAgendaChange = useCallback(async (items: any[]) => {
         if (!selectedMeeting || !isHost) return;
         setAgendaItems(items);
@@ -555,6 +573,8 @@ export default function LiveMeetingPage({ isPersonalRoom = false }: LiveMeetingP
                 onUnpinChatMessage={handleUnpinChatMessage}
                 chatSessionActive={chatSessionActive}
                 onRequestJoinMeeting={handleRequestJoinFromChat}
+                minutesItems={minutesTasks}
+                onAddMinute={handleAddMinute}
                 onAgendaChange={handleAgendaChange}
                 onAddTaskConsumed={() => setAddTaskTrigger(0)}
                 onRefreshTasks={() => internalMeetingId && fetchTasks(internalMeetingId)}

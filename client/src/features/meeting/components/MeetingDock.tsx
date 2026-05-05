@@ -66,6 +66,7 @@ interface MeetingDockProps {
 
     onAgendaChange: (items: any[]) => void;
     onMinutesChange?: (items: any[]) => void;
+    onAddMinute?: (title: string) => void;
     onAddTaskConsumed: () => void;
     onRefreshTasks: () => void;
     fetchWithAuth: (url: string, options?: RequestInit) => Promise<Response>;
@@ -95,6 +96,7 @@ const MeetingDock: FC<MeetingDockProps> = ({
     onRequestJoinMeeting,
     onAgendaChange,
     onMinutesChange,
+    onAddMinute,
     onAddTaskConsumed,
     onRefreshTasks,
     fetchWithAuth,
@@ -131,7 +133,8 @@ const MeetingDock: FC<MeetingDockProps> = ({
                 return (
                     <MinutesPanel
                         minutesItems={minutesItems}
-                        onItemChange={onMinutesChange ?? (() => {})}
+                        onAddItem={onAddMinute}
+                        onItemChange={onMinutesChange}
                     />
                 );
             case 'actions':
@@ -159,7 +162,7 @@ const MeetingDock: FC<MeetingDockProps> = ({
         chatMessages, currentUserId, onSendChatMessage,
         pinnedChatMessage, onPinChatMessage, onUnpinChatMessage,
         chatSessionActive, onRequestJoinMeeting,
-        onAgendaChange, onMinutesChange, onAddTaskConsumed,
+        onAgendaChange, onMinutesChange, onAddMinute, onAddTaskConsumed,
         onRefreshTasks, fetchWithAuth,
     ]);
 
