@@ -131,7 +131,7 @@ export = function ({ User, Meeting, protect, usingMongo, inMemoryUsers }: any) {
             const user = await User.findById(req.params.userId).select('+profileImageBuffer profileImageMimeType');
             if (!user?.profileImageBuffer) return res.status(404).send('Not found');
             res.set('Content-Type', user.profileImageMimeType || 'image/jpeg');
-            res.set('Cache-Control', 'public, max-age=31536000, immutable');
+            res.set('Cache-Control', 'private, max-age=3600');
             return res.send(user.profileImageBuffer);
         } catch {
             return res.status(404).send('Not found');
@@ -148,7 +148,7 @@ export = function ({ User, Meeting, protect, usingMongo, inMemoryUsers }: any) {
             }
             if (!req.file) return res.status(400).json({ message: 'No file uploaded' });
             try {
-                const profileImage = `/api/profile/avatar/${req.user.id}`;
+                const profileImage = `/api/profile/avatar/${req.user.id}?v=${Date.now()}`;
                 if (usingMongo() && User) {
                     await User.findByIdAndUpdate(req.user.id, {
                         profileImage,
