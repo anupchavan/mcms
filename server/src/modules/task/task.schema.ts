@@ -26,6 +26,10 @@ const taskSchema = new mongoose.Schema({
     deadline: { type: String, default: null },
     source: { type: String, enum: ['manual', 'ai-extracted'], default: 'manual' },
     aiConfidence: { type: Number, default: null },
+    /** Soft-archive flag — only hosts can set this. Archived tasks are hidden from
+     * the main My Tasks / Delegated Tasks views but accessible in the archived panel. */
+    archived: { type: Boolean, default: false },
+    archivedAt: { type: Date, default: null },
 }, {
     timestamps: true,
 });

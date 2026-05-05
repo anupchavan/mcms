@@ -42,10 +42,18 @@ interface DashboardStats {
     avgMeetingDuration: number;
 }
 
+interface TaskMini {
+    id: string;
+    title: string;
+    meetingId?: string | null;
+    meetingShortId?: string | null;
+}
+
 interface ProductivityDashboardProps {
     stats: DashboardStats | null;
     userName?: string;
     personalRoomId?: string;
+    myTasks?: { assignedToMe: TaskMini[]; assignedByMe: TaskMini[] };
 }
 
 const TABS = ['overview', 'attendance', 'engagement'];
@@ -140,7 +148,7 @@ function buildRecommendations(stats: DashboardStats): Recommendation[] {
     return recs.slice(0, 3);
 }
 
-export default function ProductivityDashboard({ stats, userName, personalRoomId }: ProductivityDashboardProps) {
+export default function ProductivityDashboard({ stats, userName, personalRoomId, myTasks }: ProductivityDashboardProps) {
     const [activeTab, setActiveTab] = useState('overview');
 
     const handleTab = useCallback((e: KeyboardEvent) => {
@@ -266,6 +274,35 @@ export default function ProductivityDashboard({ stats, userName, personalRoomId 
                             <span className="stat-label">Tasks Completed</span>
                         </div>
                         <div className="stat-value">{stats.tasksCompleted}/{stats.tasksTotal}</div>
+                        {(() => {
+                            const tasks = myTasks?.assignedToMe ?? [];
+                            const shown = tasks.slice(0, 3);
+                            const rest = tasks.length - shown.length;
+                            if (shown.length === 0) return null;
+                            return (
+                                <div className="dashboard-task-mini-list">
+                                    {shown.map((t) =>
+                                        t.meetingId ? (
+                                            <Link
+                                                key={t.id}
+                                                to={`/archives/${encodeURIComponent(t.meetingShortId || t.meetingId!)}`}
+                                                className="dashboard-task-mini-item"
+                                                title={t.title}
+                                            >
+                                                {t.title}
+                                            </Link>
+                                        ) : (
+                                            <span key={t.id} className="dashboard-task-mini-item dashboard-task-mini-item--no-link" title={t.title}>
+                                                {t.title}
+                                            </span>
+                                        )
+                                    )}
+                                    {rest > 0 && (
+                                        <Link to="/tasks" className="dashboard-task-mini-more">+{rest} more</Link>
+                                    )}
+                                </div>
+                            );
+                        })()}
                     </div>
 
                     <div className="stat-card glass-card" style={{ gridColumn: 'span 2' }}>

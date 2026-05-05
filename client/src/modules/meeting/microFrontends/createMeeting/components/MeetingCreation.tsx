@@ -620,7 +620,7 @@ export default function MeetingCreation({
             </div>
           </div>
 
-          <div className="form-group" style={{ marginBottom: "0.5rem" }}>
+          <div className="form-group" style={{ marginBottom: "var(--lk-size-md)" }}>
             <label className="form-label">Meeting Modality</label>
             <div className="modality-options">
               {(["Online", "Offline", "Hybrid"] as const).map((m) => (
@@ -661,10 +661,10 @@ export default function MeetingCreation({
                   alignItems: "center",
                   gap: "0.5rem",
                   fontSize: "0.8125rem",
-                  color: "var(--primary)",
+                  color: "var(--color-tx-normal)",
                 }}
               >
-                <Icon icon={Link01Icon} size={14} />A video call room will be
+                A video call room will be
                 auto-created
               </div>
             </div>
@@ -686,10 +686,10 @@ export default function MeetingCreation({
                   alignItems: "center",
                   gap: "0.5rem",
                   fontSize: "0.8125rem",
-                  color: "var(--primary)",
+                  color: "var(--color-tx-normal)",
                 }}
               >
-                <Icon icon={Link01Icon} size={14} />A video call room will be
+                A video call room will be
                 auto-created
               </div>
             </div>
@@ -697,25 +697,40 @@ export default function MeetingCreation({
 
           {(modality === "Offline" || modality === "Hybrid") && (
             <div className="form-group">
-              <label className="form-label">Physical Location</label>
-              <div style={{ display: "flex", gap: "1rem", marginBottom: "0.75rem" }}>
-                <label style={{ display: "flex", alignItems: "center", gap: "0.25rem", fontSize: "0.8125rem", color: "var(--text-secondary)", cursor: "pointer" }}>
+              <label className="form-label form-subheading">Physical Location</label>
+              <div style={{ display: "flex", gap: "1rem", marginBottom: "var(--lk-size-md)" }}>
+                <label className="custom-radio-label" style={{ display: "flex", alignItems: "center", gap: "0.5rem", fontSize: "0.92rem", color: "var(--text-secondary)", cursor: "pointer", padding: "var(--lk-size-xs) 0", borderRadius: "var(--radius-xs)", transition: "background 0.2s" }}>
                   <input
                     type="radio"
                     name="locationType"
                     value="Inside"
                     checked={locationType === "Inside"}
                     onChange={(e) => setLocationType(e.target.value as "Inside" | "Outside")}
+                    style={{
+                      accentColor: "var(--color-tx-normal)",
+                      width: "1.1em",
+                      height: "1.1em",
+                      marginRight: "0.5em",
+                    }}
                   />
-                  Inside IITH Campus
+                  <span>
+                    Inside IITH Campus
+                  </span>
                 </label>
-                <label style={{ display: "flex", alignItems: "center", gap: "0.25rem", fontSize: "0.8125rem", color: "var(--text-secondary)", cursor: "pointer" }}>
+
+                <label className="custom-radio-label" style={{ display: "flex", alignItems: "center", gap: "0.5rem", fontSize: "0.92rem", color: "var(--text-secondary)", cursor: "pointer", padding: "var(--lk-size-xs) 0", borderRadius: "var(--radius-xs)", transition: "background 0.2s" }}>
                   <input
                     type="radio"
                     name="locationType"
                     value="Outside"
                     checked={locationType === "Outside"}
                     onChange={(e) => setLocationType(e.target.value as "Inside" | "Outside")}
+                    style={{
+                      accentColor: "var(--color-tx-normal)",
+                      width: "1.1em",
+                      height: "1.1em",
+                      marginRight: "0.5em",
+                    }}
                   />
                   Outside Campus
                 </label>
@@ -1157,8 +1172,8 @@ export default function MeetingCreation({
             background: var(--bg-hover); border-color: var(--border-hover);
           }
           .modality-btn.active {
-            background: var(--primary-muted); border-color: var(--primary-border);
-            color: var(--primary);
+            background: var(--bg-primary); border-color: var(--border);
+            color: var(--color-tx-normal);
           }
 
           .nldate-wrapper {
@@ -1175,7 +1190,7 @@ export default function MeetingCreation({
             transition: border-color 0.2s ease, box-shadow 0.2s ease;
           }
           .nldate-input-row:focus-within {
-            border-color: var(--primary);
+            border-color: var(--color-tx-normal);
             box-shadow: 0 0 0 0.1875rem var(--primary-muted);
           }
           .nldate-input-row.nldate-error {
@@ -1286,7 +1301,7 @@ export default function MeetingCreation({
             color: var(--text-primary);
           }
           .slot-row-icon {
-            color: var(--primary);
+            color: var(--color-tx-normal);
             flex-shrink: 0;
           }
 

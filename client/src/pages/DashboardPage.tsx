@@ -4,13 +4,14 @@ import useDashboardContext from "../hooks/useDashboardContext";
 
 export default function DashboardPage() {
     const { user } = useAuth();
-    const { dashboardStats } = useDashboardContext();
+    const { dashboardStats, myTasks } = useDashboardContext();
     return (
         <div style={{ flex: 1, overflow: "hidden" }}>
             <ProductivityDashboard
                 stats={dashboardStats as any}
                 userName={user?.name}
                 personalRoomId={user?.personalRoomId}
+                myTasks={myTasks}
             />
         </div>
     );

@@ -15,6 +15,20 @@ import type { ArchiveParticipant, ArchiveTask, ArchiveTaskAssignee } from "./arc
 
 const STACK_MAX_VISIBLE_DISCS = 3;
 
+const CATEGORY_CHIP: Record<string, string> = {
+    Technical: "chip-blue",
+    Administrative: "chip-purple",
+    Decision: "chip-amber",
+    "Follow-up": "chip-cyan",
+};
+
+const MONTH_ABBR = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+function formatDeadline(v: string): string {
+    const d = new Date(v);
+    if (Number.isNaN(d.getTime())) return v;
+    return `${String(d.getDate()).padStart(2,"0")} ${MONTH_ABBR[d.getMonth()]} ${d.getFullYear()}`;
+}
+
 interface StatusOption {
     value: string;
     label: string;
@@ -30,7 +44,7 @@ export const STATUS_OPTIONS: StatusOption[] = [
         label: "Awaiting Verify",
         statusLabelClass: "archive-task-status-label archive-task-status-label--awaiting-verify",
     },
-    { value: "verified", label: "Verified", statusLabelClass: "archive-task-status-label archive-task-status-label--verified" },
+    { value: "verified", label: "Completed", statusLabelClass: "archive-task-status-label archive-task-status-label--completed" },
     { value: "missing", label: "Missing", statusLabelClass: "archive-task-status-label archive-task-status-label--missing" },
     { value: "draft", label: "Draft", statusLabelClass: "archive-task-status-label archive-task-status-label--draft" },
 ];
@@ -68,6 +82,8 @@ export function ArchiveTaskTable({
             <div className="archive-task-table-head" role="row">
                 <div className="archive-task-table-cell archive-task-table-cell--title" role="columnheader">Task</div>
                 <div className="archive-task-table-cell archive-task-table-cell--assignees" role="columnheader">Assigned</div>
+                <div className="archive-task-table-cell archive-task-table-cell--type" role="columnheader">Type</div>
+                <div className="archive-task-table-cell archive-task-table-cell--deadline" role="columnheader">Deadline</div>
                 <div className="archive-task-table-cell archive-task-table-cell--status" role="columnheader">Status</div>
             </div>
             <div className="archive-task-table-body">
@@ -205,6 +221,18 @@ function ArchiveTaskRow({ task, participants, canEdit, fetchWithAuth, apiBase, o
                     disabled={!canEdit}
                 />
             </div>
+            <div className="archive-task-table-cell archive-task-table-cell--type" role="cell">
+                {task.category ? (
+                    <span className={`chip ${CATEGORY_CHIP[task.category] || "chip-blue"}`} style={{ fontSize: "0.6875rem" }}>
+                        {task.category}
+                    </span>
+                ) : <span className="archive-task-no-value">—</span>}
+            </div>
+            <div className="archive-task-table-cell archive-task-table-cell--deadline" role="cell">
+                <span className="archive-task-deadline-text">
+                    {task.deadline ? formatDeadline(task.deadline) : "—"}
+                </span>
+            </div>
             <div className="archive-task-table-cell archive-task-table-cell--status" role="cell">
                 <TaskStatusSelect
                     value={task.status}
@@ -216,9 +244,10 @@ function ArchiveTaskRow({ task, participants, canEdit, fetchWithAuth, apiBase, o
     );
 }
 
-/** Multi-assignee picker. Built from the same archive multi-select primitives as the People filter:
+/** Multi-assignee picker. Exported so other task tables (e.g. MyTasksTaskTable) can reuse it.
+ * Built from the same archive multi-select primitives as the People filter:
  * stacked avatars in the trigger, checkbox + avatar + name rows, and "Unassigned" header that clears all. */
-function TaskAssigneePicker({
+export function TaskAssigneePicker({
     participants,
     value,
     selectedAssignees,

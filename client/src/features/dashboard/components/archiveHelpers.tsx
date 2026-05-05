@@ -81,6 +81,8 @@ export interface ArchiveTask {
     id: string;
     title: string;
     status: string;
+    category?: string;
+    deadline?: string | null;
     /** Canonical multi-assignee list. Empty array = unassigned. */
     assignees?: ArchiveTaskAssignee[];
     /** Legacy single-assignee display name (kept so older data still renders). */
