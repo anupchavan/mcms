@@ -1,12 +1,18 @@
-import { createContext, useContext, useState, useEffect, useCallback, useMemo } from 'react';
-import type { ReactNode } from 'react';
-import { ALL_ACTIONS, ACTION_BY_ID, type HotkeyDef } from '../shared/actions';
-import { useAuth } from './AuthContext';
+import {
+    createContext,
+    useContext,
+    useState,
+    useEffect,
+    useCallback,
+    useMemo,
+} from "react";
+import type { ReactNode } from "react";
+import { ALL_ACTIONS, ACTION_BY_ID, type HotkeyDef } from "../shared/actions";
+import { useAuth } from "./AuthContext";
 
-const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:5001/api';
+const API_BASE = import.meta.env.VITE_API_URL || "http://localhost:5001/api";
 
-// ── Types ─────────────────────────────────────────────────────────────────────
-
+// Types
 export interface ActionPref {
     actionId: string;
     /** User-defined alias; empty string means use default. */
@@ -25,89 +31,134 @@ interface ActionPreferencesContextValue {
     /** Persist the entire prefs array to the server. */
     savePreferences: (newPrefs: ActionPref[]) => Promise<void>;
     /** Update a single action's alias and/or hotkey without full save. */
-    updatePref: (actionId: string, patch: Partial<Omit<ActionPref, 'actionId'>>) => void;
+    updatePref: (
+        actionId: string,
+        patch: Partial<Omit<ActionPref, "actionId">>,
+    ) => void;
     /** Flush pending local changes to the server. */
     flush: () => Promise<void>;
     loading: boolean;
 }
 
-// ── Context ───────────────────────────────────────────────────────────────────
+// Context
 
-const ActionPreferencesContext = createContext<ActionPreferencesContextValue | null>(null);
+const ActionPreferencesContext =
+    createContext<ActionPreferencesContextValue | null>(null);
 
 export function useActionPreferences() {
     const ctx = useContext(ActionPreferencesContext);
-    if (!ctx) throw new Error('useActionPreferences must be used inside ActionPreferencesProvider');
+    if (!ctx)
+        throw new Error(
+            "useActionPreferences must be used inside ActionPreferencesProvider",
+        );
     return ctx;
 }
 
-// ── Provider ──────────────────────────────────────────────────────────────────
+// Provider
 
-export function ActionPreferencesProvider({ children }: { children: ReactNode }) {
+export function ActionPreferencesProvider({
+    children,
+}: {
+    children: ReactNode;
+}) {
     const { user } = useAuth();
     const [prefs, setPrefs] = useState<ActionPref[]>([]);
     const [loading, setLoading] = useState(true);
     // Debounce flush ref
-    const flushTimerRef = { current: null as ReturnType<typeof setTimeout> | null };
+    const flushTimerRef = {
+        current: null as ReturnType<typeof setTimeout> | null,
+    };
 
     // Load from server on mount
     useEffect(() => {
-        if (!user?.token) { setLoading(false); return; }
+        if (!user?.token) {
+            setLoading(false);
+            return;
+        }
         fetch(`${API_BASE}/profile/action-preferences`, {
             headers: { Authorization: `Bearer ${user.token}` },
         })
-            .then(r => r.ok ? r.json() : { actionPreferences: [] })
-            .then(data => {
-                setPrefs(Array.isArray(data.actionPreferences) ? data.actionPreferences : []);
+            .then((r) => (r.ok ? r.json() : { actionPreferences: [] }))
+            .then((data) => {
+                setPrefs(
+                    Array.isArray(data.actionPreferences)
+                        ? data.actionPreferences
+                        : [],
+                );
             })
             .catch(() => setPrefs([]))
             .finally(() => setLoading(false));
     }, [user?.token]);
 
-    const getAlias = useCallback((actionId: string): string => {
-        const pref = prefs.find(p => p.actionId === actionId);
-        if (pref?.alias) return pref.alias;
-        return ACTION_BY_ID[actionId]?.defaultAlias ?? '';
-    }, [prefs]);
+    const getAlias = useCallback(
+        (actionId: string): string => {
+            const pref = prefs.find((p) => p.actionId === actionId);
+            if (pref?.alias) return pref.alias;
+            return ACTION_BY_ID[actionId]?.defaultAlias ?? "";
+        },
+        [prefs],
+    );
 
-    const getHotkey = useCallback((actionId: string): HotkeyDef | undefined => {
-        const pref = prefs.find(p => p.actionId === actionId);
-        if (pref?.hotkey?.key) return pref.hotkey;
-        return ACTION_BY_ID[actionId]?.defaultHotkey;
-    }, [prefs]);
+    const getHotkey = useCallback(
+        (actionId: string): HotkeyDef | undefined => {
+            const pref = prefs.find((p) => p.actionId === actionId);
+            if (pref?.hotkey?.key) return pref.hotkey;
+            return ACTION_BY_ID[actionId]?.defaultHotkey;
+        },
+        [prefs],
+    );
 
-    const savePreferences = useCallback(async (newPrefs: ActionPref[]) => {
-        if (!user?.token) return;
-        setPrefs(newPrefs);
-        await fetch(`${API_BASE}/profile/action-preferences`, {
-            method: 'PUT',
-            headers: {
-                'Content-Type': 'application/json',
-                Authorization: `Bearer ${user.token}`,
-            },
-            body: JSON.stringify({ actionPreferences: newPrefs }),
-        });
-    }, [user?.token]);
+    const savePreferences = useCallback(
+        async (newPrefs: ActionPref[]) => {
+            if (!user?.token) return;
+            setPrefs(newPrefs);
+            await fetch(`${API_BASE}/profile/action-preferences`, {
+                method: "PUT",
+                headers: {
+                    "Content-Type": "application/json",
+                    Authorization: `Bearer ${user.token}`,
+                },
+                body: JSON.stringify({ actionPreferences: newPrefs }),
+            });
+        },
+        [user?.token],
+    );
 
-    const updatePref = useCallback((actionId: string, patch: Partial<Omit<ActionPref, 'actionId'>>) => {
-        setPrefs(prev => {
-            const idx = prev.findIndex(p => p.actionId === actionId);
-            if (idx >= 0) {
-                const updated = [...prev];
-                updated[idx] = { ...updated[idx], ...patch };
-                return updated;
-            }
-            return [...prev, { actionId, alias: '', hotkey: { key: '', mod: false, shift: false, alt: false }, ...patch }];
-        });
-    }, []);
+    const updatePref = useCallback(
+        (actionId: string, patch: Partial<Omit<ActionPref, "actionId">>) => {
+            setPrefs((prev) => {
+                const idx = prev.findIndex((p) => p.actionId === actionId);
+                if (idx >= 0) {
+                    const updated = [...prev];
+                    updated[idx] = { ...updated[idx], ...patch };
+                    return updated;
+                }
+                return [
+                    ...prev,
+                    {
+                        actionId,
+                        alias: "",
+                        hotkey: {
+                            key: "",
+                            mod: false,
+                            shift: false,
+                            alt: false,
+                        },
+                        ...patch,
+                    },
+                ];
+            });
+        },
+        [],
+    );
 
     const flush = useCallback(async () => {
         if (!user?.token) return;
         // Read current prefs from state closure
         await fetch(`${API_BASE}/profile/action-preferences`, {
-            method: 'PUT',
+            method: "PUT",
             headers: {
-                'Content-Type': 'application/json',
+                "Content-Type": "application/json",
                 Authorization: `Bearer ${user.token}`,
             },
             body: JSON.stringify({ actionPreferences: prefs }),
@@ -124,17 +175,29 @@ export function ActionPreferencesProvider({ children }: { children: ReactNode })
         return map;
     }, [getAlias]);
 
-    const value = useMemo<ActionPreferencesContextValue>(() => ({
-        prefs,
-        getAlias,
-        getHotkey,
-        savePreferences,
-        updatePref,
-        flush,
-        loading,
-        // Expose aliasMap for command palette use
-        ...({ aliasMap } as any),
-    }), [prefs, getAlias, getHotkey, savePreferences, updatePref, flush, loading, aliasMap]);
+    const value = useMemo<ActionPreferencesContextValue>(
+        () => ({
+            prefs,
+            getAlias,
+            getHotkey,
+            savePreferences,
+            updatePref,
+            flush,
+            loading,
+            // Expose aliasMap for command palette use
+            ...({ aliasMap } as any),
+        }),
+        [
+            prefs,
+            getAlias,
+            getHotkey,
+            savePreferences,
+            updatePref,
+            flush,
+            loading,
+            aliasMap,
+        ],
+    );
 
     return (
         <ActionPreferencesContext.Provider value={value}>

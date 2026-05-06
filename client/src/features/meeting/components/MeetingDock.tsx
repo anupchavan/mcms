@@ -1,4 +1,4 @@
-import { FC, useMemo, ComponentType } from 'react';
+import { FC, useMemo, ComponentType } from "react";
 import {
     ViewAgendaIcon,
     BubbleChatIcon,
@@ -6,18 +6,23 @@ import {
     Note01Icon,
     CheckListIcon,
     SidebarRight01Icon,
-} from '@hugeicons/core-free-icons';
-import Icon from '../../../shared/components/Icon';
-import ShortcutTooltip from '../../../shared/components/ShortcutTooltip';
-import AgendaPanel from '../../agenda/components/AgendaPanel';
-import ChatPanel, { ChatMessage } from './ChatPanel';
-import TranscriptFeed from '../../transcript/components/TranscriptFeed';
-import MinutesPanel from '../../minutes/components/MinutesPanel';
-import Tasks from '../../minutes/components/Tasks';
+} from "@hugeicons/core-free-icons";
+import Icon from "../../../shared/components/Icon";
+import ShortcutTooltip from "../../../shared/components/ShortcutTooltip";
+import AgendaPanel from "../../agenda/components/AgendaPanel";
+import ChatPanel, { ChatMessage } from "./ChatPanel";
+import TranscriptFeed from "../../transcript/components/TranscriptFeed";
+import MinutesPanel from "../../minutes/components/MinutesPanel";
+import Tasks from "../../minutes/components/Tasks";
 
 /** Identifier for each dock tab. Drives both the active-panel state and the
  *  icon-rail buttons. Exhaustive — TypeScript will flag any missed case. */
-export type DockPanelId = 'agenda' | 'chat' | 'transcript' | 'minutes' | 'actions';
+export type DockPanelId =
+    | "agenda"
+    | "chat"
+    | "transcript"
+    | "minutes"
+    | "actions";
 
 interface DockTab {
     id: DockPanelId;
@@ -30,11 +35,16 @@ interface DockTab {
 }
 
 const TABS: DockTab[] = [
-    { id: 'agenda',     label: 'Agenda',       icon: ViewAgendaIcon, hint: 'G' },
-    { id: 'chat',       label: 'Chat',         icon: BubbleChatIcon, hint: 'H' },
-    { id: 'transcript', label: 'Transcript',   icon: ClosedCaptionIcon, hint: 'T' },
-    { id: 'minutes',    label: 'Minutes',      icon: Note01Icon,     hint: 'I' },
-    { id: 'actions',    label: 'Tasks',        icon: CheckListIcon,  hint: 'K' },
+    { id: "agenda", label: "Agenda", icon: ViewAgendaIcon, hint: "G" },
+    { id: "chat", label: "Chat", icon: BubbleChatIcon, hint: "H" },
+    {
+        id: "transcript",
+        label: "Transcript",
+        icon: ClosedCaptionIcon,
+        hint: "T",
+    },
+    { id: "minutes", label: "Minutes", icon: Note01Icon, hint: "I" },
+    { id: "actions", label: "Tasks", icon: CheckListIcon, hint: "K" },
 ];
 
 interface MeetingDockProps {
@@ -105,7 +115,7 @@ const MeetingDock: FC<MeetingDockProps> = ({
      *  doesn't churn heavy panels (TranscriptFeed in particular). */
     const activePanel = useMemo(() => {
         switch (activePanelId) {
-            case 'agenda':
+            case "agenda":
                 return (
                     <AgendaPanel
                         agendaItems={agendaItems}
@@ -113,7 +123,7 @@ const MeetingDock: FC<MeetingDockProps> = ({
                         isHost={isHost}
                     />
                 );
-            case 'chat':
+            case "chat":
                 return (
                     <ChatPanel
                         messages={chatMessages}
@@ -127,9 +137,9 @@ const MeetingDock: FC<MeetingDockProps> = ({
                         onRequestJoinMeeting={onRequestJoinMeeting}
                     />
                 );
-            case 'transcript':
+            case "transcript":
                 return <TranscriptFeed transcripts={transcripts} />;
-            case 'minutes':
+            case "minutes":
                 return (
                     <MinutesPanel
                         minutesItems={minutesItems}
@@ -137,7 +147,7 @@ const MeetingDock: FC<MeetingDockProps> = ({
                         onItemChange={onMinutesChange}
                     />
                 );
-            case 'actions':
+            case "actions":
                 return (
                     <Tasks
                         items={tasks}
@@ -157,31 +167,57 @@ const MeetingDock: FC<MeetingDockProps> = ({
             }
         }
     }, [
-        activePanelId, agendaItems, minutesItems, tasks, transcripts,
-        participants, isHost, meetingId, meetingHostId, addTaskTrigger,
-        chatMessages, currentUserId, onSendChatMessage,
-        pinnedChatMessage, onPinChatMessage, onUnpinChatMessage,
-        chatSessionActive, onRequestJoinMeeting,
-        onAgendaChange, onMinutesChange, onAddMinute, onAddTaskConsumed,
-        onRefreshTasks, fetchWithAuth,
+        activePanelId,
+        agendaItems,
+        minutesItems,
+        tasks,
+        transcripts,
+        participants,
+        isHost,
+        meetingId,
+        meetingHostId,
+        addTaskTrigger,
+        chatMessages,
+        currentUserId,
+        onSendChatMessage,
+        pinnedChatMessage,
+        onPinChatMessage,
+        onUnpinChatMessage,
+        chatSessionActive,
+        onRequestJoinMeeting,
+        onAgendaChange,
+        onMinutesChange,
+        onAddMinute,
+        onAddTaskConsumed,
+        onRefreshTasks,
+        fetchWithAuth,
     ]);
 
     return (
-        <div className={`meeting-dock ${isOpen ? 'open' : 'collapsed'}`}>
+        <div className={`meeting-dock ${isOpen ? "open" : "collapsed"}`}>
             {isOpen && (
                 <div className="meeting-dock-content" key={activePanelId}>
                     {activePanel}
                 </div>
             )}
-            <div className="meeting-dock-rail" role="tablist" aria-label="Meeting panels">
+            <div
+                className="meeting-dock-rail"
+                role="tablist"
+                aria-label="Meeting panels"
+            >
                 <div className="meeting-dock-rail-tabs">
-                    {TABS.map(tab => {
+                    {TABS.map((tab) => {
                         const isActive = isOpen && activePanelId === tab.id;
                         return (
-                            <ShortcutTooltip key={tab.id} label={tab.label.toUpperCase()} keys={[tab.hint]} position="left">
+                            <ShortcutTooltip
+                                key={tab.id}
+                                label={tab.label.toUpperCase()}
+                                keys={[tab.hint]}
+                                position="left"
+                            >
                                 <button
                                     type="button"
-                                    className={`meeting-dock-rail-btn ${isActive ? 'active' : ''}`}
+                                    className={`meeting-dock-rail-btn ${isActive ? "active" : ""}`}
                                     onClick={() => onSelectPanel(tab.id)}
                                     aria-pressed={isActive}
                                     role="tab"
@@ -193,12 +229,16 @@ const MeetingDock: FC<MeetingDockProps> = ({
                         );
                     })}
                 </div>
-                <ShortcutTooltip label={isOpen ? 'HIDE PANEL' : 'SHOW PANEL'} keys={['mod', ']']} position="left">
+                <ShortcutTooltip
+                    label={isOpen ? "HIDE PANEL" : "SHOW PANEL"}
+                    keys={["mod", "]"]}
+                    position="left"
+                >
                     <button
                         type="button"
                         className="meeting-dock-rail-btn meeting-dock-rail-btn-toggle"
                         onClick={onToggleOpen}
-                        aria-label={isOpen ? 'Hide panel' : 'Show panel'}
+                        aria-label={isOpen ? "Hide panel" : "Show panel"}
                         aria-pressed={!isOpen}
                     >
                         <Icon icon={SidebarRight01Icon} size={18} />

@@ -4,112 +4,112 @@ const router = express.Router();
 
 export = function ({ User, protect, generateToken, usingMongo, inMemoryUsers }: any) {
 
-    router.post('/register', async (req: any, res: any) => {
-        try {
-            const { name, email, password } = req.body;
-            if (!name || !email || !password) {
-                return res.status(400).json({ message: 'Please provide name, email, and password' });
-            }
+	router.post('/register', async (req: any, res: any) => {
+		try {
+			const { name, email, password } = req.body;
+			if (!name || !email || !password) {
+				return res.status(400).json({ message: 'Please provide name, email, and password' });
+			}
 
-            const personalRoomId = `${name.toLowerCase().replace(/[^a-z0-9]/g, '')}-${Math.random().toString(36).slice(2, 6)}`;
+			const personalRoomId = `${name.toLowerCase().replace(/[^a-z0-9]/g, '')}-${Math.random().toString(36).slice(2, 6)}`;
 
-            if (usingMongo() && User) {
-                let existing = await User.findOne({ email });
-                if (existing) return res.status(400).json({ message: 'User already exists' });
-                const user = await User.create({ name, email, password, personalRoomId });
-                return res.status(201).json({ _id: user._id, name: user.name, email: user.email, profileImage: user.profileImage, personalRoomId: user.personalRoomId, token: generateToken(user._id) });
-            } else {
-                const existing = inMemoryUsers.find((u: any) => u.email === email.toLowerCase());
-                if (existing) return res.status(400).json({ message: 'User already exists' });
-                const salt = await bcrypt.genSalt(10);
-                const hashedPassword = await bcrypt.hash(password, salt);
-                const userId = `user_${Date.now()}`;
-                const user = { _id: userId, name, email: email.toLowerCase(), password: hashedPassword, personalRoomId };
-                inMemoryUsers.push(user);
-                return res.status(201).json({ _id: user._id, name: user.name, email: user.email, profileImage: null, personalRoomId, token: generateToken(user._id) });
-            }
-        } catch (error: any) {
-            console.error('Register error:', error);
-            res.status(500).json({ message: 'Server error', error: error.message });
-        }
-    });
+			if (usingMongo() && User) {
+				let existing = await User.findOne({ email });
+				if (existing) return res.status(400).json({ message: 'User already exists' });
+				const user = await User.create({ name, email, password, personalRoomId });
+				return res.status(201).json({ _id: user._id, name: user.name, email: user.email, profileImage: user.profileImage, personalRoomId: user.personalRoomId, token: generateToken(user._id) });
+			} else {
+				const existing = inMemoryUsers.find((u: any) => u.email === email.toLowerCase());
+				if (existing) return res.status(400).json({ message: 'User already exists' });
+				const salt = await bcrypt.genSalt(10);
+				const hashedPassword = await bcrypt.hash(password, salt);
+				const userId = `user_${Date.now()}`;
+				const user = { _id: userId, name, email: email.toLowerCase(), password: hashedPassword, personalRoomId };
+				inMemoryUsers.push(user);
+				return res.status(201).json({ _id: user._id, name: user.name, email: user.email, profileImage: null, personalRoomId, token: generateToken(user._id) });
+			}
+		} catch (error: any) {
+			console.error('Register error:', error);
+			res.status(500).json({ message: 'Server error', error: error.message });
+		}
+	});
 
-    router.post('/login', async (req: any, res: any) => {
-        try {
-            const { email, password } = req.body;
-            if (!email || !password) {
-                return res.status(400).json({ message: 'Please provide email and password' });
-            }
+	router.post('/login', async (req: any, res: any) => {
+		try {
+			const { email, password } = req.body;
+			if (!email || !password) {
+				return res.status(400).json({ message: 'Please provide email and password' });
+			}
 
-            if (usingMongo() && User) {
-                const user = await User.findOne({ email });
-                if (!user) return res.status(401).json({ message: 'Invalid email or password' });
-                const isMatch = await user.matchPassword(password);
-                if (!isMatch) return res.status(401).json({ message: 'Invalid email or password' });
-                
-                if (!user.personalRoomId) {
-                    user.personalRoomId = `${user.name.toLowerCase().replace(/[^a-z0-9]/g, '')}-${Math.random().toString(36).slice(2, 6)}`;
-                    await user.save();
-                }
-                
-                return res.json({ _id: user._id, name: user.name, email: user.email, profileImage: user.profileImage, personalRoomId: user.personalRoomId, token: generateToken(user._id) });
-            } else {
-                const user = inMemoryUsers.find((u: any) => u.email === email.toLowerCase());
-                if (!user) return res.status(401).json({ message: 'Invalid email or password' });
-                const isMatch = await bcrypt.compare(password, user.password);
-                if (!isMatch) return res.status(401).json({ message: 'Invalid email or password' });
-                
-                if (!user.personalRoomId) {
-                    user.personalRoomId = `${user.name.toLowerCase().replace(/[^a-z0-9]/g, '')}-${Math.random().toString(36).slice(2, 6)}`;
-                }
-                
-                return res.json({ _id: user._id, name: user.name, email: user.email, profileImage: user.profileImage || null, personalRoomId: user.personalRoomId, token: generateToken(user._id) });
-            }
-        } catch (error: any) {
-            console.error('Login error:', error);
-            res.status(500).json({ message: 'Server error', error: error.message });
-        }
-    });
+			if (usingMongo() && User) {
+				const user = await User.findOne({ email });
+				if (!user) return res.status(401).json({ message: 'Invalid email or password' });
+				const isMatch = await user.matchPassword(password);
+				if (!isMatch) return res.status(401).json({ message: 'Invalid email or password' });
 
-    router.get('/me', protect, async (req: any, res: any) => {
-        try {
-            if (usingMongo() && User) {
-                const user = await User.findById(req.user.id).select('-password');
-                return res.json(user);
-            }
-            const user = inMemoryUsers.find((u: any) => u._id === req.user.id);
-            res.json(user ? { _id: user._id, name: user.name, email: user.email, profileImage: user.profileImage || null, personalRoomId: user.personalRoomId } : null);
-        } catch (error) {
-            res.status(500).json({ message: 'Server error' });
-        }
-    });
+				if (!user.personalRoomId) {
+					user.personalRoomId = `${user.name.toLowerCase().replace(/[^a-z0-9]/g, '')}-${Math.random().toString(36).slice(2, 6)}`;
+					await user.save();
+				}
 
-    router.get('/search', protect, async (req: any, res: any) => {
-        try {
-            const q = (req.query.q || '').trim();
-            if (!q || q.length < 1) return res.json([]);
+				return res.json({ _id: user._id, name: user.name, email: user.email, profileImage: user.profileImage, personalRoomId: user.personalRoomId, token: generateToken(user._id) });
+			} else {
+				const user = inMemoryUsers.find((u: any) => u.email === email.toLowerCase());
+				if (!user) return res.status(401).json({ message: 'Invalid email or password' });
+				const isMatch = await bcrypt.compare(password, user.password);
+				if (!isMatch) return res.status(401).json({ message: 'Invalid email or password' });
 
-            if (usingMongo() && User) {
-                const regex = new RegExp(q, 'i');
-                const users = await User.find({
-                    $and: [
-                        { _id: { $ne: req.user.id } },
-                        { $or: [{ name: regex }, { email: regex }] }
-                    ]
-                }).select('name email profileImage').limit(10);
-                return res.json(users);
-            }
+				if (!user.personalRoomId) {
+					user.personalRoomId = `${user.name.toLowerCase().replace(/[^a-z0-9]/g, '')}-${Math.random().toString(36).slice(2, 6)}`;
+				}
 
-            const lower = q.toLowerCase();
-            const results = inMemoryUsers
-                .filter((u: any) => u._id !== req.user.id && (u.name.toLowerCase().includes(lower) || u.email.includes(lower)))
-                .slice(0, 10)
-                .map((u: any) => ({ _id: u._id, name: u.name, email: u.email, profileImage: u.profileImage ?? null }));
-            res.json(results);
-        } catch (error: any) {
-            res.status(500).json({ message: 'Server error', error: error.message });
-        }
-    });
+				return res.json({ _id: user._id, name: user.name, email: user.email, profileImage: user.profileImage || null, personalRoomId: user.personalRoomId, token: generateToken(user._id) });
+			}
+		} catch (error: any) {
+			console.error('Login error:', error);
+			res.status(500).json({ message: 'Server error', error: error.message });
+		}
+	});
 
-    return router;
+	router.get('/me', protect, async (req: any, res: any) => {
+		try {
+			if (usingMongo() && User) {
+				const user = await User.findById(req.user.id).select('-password');
+				return res.json(user);
+			}
+			const user = inMemoryUsers.find((u: any) => u._id === req.user.id);
+			res.json(user ? { _id: user._id, name: user.name, email: user.email, profileImage: user.profileImage || null, personalRoomId: user.personalRoomId } : null);
+		} catch (error) {
+			res.status(500).json({ message: 'Server error' });
+		}
+	});
+
+	router.get('/search', protect, async (req: any, res: any) => {
+		try {
+			const q = (req.query.q || '').trim();
+			if (!q || q.length < 1) return res.json([]);
+
+			if (usingMongo() && User) {
+				const regex = new RegExp(q, 'i');
+				const users = await User.find({
+					$and: [
+						{ _id: { $ne: req.user.id } },
+						{ $or: [{ name: regex }, { email: regex }] }
+					]
+				}).select('name email profileImage').limit(10);
+				return res.json(users);
+			}
+
+			const lower = q.toLowerCase();
+			const results = inMemoryUsers
+				.filter((u: any) => u._id !== req.user.id && (u.name.toLowerCase().includes(lower) || u.email.includes(lower)))
+				.slice(0, 10)
+				.map((u: any) => ({ _id: u._id, name: u.name, email: u.email, profileImage: u.profileImage ?? null }));
+			res.json(results);
+		} catch (error: any) {
+			res.status(500).json({ message: 'Server error', error: error.message });
+		}
+	});
+
+	return router;
 };

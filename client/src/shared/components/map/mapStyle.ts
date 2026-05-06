@@ -11,9 +11,7 @@ import type { StyleSpecification } from "maplibre-gl";
  * targeted are documented inline above each style layer.
  */
 
-// ────────────────────────────────────────────────────────────────────
-// Flexoki tokens (mirrored from `index.css`)
-// ────────────────────────────────────────────────────────────────────
+// Flexoki tokens
 
 const N = {
 	paper: "#FFFCF0",
@@ -41,9 +39,7 @@ const CYAN = { 50: "#DDF1E4", 100: "#BFE8D9", 200: "#87D3C3", 300: "#5ABDAC", 40
 const BLUE = { 50: "#E1ECEB", 100: "#C6DDE8", 200: "#92BFDB", 300: "#66A0C8", 400: "#4385BE", 500: "#3171B2", 600: "#205EA6", 700: "#1A4F8C", 800: "#163B66", 900: "#12253B", 950: "#101A24" } as const;
 const PURPLE = { 50: "#F0EAEC", 100: "#E2D9E9", 200: "#C4B9E0", 300: "#A699D0", 400: "#8B7EC8", 500: "#735EB5", 600: "#5E409D", 700: "#4F3685", 800: "#3C2A62", 900: "#261C39", 950: "#1A1623" } as const;
 
-// ────────────────────────────────────────────────────────────────────
 // Per-theme token bundles
-// ────────────────────────────────────────────────────────────────────
 
 interface ThemeTokens {
 	background: string;
@@ -180,9 +176,7 @@ const darkTokens: ThemeTokens = {
 	},
 };
 
-// ────────────────────────────────────────────────────────────────────
 // Style builder
-// ────────────────────────────────────────────────────────────────────
 
 export type FlexokiTheme = "light" | "dark";
 

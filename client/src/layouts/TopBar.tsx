@@ -1,7 +1,7 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { useNavigate } from 'react-router-dom';
-import Icon from '../shared/components/Icon';
-import { UserAvatar } from '../shared/components/UserAvatar';
+import React, { useState, useEffect, useRef, useCallback } from "react";
+import { useNavigate } from "react-router-dom";
+import Icon from "../shared/components/Icon";
+import { UserAvatar } from "../shared/components/UserAvatar";
 import {
     Search01Icon,
     Notification01Icon,
@@ -17,15 +17,15 @@ import {
     Archive03Icon,
     Copy01Icon,
     Video01Icon,
-} from '@hugeicons/core-free-icons';
-import { useAuth } from '../stores/AuthContext';
-import { useSocket } from '../stores/SocketContext';
-import Kbd from '../shared/components/Kbd';
-import ShortcutTooltip from '../shared/components/ShortcutTooltip';
-import { publicMeetingSlug, isMeetingShortSlug } from '../utils/meetingSlug';
+} from "@hugeicons/core-free-icons";
+import { useAuth } from "../stores/AuthContext";
+import { useSocket } from "../stores/SocketContext";
+import Kbd from "../shared/components/Kbd";
+import ShortcutTooltip from "../shared/components/ShortcutTooltip";
+import { publicMeetingSlug, isMeetingShortSlug } from "../utils/meetingSlug";
 
-const _raw = import.meta.env.VITE_API_URL || 'http://localhost:5001/api';
-const SERVER_BASE = _raw.replace(/(\/api\/?)+$/, '');
+const _raw = import.meta.env.VITE_API_URL || "http://localhost:5001/api";
+const SERVER_BASE = _raw.replace(/(\/api\/?)+$/, "");
 const API_BASE = `${SERVER_BASE}/api`;
 
 const SEARCH_DEBOUNCE_MS = 280;
@@ -43,26 +43,61 @@ interface TopBarProps {
 }
 
 function formatDate(dateStr: string) {
-    if (!dateStr) return '';
-    const d = new Date(dateStr + 'T00:00:00');
-    return `${d.getDate()} ${d.toLocaleString('en-US', { month: 'short' })} ${d.getFullYear()}`;
+    if (!dateStr) return "";
+    const d = new Date(dateStr + "T00:00:00");
+    return `${d.getDate()} ${d.toLocaleString("en-US", { month: "short" })} ${d.getFullYear()}`;
 }
 
 function SidebarToggleIcon({ collapsed }: { collapsed: boolean }) {
     return (
-        <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="svg-icon sidebar-toggle-button-icon">
+        <svg
+            xmlns="http://www.w3.org/2000/svg"
+            width="18"
+            height="18"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            className="svg-icon sidebar-toggle-button-icon"
+        >
             <rect x="1" y="2" width="22" height="20" rx="4" />
-            <rect x={collapsed ? "4.9" : "4"} y={collapsed ? "6" : "5"} width="2" height={collapsed ? "12" : "14"} rx="1" fill="currentColor" className={collapsed ? 'sidebar-toggle-icon-close' : 'sidebar-toggle-icon-open'} />
+            <rect
+                x={collapsed ? "4.9" : "4"}
+                y={collapsed ? "6" : "5"}
+                width="2"
+                height={collapsed ? "12" : "14"}
+                rx="1"
+                fill="currentColor"
+                className={
+                    collapsed
+                        ? "sidebar-toggle-icon-close"
+                        : "sidebar-toggle-icon-open"
+                }
+            />
         </svg>
     );
 }
 
 /** Public URL slug for notifications — lowercase `xxxx-xxxx`; never Mongo ObjectId hex. */
-function resolveMeetingSlug(notif: { meetingId?: unknown; inviteId?: string; meetingShortId?: string }): string | null {
-    if (typeof notif.inviteId === 'string' && isMeetingShortSlug(notif.inviteId)) return notif.inviteId.trim();
-    if (typeof notif.meetingShortId === 'string' && isMeetingShortSlug(notif.meetingShortId)) return notif.meetingShortId.trim();
+function resolveMeetingSlug(notif: {
+    meetingId?: unknown;
+    inviteId?: string;
+    meetingShortId?: string;
+}): string | null {
+    if (
+        typeof notif.inviteId === "string" &&
+        isMeetingShortSlug(notif.inviteId)
+    )
+        return notif.inviteId.trim();
+    if (
+        typeof notif.meetingShortId === "string" &&
+        isMeetingShortSlug(notif.meetingShortId)
+    )
+        return notif.meetingShortId.trim();
     const m = notif.meetingId;
-    if (m && typeof m === 'object' && m !== null) {
+    if (m && typeof m === "object" && m !== null) {
         const doc = m as { id?: string; shortId?: string; _id?: unknown };
         return publicMeetingSlug({
             id: doc.id,
@@ -70,20 +105,24 @@ function resolveMeetingSlug(notif: { meetingId?: unknown; inviteId?: string; mee
             _id: doc._id != null ? String(doc._id) : undefined,
         });
     }
-    const raw = typeof m === 'string' ? m : '';
+    const raw = typeof m === "string" ? m : "";
     return publicMeetingSlug({ id: raw || undefined });
 }
 
 function getNavMeetingMongoId(notif: { meetingId?: unknown }): string | null {
     const mid = notif.meetingId;
-    if (mid && typeof mid === 'object' && '_id' in mid && mid._id != null) return String((mid as { _id: unknown })._id);
-    if (typeof mid === 'string' || typeof mid === 'number') return String(mid);
+    if (mid && typeof mid === "object" && "_id" in mid && mid._id != null)
+        return String((mid as { _id: unknown })._id);
+    if (typeof mid === "string" || typeof mid === "number") return String(mid);
     return null;
 }
 
 function appHref(path: string) {
-    const basename = typeof import.meta.env.BASE_URL === 'string' ? import.meta.env.BASE_URL.replace(/\/$/, '') : '';
-    return `${typeof window !== 'undefined' ? window.location.origin : ''}${basename}${path.startsWith('/') ? path : `/${path}`}`;
+    const basename =
+        typeof import.meta.env.BASE_URL === "string"
+            ? import.meta.env.BASE_URL.replace(/\/$/, "")
+            : "";
+    return `${typeof window !== "undefined" ? window.location.origin : ""}${basename}${path.startsWith("/") ? path : `/${path}`}`;
 }
 
 /** Scheduled start timestamp for join eligibility; uses populated meeting or realtime snapshot fields on the notification. */
@@ -95,17 +134,24 @@ function parseMeetingStartMs(notif: {
     let dateStr: string | undefined | null;
     let timeStr: string | undefined | null;
     const m = notif.meetingId;
-    if (m && typeof m === 'object') {
-        const mt = m as { confirmedDate?: string; confirmedTime?: string; date?: string; time?: string };
+    if (m && typeof m === "object") {
+        const mt = m as {
+            confirmedDate?: string;
+            confirmedTime?: string;
+            date?: string;
+            time?: string;
+        };
         dateStr = mt.confirmedDate || mt.date;
         timeStr = mt.confirmedTime || mt.time;
     }
     dateStr = dateStr || notif.meetingScheduledDate || null;
     timeStr = timeStr || notif.meetingScheduledTime || null;
-    if (!dateStr || !timeStr || String(timeStr).trim() === '') return null;
+    if (!dateStr || !timeStr || String(timeStr).trim() === "") return null;
     const t = String(timeStr).trim();
     const timeNorm = /^\d{1,2}:\d{2}(:\d{2})?$/.test(t)
-        ? (t.split(':').length === 2 ? `${t}:00` : t)
+        ? t.split(":").length === 2
+            ? `${t}:00`
+            : t
         : t;
     const iso = `${String(dateStr).trim()}T${timeNorm}`;
     const ms = Date.parse(iso);
@@ -117,13 +163,18 @@ function notificationModality(notif: {
     meetingModality?: string;
 }): string | undefined {
     const m = notif.meetingId;
-    if (m && typeof m === 'object' && 'modality' in m) return (m as { modality?: string }).modality;
+    if (m && typeof m === "object" && "modality" in m)
+        return (m as { modality?: string }).modality;
     return notif.meetingModality;
 }
 
-function notificationStatus(notif: { meetingId?: unknown; meetingStatus?: string }): string | undefined {
+function notificationStatus(notif: {
+    meetingId?: unknown;
+    meetingStatus?: string;
+}): string | undefined {
     const m = notif.meetingId;
-    if (m && typeof m === 'object' && 'status' in m) return (m as { status?: string }).status;
+    if (m && typeof m === "object" && "status" in m)
+        return (m as { status?: string }).status;
     return notif.meetingStatus;
 }
 
@@ -135,10 +186,10 @@ function notificationJoinEligible(notif: {
     meetingModality?: string;
 }) {
     const modality = notificationModality(notif);
-    if (modality === 'Offline') return false;
+    if (modality === "Offline") return false;
     const st = notificationStatus(notif);
-    if (st === 'completed' || st === 'cancelled') return false;
-    if (st === 'in-progress') return true;
+    if (st === "completed" || st === "cancelled") return false;
+    if (st === "in-progress") return true;
     const startMs = parseMeetingStartMs(notif);
     if (startMs == null) return false;
     return Math.abs(Date.now() - startMs) <= 15 * 60 * 1000;
@@ -148,7 +199,7 @@ function timeAgo(dateStr: string) {
     const now = new Date();
     const date = new Date(dateStr);
     const seconds = Math.floor((now.getTime() - date.getTime()) / 1000);
-    if (seconds < 60) return 'just now';
+    if (seconds < 60) return "just now";
     const minutes = Math.floor(seconds / 60);
     if (minutes < 60) return `${minutes}m ago`;
     const hours = Math.floor(minutes / 60);
@@ -157,7 +208,17 @@ function timeAgo(dateStr: string) {
     return `${days}d ago`;
 }
 
-export default function TopBar({ userName, onNewMeeting, theme = 'dark', onToggleTheme, sidebarCollapsed, onSidebarToggle, onLogout, onOpenPoll, searchInputRef }: TopBarProps) {
+export default function TopBar({
+    userName,
+    onNewMeeting,
+    theme = "dark",
+    onToggleTheme,
+    sidebarCollapsed,
+    onSidebarToggle,
+    onLogout,
+    onOpenPoll,
+    searchInputRef,
+}: TopBarProps) {
     const { user } = useAuth();
     const { socket } = useSocket();
     const navigate = useNavigate();
@@ -165,7 +226,7 @@ export default function TopBar({ userName, onNewMeeting, theme = 'dark', onToggl
     const [showUserMenu, setShowUserMenu] = useState(false);
     const [notifications, setNotifications] = useState<any[]>([]);
     const [notifToast, setNotifToast] = useState<string | null>(null);
-    const [searchQuery, setSearchQuery] = useState('');
+    const [searchQuery, setSearchQuery] = useState("");
     const [searchResults, setSearchResults] = useState<any[]>([]);
     const [searchLoading, setSearchLoading] = useState(false);
     const [showSearchDropdown, setShowSearchDropdown] = useState(false);
@@ -173,10 +234,11 @@ export default function TopBar({ userName, onNewMeeting, theme = 'dark', onToggl
     const notifRef = useRef<HTMLDivElement | null>(null);
     const userMenuRef = useRef<HTMLDivElement | null>(null);
     const searchBoxRef = useRef<HTMLDivElement | null>(null);
-    const searchDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+    const searchDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(
+        null,
+    );
 
-    const unreadCount = notifications.filter(n => !n.read).length;
-
+    const unreadCount = notifications.filter((n) => !n.read).length;
 
     useEffect(() => {
         if (!notifToast) return;
@@ -184,24 +246,30 @@ export default function TopBar({ userName, onNewMeeting, theme = 'dark', onToggl
         return () => clearTimeout(t);
     }, [notifToast]);
 
-    const runSearch = useCallback(async (q: string) => {
-        const trimmed = (q || '').trim();
-        if (trimmed.length < 2) {
-            setSearchResults([]);
-            return;
-        }
-        setSearchLoading(true);
-        try {
-            const res = await fetch(`${API_BASE}/search?q=${encodeURIComponent(trimmed)}`, {
-                headers: { Authorization: `Bearer ${user?.token}` },
-            });
-            if (res.ok) setSearchResults(await res.json());
-            else setSearchResults([]);
-        } catch {
-            setSearchResults([]);
-        }
-        setSearchLoading(false);
-    }, [user?.token]);
+    const runSearch = useCallback(
+        async (q: string) => {
+            const trimmed = (q || "").trim();
+            if (trimmed.length < 2) {
+                setSearchResults([]);
+                return;
+            }
+            setSearchLoading(true);
+            try {
+                const res = await fetch(
+                    `${API_BASE}/search?q=${encodeURIComponent(trimmed)}`,
+                    {
+                        headers: { Authorization: `Bearer ${user?.token}` },
+                    },
+                );
+                if (res.ok) setSearchResults(await res.json());
+                else setSearchResults([]);
+            } catch {
+                setSearchResults([]);
+            }
+            setSearchLoading(false);
+        },
+        [user?.token],
+    );
 
     useEffect(() => {
         if (searchDebounceRef.current) clearTimeout(searchDebounceRef.current);
@@ -213,8 +281,14 @@ export default function TopBar({ userName, onNewMeeting, theme = 'dark', onToggl
         }
         setShowSearchDropdown(true);
         setSearchSelectedIndex(-1);
-        searchDebounceRef.current = setTimeout(() => runSearch(searchQuery), SEARCH_DEBOUNCE_MS);
-        return () => { if (searchDebounceRef.current) clearTimeout(searchDebounceRef.current); };
+        searchDebounceRef.current = setTimeout(
+            () => runSearch(searchQuery),
+            SEARCH_DEBOUNCE_MS,
+        );
+        return () => {
+            if (searchDebounceRef.current)
+                clearTimeout(searchDebounceRef.current);
+        };
     }, [searchQuery, runSearch]);
 
     useEffect(() => {
@@ -226,14 +300,14 @@ export default function TopBar({ userName, onNewMeeting, theme = 'dark', onToggl
         fetch(`${API_BASE}/notifications`, {
             headers: { Authorization: `Bearer ${user.token}` },
         })
-            .then(r => r.ok ? r.json() : [])
+            .then((r) => (r.ok ? r.json() : []))
             .then(setNotifications)
             .catch(() => {});
     }, [user?.token]);
 
     // Request browser notification permission once on mount.
     useEffect(() => {
-        if ('Notification' in window && Notification.permission === 'default') {
+        if ("Notification" in window && Notification.permission === "default") {
             Notification.requestPermission();
         }
     }, []);
@@ -241,148 +315,235 @@ export default function TopBar({ userName, onNewMeeting, theme = 'dark', onToggl
     useEffect(() => {
         if (!socket) return;
         const handler = (notif: any) => {
-            setNotifications(prev => [notif, ...prev]);
+            setNotifications((prev) => [notif, ...prev]);
             fireBrowserNotif(notif);
         };
-        socket.on('notification', handler);
-        return () => { socket.off('notification', handler); };
+        socket.on("notification", handler);
+        return () => {
+            socket.off("notification", handler);
+        };
     }, [socket]);
 
     useEffect(() => {
         function handleNotifKeyDown(e: KeyboardEvent) {
-            const inInput = ['INPUT', 'TEXTAREA', 'SELECT'].includes(document.activeElement?.tagName) || (document.activeElement as HTMLElement)?.isContentEditable;
-            if (e.key === 'n' && !e.metaKey && !e.ctrlKey && !e.altKey && !inInput) {
+            const inInput =
+                ["INPUT", "TEXTAREA", "SELECT"].includes(
+                    document.activeElement?.tagName,
+                ) || (document.activeElement as HTMLElement)?.isContentEditable;
+            if (
+                e.key === "n" &&
+                !e.metaKey &&
+                !e.ctrlKey &&
+                !e.altKey &&
+                !inInput
+            ) {
                 e.preventDefault();
-                setShowNotif(prev => !prev);
+                setShowNotif((prev) => !prev);
             }
-            if (e.key === 'Escape') {
+            if (e.key === "Escape") {
                 setShowNotif(false);
             }
         }
-        window.addEventListener('keydown', handleNotifKeyDown);
-        return () => window.removeEventListener('keydown', handleNotifKeyDown);
+        window.addEventListener("keydown", handleNotifKeyDown);
+        return () => window.removeEventListener("keydown", handleNotifKeyDown);
     }, []);
 
     useEffect(() => {
         function handleClickOutside(e: MouseEvent) {
-            if (notifRef.current && !notifRef.current.contains(e.target as Node)) {
+            if (
+                notifRef.current &&
+                !notifRef.current.contains(e.target as Node)
+            ) {
                 setShowNotif(false);
             }
-            if (userMenuRef.current && !userMenuRef.current.contains(e.target as Node)) {
+            if (
+                userMenuRef.current &&
+                !userMenuRef.current.contains(e.target as Node)
+            ) {
                 setShowUserMenu(false);
             }
-            if (searchBoxRef.current && !searchBoxRef.current.contains(e.target as Node)) {
+            if (
+                searchBoxRef.current &&
+                !searchBoxRef.current.contains(e.target as Node)
+            ) {
                 setShowSearchDropdown(false);
             }
         }
-        document.addEventListener('mousedown', handleClickOutside);
-        return () => document.removeEventListener('mousedown', handleClickOutside);
+        document.addEventListener("mousedown", handleClickOutside);
+        return () =>
+            document.removeEventListener("mousedown", handleClickOutside);
     }, []);
 
     const markAllRead = useCallback(async () => {
         try {
             await fetch(`${API_BASE}/notifications/read-all`, {
-                method: 'PATCH',
-                headers: { Authorization: `Bearer ${user?.token}`, 'Content-Type': 'application/json' },
+                method: "PATCH",
+                headers: {
+                    Authorization: `Bearer ${user?.token}`,
+                    "Content-Type": "application/json",
+                },
             });
-            setNotifications(prev => prev.map(n => ({ ...n, read: true })));
-        } catch { /* ignore */ }
+            setNotifications((prev) => prev.map((n) => ({ ...n, read: true })));
+        } catch {
+            /* ignore */
+        }
     }, [user?.token]);
 
-    const markNotificationRead = useCallback(async (notif: any) => {
-        if (!notif?._id || notif.read) return;
-        try {
-            await fetch(`${API_BASE}/notifications/${notif._id}/read`, {
-                method: 'PATCH',
-                headers: { Authorization: `Bearer ${user?.token}`, 'Content-Type': 'application/json' },
-            });
-            setNotifications(prev => prev.map(n => n._id === notif._id ? { ...n, read: true } : n));
-        } catch { /* ignore */ }
-    }, [user?.token]);
+    const markNotificationRead = useCallback(
+        async (notif: any) => {
+            if (!notif?._id || notif.read) return;
+            try {
+                await fetch(`${API_BASE}/notifications/${notif._id}/read`, {
+                    method: "PATCH",
+                    headers: {
+                        Authorization: `Bearer ${user?.token}`,
+                        "Content-Type": "application/json",
+                    },
+                });
+                setNotifications((prev) =>
+                    prev.map((n) =>
+                        n._id === notif._id ? { ...n, read: true } : n,
+                    ),
+                );
+            } catch {
+                /* ignore */
+            }
+        },
+        [user?.token],
+    );
 
     const getNotifIcon = (type: string) => {
         switch (type) {
-            case 'poll_invite': return BarChartIcon;
-            case 'meeting_confirmed':
-            case 'meeting_invite': return Calendar02Icon;
-            case 'meeting_summary_ready': return Archive03Icon;
-            default: return Notification01Icon;
+            case "poll_invite":
+                return BarChartIcon;
+            case "meeting_confirmed":
+            case "meeting_invite":
+                return Calendar02Icon;
+            case "meeting_summary_ready":
+                return Archive03Icon;
+            default:
+                return Notification01Icon;
         }
     };
 
     const notificationRowIconModifier = (type: string) =>
-        type === 'poll_invite' ? 'poll'
-        : (type === 'meeting_confirmed' || type === 'meeting_invite') ? 'confirmed'
-        : type === 'meeting_summary_ready' ? 'archive' : '';
+        type === "poll_invite"
+            ? "poll"
+            : type === "meeting_confirmed" || type === "meeting_invite"
+              ? "confirmed"
+              : type === "meeting_summary_ready"
+                ? "archive"
+                : "";
 
-    const selectSearchResult = useCallback((m: any) => {
-        const linkSlug = publicMeetingSlug(m);
-        if (linkSlug) {
-            const path = m.status === 'completed' ? `/archives/${linkSlug}` : `/meetings/${linkSlug}`;
-            navigate(path);
-        }
-        setSearchQuery('');
-        setShowSearchDropdown(false);
-        setSearchSelectedIndex(-1);
-    }, [navigate]);
-
-    const handleSearchKeyDown = useCallback((e: React.KeyboardEvent) => {
-        if (e.key === 'Escape') {
+    const selectSearchResult = useCallback(
+        (m: any) => {
+            const linkSlug = publicMeetingSlug(m);
+            if (linkSlug) {
+                const path =
+                    m.status === "completed"
+                        ? `/archives/${linkSlug}`
+                        : `/meetings/${linkSlug}`;
+                navigate(path);
+            }
+            setSearchQuery("");
             setShowSearchDropdown(false);
-            setSearchQuery('');
             setSearchSelectedIndex(-1);
-            searchInputRef?.current?.blur();
-            return;
-        }
-        if (!showSearchDropdown || searchLoading || searchResults.length === 0) return;
-        if (e.key === 'ArrowDown') {
-            e.preventDefault();
-            setSearchSelectedIndex(i => (i < searchResults.length - 1 ? i + 1 : i));
-        } else if (e.key === 'ArrowUp') {
-            e.preventDefault();
-            setSearchSelectedIndex(i => (i <= 0 ? -1 : i - 1));
-        } else if (e.key === 'Enter' && searchSelectedIndex >= 0 && searchResults[searchSelectedIndex]) {
-            e.preventDefault();
-            selectSearchResult(searchResults[searchSelectedIndex]);
-        }
-    }, [showSearchDropdown, searchLoading, searchResults, searchSelectedIndex, selectSearchResult]);
+        },
+        [navigate],
+    );
+
+    const handleSearchKeyDown = useCallback(
+        (e: React.KeyboardEvent) => {
+            if (e.key === "Escape") {
+                setShowSearchDropdown(false);
+                setSearchQuery("");
+                setSearchSelectedIndex(-1);
+                searchInputRef?.current?.blur();
+                return;
+            }
+            if (
+                !showSearchDropdown ||
+                searchLoading ||
+                searchResults.length === 0
+            )
+                return;
+            if (e.key === "ArrowDown") {
+                e.preventDefault();
+                setSearchSelectedIndex((i) =>
+                    i < searchResults.length - 1 ? i + 1 : i,
+                );
+            } else if (e.key === "ArrowUp") {
+                e.preventDefault();
+                setSearchSelectedIndex((i) => (i <= 0 ? -1 : i - 1));
+            } else if (
+                e.key === "Enter" &&
+                searchSelectedIndex >= 0 &&
+                searchResults[searchSelectedIndex]
+            ) {
+                e.preventDefault();
+                selectSearchResult(searchResults[searchSelectedIndex]);
+            }
+        },
+        [
+            showSearchDropdown,
+            searchLoading,
+            searchResults,
+            searchSelectedIndex,
+            selectSearchResult,
+        ],
+    );
 
     function fireBrowserNotif(notif: any) {
-        if (!('Notification' in window) || Notification.permission !== 'granted') return;
+        if (
+            !("Notification" in window) ||
+            Notification.permission !== "granted"
+        )
+            return;
         const TITLES: Record<string, string> = {
-            poll_invite: 'New poll invitation',
-            meeting_confirmed: 'Meeting confirmed',
-            meeting_invite: 'Meeting invitation',
-            meeting_summary_ready: 'Meeting summary ready',
-            task_assigned: 'Task assigned',
-            task_completion_submitted: 'Task submitted for review',
-            task_verified: 'Task verified',
-            task_rejected: 'Task needs revision',
-            task_feedback: 'Task feedback',
-            attendance_marked: 'Attendance marked',
-            brief_ready: 'Brief ready',
-            rubric_score: 'Rubric scored',
-            rsvp_update: 'RSVP update',
+            poll_invite: "New poll invitation",
+            meeting_confirmed: "Meeting confirmed",
+            meeting_invite: "Meeting invitation",
+            meeting_summary_ready: "Meeting summary ready",
+            task_assigned: "Task assigned",
+            task_completion_submitted: "Task submitted for review",
+            task_verified: "Task verified",
+            task_rejected: "Task needs revision",
+            task_feedback: "Task feedback",
+            attendance_marked: "Attendance marked",
+            brief_ready: "Brief ready",
+            rubric_score: "Rubric scored",
+            rsvp_update: "RSVP update",
         };
-        const title = TITLES[notif.type] || 'New notification';
+        const title = TITLES[notif.type] || "New notification";
         const bn = new Notification(title, {
             body: notif.message,
-            icon: `${typeof window !== 'undefined' ? window.location.origin : ''}/favicon.ico`,
+            icon: `${typeof window !== "undefined" ? window.location.origin : ""}/favicon.ico`,
             tag: notif._id ? String(notif._id) : undefined,
         });
         const slug = resolveMeetingSlug(notif);
         if (slug) {
-            const isArchive = notif.type === 'meeting_summary_ready';
+            const isArchive = notif.type === "meeting_summary_ready";
             const path = isArchive ? `/archives/${slug}` : `/meetings/${slug}`;
-            bn.onclick = () => { window.focus(); window.location.href = appHref(path); };
+            bn.onclick = () => {
+                window.focus();
+                window.location.href = appHref(path);
+            };
         }
     }
 
     return (
         <header className="topbar">
             <div className="topbar-left">
-                <ShortcutTooltip keys={['mod', 'B']}>
-                    <div className="sidebar-toggle" onClick={onSidebarToggle} aria-label={sidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}>
+                <ShortcutTooltip keys={["mod", "B"]}>
+                    <div
+                        className="sidebar-toggle"
+                        onClick={onSidebarToggle}
+                        aria-label={
+                            sidebarCollapsed
+                                ? "Expand sidebar"
+                                : "Collapse sidebar"
+                        }
+                    >
                         <SidebarToggleIcon collapsed={sidebarCollapsed} />
                     </div>
                 </ShortcutTooltip>
@@ -399,47 +560,107 @@ export default function TopBar({ userName, onNewMeeting, theme = 'dark', onToggl
                         type="text"
                         placeholder="Search meetings and agendas..."
                         value={searchQuery}
-                        onChange={(e: React.ChangeEvent<HTMLInputElement>) => setSearchQuery(e.target.value)}
-                        onFocus={() => searchQuery.trim().length >= 2 && setShowSearchDropdown(true)}
+                        onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
+                            setSearchQuery(e.target.value)
+                        }
+                        onFocus={() =>
+                            searchQuery.trim().length >= 2 &&
+                            setShowSearchDropdown(true)
+                        }
                         onKeyDown={handleSearchKeyDown}
                     />
-                    <Kbd keys={['mod', 'K']} className="kbd-hint" />
+                    <Kbd keys={["mod", "K"]} className="kbd-hint" />
                 </div>
                 {showSearchDropdown && searchQuery.trim() && (
                     <div className="search-dropdown glass-card">
                         {searchLoading ? (
-                            <div className="search-dropdown-loading">Searching...</div>
+                            <div className="search-dropdown-loading">
+                                Searching...
+                            </div>
                         ) : searchResults.length === 0 ? (
-                            <div className="search-dropdown-empty">No meetings found</div>
+                            <div className="search-dropdown-empty">
+                                No meetings found
+                            </div>
                         ) : (
                             <div className="search-dropdown-results">
                                 {searchResults.map((m, idx) => (
                                     <button
                                         key={m.id}
                                         type="button"
-                                        className={`search-dropdown-item${searchSelectedIndex === idx ? ' selected' : ''}`}
+                                        className={`search-dropdown-item${searchSelectedIndex === idx ? " selected" : ""}`}
                                         onClick={() => selectSearchResult(m)}
-                                        onMouseEnter={() => setSearchSelectedIndex(idx)}
+                                        onMouseEnter={() =>
+                                            setSearchSelectedIndex(idx)
+                                        }
                                     >
-                                        <div className="search-dropdown-item-title">{m.title}</div>
+                                        <div className="search-dropdown-item-title">
+                                            {m.title}
+                                        </div>
                                         <div className="search-dropdown-item-meta">
-                                            {m.date && <span><Icon icon={Calendar02Icon} size={12} /> {formatDate(m.date)}</span>}
-                                            {m.time && <span><Icon icon={Clock01Icon} size={12} /> {m.time}</span>}
-                                            <span><Icon icon={UserIcon} size={12} /> {m.host}</span>
-                                            {m.status && <span className={`chip chip-2xs ${m.status === 'completed' ? 'chip-emerald' : 'chip-amber'}`}>{m.status}</span>}
+                                            {m.date && (
+                                                <span>
+                                                    <Icon
+                                                        icon={Calendar02Icon}
+                                                        size={12}
+                                                    />{" "}
+                                                    {formatDate(m.date)}
+                                                </span>
+                                            )}
+                                            {m.time && (
+                                                <span>
+                                                    <Icon
+                                                        icon={Clock01Icon}
+                                                        size={12}
+                                                    />{" "}
+                                                    {m.time}
+                                                </span>
+                                            )}
+                                            <span>
+                                                <Icon
+                                                    icon={UserIcon}
+                                                    size={12}
+                                                />{" "}
+                                                {m.host}
+                                            </span>
+                                            {m.status && (
+                                                <span
+                                                    className={`chip chip-2xs ${m.status === "completed" ? "chip-emerald" : "chip-amber"}`}
+                                                >
+                                                    {m.status}
+                                                </span>
+                                            )}
                                         </div>
                                         {m.matchedTranscripts?.length > 0 && (
                                             <div className="search-dropdown-item-snippets">
-                                                {m.matchedTranscripts.slice(0, 2).map((t, i) => (
-                                                    <p key={i}><strong>{t.speaker}:</strong> {t.text.length > 80 ? t.text.slice(0, 80) + '…' : t.text}</p>
-                                                ))}
+                                                {m.matchedTranscripts
+                                                    .slice(0, 2)
+                                                    .map((t, i) => (
+                                                        <p key={i}>
+                                                            <strong>
+                                                                {t.speaker}:
+                                                            </strong>{" "}
+                                                            {t.text.length > 80
+                                                                ? t.text.slice(
+                                                                      0,
+                                                                      80,
+                                                                  ) + "…"
+                                                                : t.text}
+                                                        </p>
+                                                    ))}
                                             </div>
                                         )}
-                                        {m.matchedAgendaItems?.length > 0 && m.matchedTranscripts?.length === 0 && (
-                                            <div className="search-dropdown-item-snippets">
-                                                <p>Agenda: {m.matchedAgendaItems.map(a => a.title).join(', ')}</p>
-                                            </div>
-                                        )}
+                                        {m.matchedAgendaItems?.length > 0 &&
+                                            m.matchedTranscripts?.length ===
+                                                0 && (
+                                                <div className="search-dropdown-item-snippets">
+                                                    <p>
+                                                        Agenda:{" "}
+                                                        {m.matchedAgendaItems
+                                                            .map((a) => a.title)
+                                                            .join(", ")}
+                                                    </p>
+                                                </div>
+                                            )}
                                     </button>
                                 ))}
                             </div>
@@ -449,167 +670,273 @@ export default function TopBar({ userName, onNewMeeting, theme = 'dark', onToggl
             </div>
 
             <div className="topbar-right">
-                <ShortcutTooltip keys={['Shift', 'M']}>
-                    <button className="btn btn-primary" onClick={onNewMeeting} id="btn-new-meeting">
+                <ShortcutTooltip keys={["Shift", "M"]}>
+                    <button
+                        className="btn btn-primary"
+                        onClick={onNewMeeting}
+                        id="btn-new-meeting"
+                    >
                         <Icon icon={Add01Icon} size={16} /> New Meeting
                     </button>
                 </ShortcutTooltip>
 
                 <div ref={notifRef} className="topbar-notif-col">
-                    <ShortcutTooltip keys={['N']}>
+                    <ShortcutTooltip keys={["N"]}>
                         <button
-                            className={`btn-icon tooltip ${showNotif ? 'active' : ''}`}
+                            className={`btn-icon tooltip ${showNotif ? "active" : ""}`}
                             data-tooltip="Notifications"
                             onClick={() => setShowNotif(!showNotif)}
                             id="btn-notifications"
                         >
                             <Icon icon={Notification01Icon} size={18} />
-                            {unreadCount > 0 && <span className="notif-dot" aria-hidden />}
+                            {unreadCount > 0 && (
+                                <span className="notif-dot" aria-hidden />
+                            )}
                         </button>
                     </ShortcutTooltip>
 
                     {showNotif && (
                         <div className="notification-dropdown">
                             <div className="notification-dropdown-header">
-                                <span className="notification-dropdown-title">Notifications</span>
+                                <span className="notification-dropdown-title">
+                                    Notifications
+                                </span>
                                 {unreadCount > 0 && (
-                                    <button type="button" className="notification-mark-read" onClick={markAllRead}>
+                                    <button
+                                        type="button"
+                                        className="notification-mark-read"
+                                        onClick={markAllRead}
+                                    >
                                         <span className="notification-mark-read-icon"></span>
                                         Mark all read
                                     </button>
                                 )}
                             </div>
                             {notifToast && (
-                                <div className="notification-dropdown-toast" role="status">
+                                <div
+                                    className="notification-dropdown-toast"
+                                    role="status"
+                                >
                                     {notifToast}
                                 </div>
                             )}
                             <div className="notification-dropdown-body">
                                 {notifications.length === 0 ? (
-                                    <div className="notification-empty">No notifications yet</div>
+                                    <div className="notification-empty">
+                                        No notifications yet
+                                    </div>
                                 ) : (
                                     notifications.map((n, idx) => {
                                         const slug = resolveMeetingSlug(n);
-                                        const pollMongoId = getNavMeetingMongoId(n);
-                                        const iconMod = notificationRowIconModifier(n.type);
-                                        const confirmedJoinEligible = notificationJoinEligible(n);
+                                        const pollMongoId =
+                                            getNavMeetingMongoId(n);
+                                        const iconMod =
+                                            notificationRowIconModifier(n.type);
+                                        const confirmedJoinEligible =
+                                            notificationJoinEligible(n);
 
-                                        const pollActions = n.type === 'poll_invite' && pollMongoId && onOpenPoll && (
-                                            <button
-                                                type="button"
-                                                className="notification-item-action"
-                                                onClick={() => {
-                                                    markNotificationRead(n);
-                                                    onOpenPoll(pollMongoId);
-                                                    setShowNotif(false);
-                                                }}
-                                            >
-                                                <Icon icon={BarChartIcon} size={12} />
-                                                Vote on times
-                                            </button>
-                                        );
-
-                                        const confirmedActions = n.type === 'meeting_confirmed' && slug && (
-                                            <>
+                                        const pollActions = n.type ===
+                                            "poll_invite" &&
+                                            pollMongoId &&
+                                            onOpenPoll && (
                                                 <button
                                                     type="button"
                                                     className="notification-item-action"
-                                                    onClick={async () => {
-                                                        try {
-                                                            await navigator.clipboard.writeText(appHref(`/meetings/${slug}`));
-                                                            setNotifToast('Meeting link copied');
-                                                            markNotificationRead(n);
-                                                        } catch {
-                                                            /* ignore */
-                                                        }
+                                                    onClick={() => {
+                                                        markNotificationRead(n);
+                                                        onOpenPoll(pollMongoId);
+                                                        setShowNotif(false);
                                                     }}
                                                 >
-                                                    <Icon icon={Copy01Icon} size={12} />
-                                                    Copy link
+                                                    <Icon
+                                                        icon={BarChartIcon}
+                                                        size={12}
+                                                    />
+                                                    Vote on times
                                                 </button>
-                                                {confirmedJoinEligible && (
+                                            );
+
+                                        const confirmedActions = n.type ===
+                                            "meeting_confirmed" &&
+                                            slug && (
+                                                <>
+                                                    <button
+                                                        type="button"
+                                                        className="notification-item-action"
+                                                        onClick={async () => {
+                                                            try {
+                                                                await navigator.clipboard.writeText(
+                                                                    appHref(
+                                                                        `/meetings/${slug}`,
+                                                                    ),
+                                                                );
+                                                                setNotifToast(
+                                                                    "Meeting link copied",
+                                                                );
+                                                                markNotificationRead(
+                                                                    n,
+                                                                );
+                                                            } catch {
+                                                                /* ignore */
+                                                            }
+                                                        }}
+                                                    >
+                                                        <Icon
+                                                            icon={Copy01Icon}
+                                                            size={12}
+                                                        />
+                                                        Copy link
+                                                    </button>
+                                                    {confirmedJoinEligible && (
+                                                        <button
+                                                            type="button"
+                                                            className="notification-item-action notification-item-action-primary"
+                                                            onClick={() => {
+                                                                markNotificationRead(
+                                                                    n,
+                                                                );
+                                                                navigate(
+                                                                    `/meetings/${slug}`,
+                                                                );
+                                                                setShowNotif(
+                                                                    false,
+                                                                );
+                                                            }}
+                                                        >
+                                                            <Icon
+                                                                icon={
+                                                                    Video01Icon
+                                                                }
+                                                                size={12}
+                                                            />
+                                                            Join
+                                                        </button>
+                                                    )}
+                                                </>
+                                            );
+
+                                        const inviteActions = n.type ===
+                                            "meeting_invite" &&
+                                            slug && (
+                                                <>
+                                                    <button
+                                                        type="button"
+                                                        className="notification-item-action"
+                                                        onClick={async () => {
+                                                            try {
+                                                                await navigator.clipboard.writeText(
+                                                                    appHref(
+                                                                        `/meetings/${slug}`,
+                                                                    ),
+                                                                );
+                                                                setNotifToast(
+                                                                    "Meeting link copied",
+                                                                );
+                                                                markNotificationRead(
+                                                                    n,
+                                                                );
+                                                            } catch {
+                                                                /* ignore */
+                                                            }
+                                                        }}
+                                                    >
+                                                        <Icon
+                                                            icon={Copy01Icon}
+                                                            size={12}
+                                                        />
+                                                        Copy link
+                                                    </button>
                                                     <button
                                                         type="button"
                                                         className="notification-item-action notification-item-action-primary"
                                                         onClick={() => {
-                                                            markNotificationRead(n);
-                                                            navigate(`/meetings/${slug}`);
+                                                            markNotificationRead(
+                                                                n,
+                                                            );
+                                                            navigate(
+                                                                `/meetings/${slug}`,
+                                                            );
                                                             setShowNotif(false);
                                                         }}
                                                     >
-                                                        <Icon icon={Video01Icon} size={12} />
+                                                        <Icon
+                                                            icon={Video01Icon}
+                                                            size={12}
+                                                        />
                                                         Join
                                                     </button>
-                                                )}
-                                            </>
-                                        );
+                                                </>
+                                            );
 
-                                        const inviteActions = n.type === 'meeting_invite' && slug && (
-                                            <>
+                                        const archiveActions = n.type ===
+                                            "meeting_summary_ready" &&
+                                            slug && (
                                                 <button
                                                     type="button"
                                                     className="notification-item-action"
-                                                    onClick={async () => {
-                                                        try {
-                                                            await navigator.clipboard.writeText(appHref(`/meetings/${slug}`));
-                                                            setNotifToast('Meeting link copied');
-                                                            markNotificationRead(n);
-                                                        } catch { /* ignore */ }
-                                                    }}
-                                                >
-                                                    <Icon icon={Copy01Icon} size={12} />
-                                                    Copy link
-                                                </button>
-                                                <button
-                                                    type="button"
-                                                    className="notification-item-action notification-item-action-primary"
                                                     onClick={() => {
                                                         markNotificationRead(n);
-                                                        navigate(`/meetings/${slug}`);
+                                                        navigate(
+                                                            `/archives/${slug}`,
+                                                        );
                                                         setShowNotif(false);
                                                     }}
                                                 >
-                                                    <Icon icon={Video01Icon} size={12} />
-                                                    Join
+                                                    <Icon
+                                                        icon={Archive03Icon}
+                                                        size={12}
+                                                    />
+                                                    Open archive
                                                 </button>
-                                            </>
-                                        );
+                                            );
 
-                                        const archiveActions = n.type === 'meeting_summary_ready' && slug && (
-                                            <button
-                                                type="button"
-                                                className="notification-item-action"
-                                                onClick={() => {
-                                                    markNotificationRead(n);
-                                                    navigate(`/archives/${slug}`);
-                                                    setShowNotif(false);
-                                                }}
-                                            >
-                                                <Icon icon={Archive03Icon} size={12} />
-                                                Open archive
-                                            </button>
-                                        );
-
-                                        const actionRow = pollActions || confirmedActions || inviteActions || archiveActions;
+                                        const actionRow =
+                                            pollActions ||
+                                            confirmedActions ||
+                                            inviteActions ||
+                                            archiveActions;
 
                                         return (
                                             <div
-                                                key={n._id ?? `nid-${idx}-${String(n.createdAt)}`}
-                                                className={`notification-item${n.read ? '' : ' unread'}`}
+                                                key={
+                                                    n._id ??
+                                                    `nid-${idx}-${String(n.createdAt)}`
+                                                }
+                                                className={`notification-item${n.read ? "" : " unread"}`}
                                                 role="listitem"
                                             >
                                                 <div className="notification-item-row">
-                                                    <div className={`notification-item-icon${iconMod ? ` ${iconMod}` : ''}`}>
-                                                        <Icon icon={getNotifIcon(n.type)} size={14} />
+                                                    <div
+                                                        className={`notification-item-icon${iconMod ? ` ${iconMod}` : ""}`}
+                                                    >
+                                                        <Icon
+                                                            icon={getNotifIcon(
+                                                                n.type,
+                                                            )}
+                                                            size={14}
+                                                        />
                                                     </div>
                                                     <div className="notification-item-content">
-                                                        <p className="notification-item-message">{n.message}</p>
-                                                        <span className="notification-item-time">{timeAgo(n.createdAt)}</span>
+                                                        <p className="notification-item-message">
+                                                            {n.message}
+                                                        </p>
+                                                        <span className="notification-item-time">
+                                                            {timeAgo(
+                                                                n.createdAt,
+                                                            )}
+                                                        </span>
                                                     </div>
-                                                    {!n.read && <span className="notification-unread-dot" aria-hidden />}
+                                                    {!n.read && (
+                                                        <span
+                                                            className="notification-unread-dot"
+                                                            aria-hidden
+                                                        />
+                                                    )}
                                                 </div>
                                                 {actionRow && (
-                                                    <div className="notification-item-actions">{actionRow}</div>
+                                                    <div className="notification-item-actions">
+                                                        {actionRow}
+                                                    </div>
                                                 )}
                                             </div>
                                         );
@@ -626,7 +953,7 @@ export default function TopBar({ userName, onNewMeeting, theme = 'dark', onToggl
                         onClick={() => setShowUserMenu(!showUserMenu)}
                     >
                         <UserAvatar
-                            name={user?.name || ''}
+                            name={user?.name || ""}
                             profileImage={user?.profileImage}
                             userId={(user as any)?.id || (user as any)?._id}
                             size={32}
@@ -637,33 +964,55 @@ export default function TopBar({ userName, onNewMeeting, theme = 'dark', onToggl
                     {showUserMenu && (
                         <div className="glass-card topbar-menu-dropdown">
                             <div className="topbar-user-info">
-                                <div className="topbar-user-name">{userName}</div>
-                                <div className="topbar-user-role">Host Account</div>
+                                <div className="topbar-user-name">
+                                    {userName}
+                                </div>
+                                <div className="topbar-user-role">
+                                    Host Account
+                                </div>
                             </div>
-                            <button className="btn btn-secondary topbar-menu-btn" onClick={() => { navigate('/settings'); setShowUserMenu(false); }}>Profile Settings</button>
+                            <button
+                                className="btn btn-secondary topbar-menu-btn"
+                                onClick={() => {
+                                    navigate("/settings");
+                                    setShowUserMenu(false);
+                                }}
+                            >
+                                Profile Settings
+                            </button>
                             {onLogout && (
                                 <button
                                     className="btn btn-secondary topbar-menu-logout"
                                     onClick={onLogout}
                                 >
                                     <Icon icon={Logout01Icon} size={16} />
-                                    <span className="topbar-logout-label">Logout</span>
+                                    <span className="topbar-logout-label">
+                                        Logout
+                                    </span>
                                 </button>
                             )}
                         </div>
                     )}
                 </div>
 
-                <ShortcutTooltip keys={['D']}>
+                <ShortcutTooltip keys={["D"]}>
                     <button
                         type="button"
-                        className={`theme-toggle tooltip ${theme === 'light' ? 'light' : 'dark'}`}
-                        data-tooltip={theme === 'light' ? 'Toggle dark mode' : 'Toggle light mode'}
+                        className={`theme-toggle tooltip ${theme === "light" ? "light" : "dark"}`}
+                        data-tooltip={
+                            theme === "light"
+                                ? "Toggle dark mode"
+                                : "Toggle light mode"
+                        }
                         aria-label="Toggle color theme"
                         onClick={onToggleTheme}
                     >
                         <span className="theme-toggle-thumb">
-                            {theme === 'light' ? <Icon icon={Sun03Icon} size={14} /> : <Icon icon={Moon02Icon} size={14} />}
+                            {theme === "light" ? (
+                                <Icon icon={Sun03Icon} size={14} />
+                            ) : (
+                                <Icon icon={Moon02Icon} size={14} />
+                            )}
                         </span>
                     </button>
                 </ShortcutTooltip>

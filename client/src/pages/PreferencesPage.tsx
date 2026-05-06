@@ -16,7 +16,8 @@ export default function PreferencesPage() {
             <div className="page-body-gutter-x preferences-page-card-wrap">
                 <div className="glass-card preferences-page-card-inner">
                     <p className="page-muted-note">
-                        Nothing to configure yet. Use the theme toggle in the top bar to switch between light and dark mode.
+                        Nothing to configure yet. Use the theme toggle in the
+                        top bar to switch between light and dark mode.
                     </p>
                 </div>
             </div>

@@ -8,28 +8,28 @@ const ACTIVE_CLASS = "modal-scroll--active";
  * Pair with `.modal-content` or `.u-scroll-thumb-on-scroll` + `.modal-scroll--active` rules in CSS.
  */
 export function useShowScrollbarWhileScrolling(
-  ref: RefObject<HTMLElement | null>
+	ref: RefObject<HTMLElement | null>
 ) {
-  useEffect(() => {
-    const el = ref.current;
-    if (!el) return;
+	useEffect(() => {
+		const el = ref.current;
+		if (!el) return;
 
-    let hideTimer: ReturnType<typeof setTimeout> | undefined;
+		let hideTimer: ReturnType<typeof setTimeout> | undefined;
 
-    const onScroll = () => {
-      el.classList.add(ACTIVE_CLASS);
-      if (hideTimer !== undefined) clearTimeout(hideTimer);
-      hideTimer = setTimeout(() => {
-        el.classList.remove(ACTIVE_CLASS);
-        hideTimer = undefined;
-      }, IDLE_MS);
-    };
+		const onScroll = () => {
+			el.classList.add(ACTIVE_CLASS);
+			if (hideTimer !== undefined) clearTimeout(hideTimer);
+			hideTimer = setTimeout(() => {
+				el.classList.remove(ACTIVE_CLASS);
+				hideTimer = undefined;
+			}, IDLE_MS);
+		};
 
-    el.addEventListener("scroll", onScroll, { passive: true });
-    return () => {
-      el.removeEventListener("scroll", onScroll);
-      if (hideTimer !== undefined) clearTimeout(hideTimer);
-      el.classList.remove(ACTIVE_CLASS);
-    };
-  }, [ref]);
+		el.addEventListener("scroll", onScroll, { passive: true });
+		return () => {
+			el.removeEventListener("scroll", onScroll);
+			if (hideTimer !== undefined) clearTimeout(hideTimer);
+			el.classList.remove(ACTIVE_CLASS);
+		};
+	}, [ref]);
 }

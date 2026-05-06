@@ -55,11 +55,15 @@ function LegacyParamsRedirect() {
             return;
         }
         if (meetingParam) {
-            navigate(`/meetings/${encodeURIComponent(meetingParam)}`, { replace: true });
+            navigate(`/meetings/${encodeURIComponent(meetingParam)}`, {
+                replace: true,
+            });
             return;
         }
         if (personalRoomParam) {
-            navigate(`/rooms/${encodeURIComponent(personalRoomParam)}`, { replace: true });
+            navigate(`/rooms/${encodeURIComponent(personalRoomParam)}`, {
+                replace: true,
+            });
             return;
         }
     }, [searchParams, navigate, location.pathname]);
@@ -81,7 +85,12 @@ function RequireAuth() {
 
     if (!user) {
         const returnTo = `${location.pathname}${location.search}`;
-        return <Navigate to={`/login?returnTo=${encodeURIComponent(returnTo)}`} replace />;
+        return (
+            <Navigate
+                to={`/login?returnTo=${encodeURIComponent(returnTo)}`}
+                replace
+            />
+        );
     }
 
     return <Outlet />;
@@ -124,12 +133,27 @@ export default function App() {
                         <Route index element={<DashboardPage />} />
                         <Route path="tasks" element={<TasksPage />} />
                         <Route path="meeting" element={<LiveMeetingPage />} />
-                        <Route path="meetings/:id" element={<LiveMeetingPage />} />
-                        <Route path="rooms/:roomId" element={<LiveMeetingPage isPersonalRoom />} />
-                        <Route path="scheduled" element={<ScheduledMeetingsPage />} />
+                        <Route
+                            path="meetings/:id"
+                            element={<LiveMeetingPage />}
+                        />
+                        <Route
+                            path="rooms/:roomId"
+                            element={<LiveMeetingPage isPersonalRoom />}
+                        />
+                        <Route
+                            path="scheduled"
+                            element={<ScheduledMeetingsPage />}
+                        />
                         <Route path="archives" element={<ArchivesPage />} />
-                        <Route path="archives/:id" element={<ArchiveDetailPage />} />
-                        <Route path="preferences" element={<PreferencesPage />} />
+                        <Route
+                            path="archives/:id"
+                            element={<ArchiveDetailPage />}
+                        />
+                        <Route
+                            path="preferences"
+                            element={<PreferencesPage />}
+                        />
                         <Route path="settings" element={<SettingsPage />} />
                         <Route path="*" element={<NotFoundPage />} />
                     </Route>

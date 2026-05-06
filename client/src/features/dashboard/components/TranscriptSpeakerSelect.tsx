@@ -30,14 +30,21 @@ function StackDisc({ opt }: { opt: TranscriptSpeakerOption }) {
                 profileImage={opt.profileImage}
                 userId={opt.value}
                 size={18}
-                style={{ border: 'none', borderRadius: '50%' }}
+                style={{ border: "none", borderRadius: "50%" }}
             />
         </span>
     );
 }
 
 function RowAvatar({ opt }: { opt: TranscriptSpeakerOption }) {
-    return <UserAvatar name={opt.label} profileImage={opt.profileImage} userId={opt.value} size={16} />;
+    return (
+        <UserAvatar
+            name={opt.label}
+            profileImage={opt.profileImage}
+            userId={opt.value}
+            size={16}
+        />
+    );
 }
 
 /** Multi-select speaker checklist mirroring the People filter on archive search.
@@ -63,7 +70,9 @@ export function TranscriptSpeakerSelect({
     const normalizedFilter = filterText.trim().toLowerCase();
     const filtered = useMemo(() => {
         if (!normalizedFilter) return options;
-        return options.filter((o) => (o.label || "").toLowerCase().includes(normalizedFilter));
+        return options.filter((o) =>
+            (o.label || "").toLowerCase().includes(normalizedFilter),
+        );
     }, [options, normalizedFilter]);
 
     const allSelected = options.length > 0 && value.length === options.length;
@@ -98,7 +107,9 @@ export function TranscriptSpeakerSelect({
 
     useLayoutEffect(() => {
         if (!open || highlightIndex < 0) return;
-        const el = listRef.current?.querySelector(`[data-transcript-speaker-idx="${highlightIndex}"]`);
+        const el = listRef.current?.querySelector(
+            `[data-transcript-speaker-idx="${highlightIndex}"]`,
+        );
         el?.scrollIntoView({ block: "nearest" });
     }, [highlightIndex, open, filtered]);
 
@@ -119,7 +130,8 @@ export function TranscriptSpeakerSelect({
         if (!open) return;
         const onDoc = (ev: MouseEvent) => {
             const el = rootRef.current;
-            if (el && ev.target instanceof Node && !el.contains(ev.target)) close();
+            if (el && ev.target instanceof Node && !el.contains(ev.target))
+                close();
         };
         const onKey = (ev: KeyboardEvent) => {
             if (ev.key === "Escape") close();
@@ -150,7 +162,9 @@ export function TranscriptSpeakerSelect({
             if (filtered.length === 0) return;
             if (e.key === "ArrowDown") {
                 e.preventDefault();
-                setHighlightIndex((i) => (i < 0 ? 0 : Math.min(i + 1, filtered.length - 1)));
+                setHighlightIndex((i) =>
+                    i < 0 ? 0 : Math.min(i + 1, filtered.length - 1),
+                );
             } else if (e.key === "ArrowUp") {
                 e.preventDefault();
                 setHighlightIndex((i) => Math.max(-1, i - 1));
@@ -171,11 +185,15 @@ export function TranscriptSpeakerSelect({
     let triggerLabel: string;
     if (selectedOrdered.length === 0) triggerLabel = "All";
     else if (allSelected) triggerLabel = `All ${options.length}`;
-    else if (selectedOrdered.length === 1) triggerLabel = selectedOrdered[0].label;
+    else if (selectedOrdered.length === 1)
+        triggerLabel = selectedOrdered[0].label;
     else triggerLabel = `${selectedOrdered.length} selected`;
 
     return (
-        <div className="archive-multi-select archive-multi-select--transcript-speaker" ref={rootRef}>
+        <div
+            className="archive-multi-select archive-multi-select--transcript-speaker"
+            ref={rootRef}
+        >
             <div className="archive-multi-select-pill">
                 <button
                     type="button"
@@ -185,7 +203,9 @@ export function TranscriptSpeakerSelect({
                     aria-haspopup="listbox"
                     aria-label="Speaker filter"
                 >
-                    <span className="archive-multi-select-trigger-title">Speaker</span>
+                    <span className="archive-multi-select-trigger-title">
+                        Speaker
+                    </span>
                     {selectedOrdered.length > 0 ? (
                         <div
                             className="archive-filter-stack archive-filter-stack--in-trigger"
@@ -206,24 +226,43 @@ export function TranscriptSpeakerSelect({
                                     className="archive-filter-stack-slot archive-filter-stack-slot--overlap"
                                     style={{ zIndex: stackVisible.length + 1 }}
                                 >
-                                    <span className="archive-filter-stack-more" aria-label={`${stackOverflow} more selected`}>
+                                    <span
+                                        className="archive-filter-stack-more"
+                                        aria-label={`${stackOverflow} more selected`}
+                                    >
                                         +{stackOverflow}
                                     </span>
                                 </div>
                             ) : null}
                         </div>
                     ) : null}
-                    <span className="archive-transcript-speaker-trigger-label">{triggerLabel}</span>
-                    <span className="archive-multi-select-trigger-spacer" aria-hidden />
+                    <span className="archive-transcript-speaker-trigger-label">
+                        {triggerLabel}
+                    </span>
+                    <span
+                        className="archive-multi-select-trigger-spacer"
+                        aria-hidden
+                    />
                     <span className="archive-multi-select-trigger-chevron">
-                        <Icon icon={open ? ArrowUp01Icon : ArrowDown01Icon} size={14} />
+                        <Icon
+                            icon={open ? ArrowUp01Icon : ArrowDown01Icon}
+                            size={14}
+                        />
                     </span>
                 </button>
             </div>
             {open && (
-                <div className="archive-multi-select-panel" role="listbox" aria-multiselectable="true">
+                <div
+                    className="archive-multi-select-panel"
+                    role="listbox"
+                    aria-multiselectable="true"
+                >
                     <div className="archive-multi-select-search-wrap">
-                        <Icon icon={Search01Icon} size={14} className="archive-multi-select-search-icon" />
+                        <Icon
+                            icon={Search01Icon}
+                            size={14}
+                            className="archive-multi-select-search-icon"
+                        />
                         <input
                             ref={panelSearchRef}
                             className="archive-multi-select-search"
@@ -253,9 +292,13 @@ export function TranscriptSpeakerSelect({
                             </button>
                         ) : null}
                         {options.length === 0 ? (
-                            <div className="archive-multi-select-empty">No speakers</div>
+                            <div className="archive-multi-select-empty">
+                                No speakers
+                            </div>
                         ) : filtered.length === 0 ? (
-                            <div className="archive-multi-select-empty">No results</div>
+                            <div className="archive-multi-select-empty">
+                                No results
+                            </div>
                         ) : (
                             filtered.map((opt, idx) => {
                                 const sel = selectedSet.has(opt.value);
@@ -268,17 +311,26 @@ export function TranscriptSpeakerSelect({
                                         aria-selected={sel}
                                         data-transcript-speaker-idx={idx}
                                         className={`archive-multi-select-row archive-multi-select-row--people archive-multi-select-row--transcript-speaker${sel ? " is-selected" : ""}${kbdHi ? " is-keyboard-highlight" : ""}`}
-                                        onMouseEnter={() => setHighlightIndex(idx)}
+                                        onMouseEnter={() =>
+                                            setHighlightIndex(idx)
+                                        }
                                         onClick={(e) => {
                                             e.preventDefault();
                                             toggleOne(opt.value);
                                         }}
                                     >
-                                        <span className={`archive-multi-select-check${sel ? " is-checked" : ""}`}>
-                                            <span className="archive-multi-select-check-mark" aria-hidden />
+                                        <span
+                                            className={`archive-multi-select-check${sel ? " is-checked" : ""}`}
+                                        >
+                                            <span
+                                                className="archive-multi-select-check-mark"
+                                                aria-hidden
+                                            />
                                         </span>
                                         <RowAvatar opt={opt} />
-                                        <span className="archive-multi-select-name">{opt.label}</span>
+                                        <span className="archive-multi-select-name">
+                                            {opt.label}
+                                        </span>
                                     </button>
                                 );
                             })

@@ -13,20 +13,32 @@ import {
 import { useLocation, useNavigate } from "react-router-dom";
 import Icon from "../../../shared/components/Icon";
 import {
-    Search01Icon, Calendar02Icon, UserIcon, ArrowDown01Icon, ArrowUp01Icon,
+    Search01Icon,
+    Calendar02Icon,
+    UserIcon,
+    ArrowDown01Icon,
+    ArrowUp01Icon,
     PinIcon,
     Pen01Icon,
     Delete01Icon,
 } from "@hugeicons/core-free-icons";
 import {
-    ArchiveMeeting, ArchiveListResponse, archiveModalityChipClass, archiveModalityLabel,
-    formatArchiveDate, groupArchiveMeetingsByRecency, parseArchiveSearchInput,
+    ArchiveMeeting,
+    ArchiveListResponse,
+    archiveModalityChipClass,
+    archiveModalityLabel,
+    formatArchiveDate,
+    groupArchiveMeetingsByRecency,
+    parseArchiveSearchInput,
     SEARCH_DEBOUNCE_MS,
     archiveLoadingMinVisibleMs,
 } from "./archiveHelpers";
 import { avatarUrlFromPath } from "../../../shared/avatarUrl";
 import { UserAvatar } from "../../../shared/components/UserAvatar";
-import { publicMeetingSlug, resolvedInternalMeetingId } from "../../../utils/meetingSlug";
+import {
+    publicMeetingSlug,
+    resolvedInternalMeetingId,
+} from "../../../utils/meetingSlug";
 import { useAuth } from "../../../stores/AuthContext";
 import ShortcutTooltip from "../../../shared/components/ShortcutTooltip";
 import Kbd from "../../../shared/components/Kbd";
@@ -36,13 +48,17 @@ const STACK_MAX_VISIBLE_DISCS = 3;
 
 /** Allowed `limit` query values for GET /archive (must stay in sync with server). */
 const ARCHIVE_PAGE_SIZES = [5, 10, 15, 20] as const;
-type ArchivePageSize = typeof ARCHIVE_PAGE_SIZES[number];
+type ArchivePageSize = (typeof ARCHIVE_PAGE_SIZES)[number];
 
 /** Page indices plus gaps for ellipsis (1-based pages). */
-function archivePaginationSlots(currentPage: number, totalPages: number): (number | "gap")[] {
+function archivePaginationSlots(
+    currentPage: number,
+    totalPages: number,
+): (number | "gap")[] {
     if (totalPages <= 0) return [];
     if (totalPages === 1) return [1];
-    if (totalPages <= 9) return Array.from({ length: totalPages }, (_, i) => i + 1);
+    if (totalPages <= 9)
+        return Array.from({ length: totalPages }, (_, i) => i + 1);
     const wins = new Set<number>();
     wins.add(1);
     wins.add(totalPages);
@@ -62,16 +78,22 @@ function archivePaginationSlots(currentPage: number, totalPages: number): (numbe
 
 const API_BASE = import.meta.env.VITE_API_URL || "http://localhost:5001/api";
 
-const IS_MAC = typeof navigator !== "undefined" && /Mac|iPod|iPhone|iPad/.test(navigator.platform);
+const IS_MAC =
+    typeof navigator !== "undefined" &&
+    /Mac|iPod|iPhone|iPad/.test(navigator.platform);
 
 function meetingApiSegment(m: ArchiveMeeting): string {
     return publicMeetingSlug(m) ?? resolvedInternalMeetingId(m) ?? "";
 }
 
-function isArchiveMeetingHost(m: ArchiveMeeting, uid: string | null | undefined): boolean {
+function isArchiveMeetingHost(
+    m: ArchiveMeeting,
+    uid: string | null | undefined,
+): boolean {
     if (uid == null || uid === "") return false;
     const h = m.hostId as unknown;
-    if (h && typeof h === "object" && "_id" in (h as object)) return String((h as { _id?: unknown })._id) === String(uid);
+    if (h && typeof h === "object" && "_id" in (h as object))
+        return String((h as { _id?: unknown })._id) === String(uid);
     return String(h ?? "") === String(uid);
 }
 
@@ -110,9 +132,13 @@ function ArchiveResultRow({
     onPin,
     onHoverSelectFlat,
 }: ArchiveResultRowProps) {
-    const deleteKbdKeys = IS_MAC ? (["ctrlmac", "backspace"] as const) : (["mod", "forwarddel"] as const);
+    const deleteKbdKeys = IS_MAC
+        ? (["ctrlmac", "backspace"] as const)
+        : (["mod", "forwarddel"] as const);
     /** ⌃⌥R / Ctrl+Alt+R — avoids Safari’s ⌘⌥R shortcuts. */
-    const renameKbdKeys = IS_MAC ? (["ctrlmac", "altmac", "R"] as const) : (["mod", "altmac", "R"] as const);
+    const renameKbdKeys = IS_MAC
+        ? (["ctrlmac", "altmac", "R"] as const)
+        : (["mod", "altmac", "R"] as const);
 
     return (
         <div
@@ -131,28 +157,41 @@ function ArchiveResultRow({
                 <div className="meeting-card-title">{meeting.title}</div>
                 <div className="meeting-card-meta">
                     {meeting.date && (
-                        <span><Icon icon={Calendar02Icon} size={14} /> {formatArchiveDate(meeting.date)}</span>
+                        <span>
+                            <Icon icon={Calendar02Icon} size={14} />{" "}
+                            {formatArchiveDate(meeting.date)}
+                        </span>
                     )}
-                    <span><Icon icon={UserIcon} size={14} /> {meeting.host}</span>
+                    <span>
+                        <Icon icon={UserIcon} size={14} /> {meeting.host}
+                    </span>
                     {(() => {
                         const modLabel = archiveModalityLabel(meeting.modality);
                         return modLabel ? (
-                            <span className={archiveModalityChipClass(meeting.modality)}>
+                            <span
+                                className={archiveModalityChipClass(
+                                    meeting.modality,
+                                )}
+                            >
                                 {modLabel}
                             </span>
                         ) : null;
                     })()}
                 </div>
-                {meeting.matchedTranscripts && meeting.matchedTranscripts.length > 0 && (
-                    <div className="archive-snippet-block">
-                        {meeting.matchedTranscripts.map((t, i) => (
-                            <p key={i} className="archive-search-snippet">
-                                {t.timestamp ? `${t.timestamp} · ` : ""}{t.speaker} ·{" "}
-                                {t.text.length > 120 ? `${t.text.slice(0, 120)}...` : t.text}
-                            </p>
-                        ))}
-                    </div>
-                )}
+                {meeting.matchedTranscripts &&
+                    meeting.matchedTranscripts.length > 0 && (
+                        <div className="archive-snippet-block">
+                            {meeting.matchedTranscripts.map((t, i) => (
+                                <p key={i} className="archive-search-snippet">
+                                    {t.timestamp ? `${t.timestamp} · ` : ""}
+                                    {t.speaker} ·{" "}
+                                    {t.text.length > 120
+                                        ? `${t.text.slice(0, 120)}...`
+                                        : t.text}
+                                </p>
+                            ))}
+                        </div>
+                    )}
             </button>
             <div className="archive-meeting-card-actions">
                 <ShortcutTooltip
@@ -174,7 +213,13 @@ function ArchiveResultRow({
                             onToggleMenu();
                         }}
                     >
-                        <svg width={16} height={16} viewBox="0 0 24 24" fill="currentColor" aria-hidden>
+                        <svg
+                            width={16}
+                            height={16}
+                            viewBox="0 0 24 24"
+                            fill="currentColor"
+                            aria-hidden
+                        >
                             <circle cx={12} cy={6} r={2} />
                             <circle cx={12} cy={12} r={2} />
                             <circle cx={12} cy={18} r={2} />
@@ -182,11 +227,23 @@ function ArchiveResultRow({
                     </button>
                 </ShortcutTooltip>
                 {menuOpen ? (
-                    <div ref={menuContainerRefProp} className="archive-meeting-actions-menu" role="menu" onMouseMove={() => {
-                        menuContainerRefProp.current?.removeAttribute("data-kbd-nav");
-                        const ae = document.activeElement as HTMLElement | null;
-                        if (ae && menuContainerRefProp.current?.contains(ae)) ae.blur();
-                    }}>
+                    <div
+                        ref={menuContainerRefProp}
+                        className="archive-meeting-actions-menu"
+                        role="menu"
+                        onMouseMove={() => {
+                            menuContainerRefProp.current?.removeAttribute(
+                                "data-kbd-nav",
+                            );
+                            const ae =
+                                document.activeElement as HTMLElement | null;
+                            if (
+                                ae &&
+                                menuContainerRefProp.current?.contains(ae)
+                            )
+                                ae.blur();
+                        }}
+                    >
                         {isHost ? (
                             <button
                                 type="button"
@@ -194,8 +251,15 @@ function ArchiveResultRow({
                                 className="archive-meeting-actions-menu-item"
                                 onClick={onRename}
                             >
-                                <Icon icon={Pen01Icon} size={14} className="archive-meeting-actions-menu-icon-hi" aria-hidden />
-                                <span className="archive-meeting-actions-menu-label">Rename</span>
+                                <Icon
+                                    icon={Pen01Icon}
+                                    size={14}
+                                    className="archive-meeting-actions-menu-icon-hi"
+                                    aria-hidden
+                                />
+                                <span className="archive-meeting-actions-menu-label">
+                                    Rename
+                                </span>
                                 <span className="archive-meeting-actions-menu-kbd">
                                     <Kbd keys={[...renameKbdKeys]} />
                                 </span>
@@ -207,8 +271,14 @@ function ArchiveResultRow({
                             className="archive-meeting-actions-menu-item"
                             onClick={onPin}
                         >
-                            <Icon icon={PinIcon} size={14} className="archive-meeting-actions-menu-icon-hi" />
-                            <span className="archive-meeting-actions-menu-label">{pinned ? "Unpin" : "Pin"}</span>
+                            <Icon
+                                icon={PinIcon}
+                                size={14}
+                                className="archive-meeting-actions-menu-icon-hi"
+                            />
+                            <span className="archive-meeting-actions-menu-label">
+                                {pinned ? "Unpin" : "Pin"}
+                            </span>
                             <span className="archive-meeting-actions-menu-kbd">
                                 <Kbd keys={["mod", "shift", "P"]} />
                             </span>
@@ -220,8 +290,15 @@ function ArchiveResultRow({
                                 className="archive-meeting-actions-menu-item archive-meeting-actions-menu-item--danger"
                                 onClick={onDelete}
                             >
-                                <Icon icon={Delete01Icon} size={14} className="archive-meeting-actions-menu-icon-hi" aria-hidden />
-                                <span className="archive-meeting-actions-menu-label">Delete</span>
+                                <Icon
+                                    icon={Delete01Icon}
+                                    size={14}
+                                    className="archive-meeting-actions-menu-icon-hi"
+                                    aria-hidden
+                                />
+                                <span className="archive-meeting-actions-menu-label">
+                                    Delete
+                                </span>
                                 <span className="archive-meeting-actions-menu-kbd">
                                     <Kbd keys={[...deleteKbdKeys]} />
                                 </span>
@@ -239,7 +316,10 @@ interface ArchiveListViewProps {
     onSelectMeeting: (meetingId: string) => void;
 }
 
-export default function ArchiveListView({ fetchWithAuth, onSelectMeeting }: ArchiveListViewProps) {
+export default function ArchiveListView({
+    fetchWithAuth,
+    onSelectMeeting,
+}: ArchiveListViewProps) {
     const { user, updateUser } = useAuth();
     const locationState = useLocation().state as { tags?: string[] } | null;
     const navigate = useNavigate();
@@ -250,10 +330,17 @@ export default function ArchiveListView({ fetchWithAuth, onSelectMeeting }: Arch
     const [page, setPage] = useState(1);
     const [pageSize, setPageSize] = useState<ArchivePageSize>(10);
     const [availableTags, setAvailableTags] = useState<string[]>([]);
-    const [availableTagColors, setAvailableTagColors] = useState<Record<string, string>>({});
-    const [availablePeople, setAvailablePeople] = useState<Array<{
-        _id: string; name: string; email: string; profileImage?: string | null;
-    }>>([]);
+    const [availableTagColors, setAvailableTagColors] = useState<
+        Record<string, string>
+    >({});
+    const [availablePeople, setAvailablePeople] = useState<
+        Array<{
+            _id: string;
+            name: string;
+            email: string;
+            profileImage?: string | null;
+        }>
+    >([]);
     const [selectedTags, setSelectedTags] = useState<string[]>([]);
     const [selectedPeople, setSelectedPeople] = useState<string[]>([]);
     const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -262,10 +349,14 @@ export default function ArchiveListView({ fetchWithAuth, onSelectMeeting }: Arch
     const archiveMainSearchRef = useRef<HTMLInputElement>(null);
     const archivePaginationSelectRef = useRef<HTMLSelectElement>(null);
     const [selectedFlatIndex, setSelectedFlatIndex] = useState(-1);
-    const [menuOpenForInternalId, setMenuOpenForInternalId] = useState<string | null>(null);
+    const [menuOpenForInternalId, setMenuOpenForInternalId] = useState<
+        string | null
+    >(null);
     /** True while the user is navigating with arrow keys; suppresses hover-select on scroll. */
     const keyboardNavRef = useRef(false);
-    const [renameTarget, setRenameTarget] = useState<ArchiveMeeting | null>(null);
+    const [renameTarget, setRenameTarget] = useState<ArchiveMeeting | null>(
+        null,
+    );
     const [renameDraft, setRenameDraft] = useState("");
     const menuContainerRef = useRef<HTMLDivElement | null>(null);
     const moreBtnRefs = useRef<Map<string, HTMLButtonElement>>(new Map());
@@ -279,11 +370,15 @@ export default function ArchiveListView({ fetchWithAuth, onSelectMeeting }: Arch
     }, []);
 
     const openTagsPanelKeyboard = useCallback(() => {
-        requestAnimationFrame(() => tagsDropdownRef.current?.activateAndFocusSearch());
+        requestAnimationFrame(() =>
+            tagsDropdownRef.current?.activateAndFocusSearch(),
+        );
     }, []);
 
     const openPeoplePanelKeyboard = useCallback(() => {
-        requestAnimationFrame(() => peopleDropdownRef.current?.activateAndFocusSearch());
+        requestAnimationFrame(() =>
+            peopleDropdownRef.current?.activateAndFocusSearch(),
+        );
     }, []);
 
     const focusPaginationOrMainSearchKeyboard = useCallback(() => {
@@ -297,23 +392,30 @@ export default function ArchiveListView({ fetchWithAuth, onSelectMeeting }: Arch
         });
     }, [totalCount]);
 
-    const onArchiveMainSearchKeyDown = useCallback((e: React.KeyboardEvent<HTMLInputElement>) => {
-        if (e.key !== "Tab" || e.shiftKey) return;
-        e.preventDefault();
-        tagsDropdownRef.current?.activateAndFocusSearch();
-    }, []);
+    const onArchiveMainSearchKeyDown = useCallback(
+        (e: React.KeyboardEvent<HTMLInputElement>) => {
+            if (e.key !== "Tab" || e.shiftKey) return;
+            e.preventDefault();
+            tagsDropdownRef.current?.activateAndFocusSearch();
+        },
+        [],
+    );
 
     useEffect(() => {
         const fetchFilters = async () => {
             try {
-                const res = await (fetchWithAuth || fetch)(`${API_BASE}/archive/filters`);
+                const res = await (fetchWithAuth || fetch)(
+                    `${API_BASE}/archive/filters`,
+                );
                 if (res.ok) {
                     const data = await res.json();
                     setAvailableTags(data.tags || []);
                     setAvailableTagColors(data.tagColors || {});
                     setAvailablePeople(data.people || []);
                 }
-            } catch (err) { console.error("Failed to load archive filters:", err); }
+            } catch (err) {
+                console.error("Failed to load archive filters:", err);
+            }
         };
         fetchFilters();
     }, [fetchWithAuth]);
@@ -335,7 +437,10 @@ export default function ArchiveListView({ fetchWithAuth, onSelectMeeting }: Arch
                 if (!res.ok || cancelled) return;
                 const data = await res.json();
                 if (Array.isArray(data.archivePinnedMeetingIds)) {
-                    updateUser({ archivePinnedMeetingIds: data.archivePinnedMeetingIds.map(String) });
+                    updateUser({
+                        archivePinnedMeetingIds:
+                            data.archivePinnedMeetingIds.map(String),
+                    });
                 }
             } catch {
                 /* ignore */
@@ -353,7 +458,12 @@ export default function ArchiveListView({ fetchWithAuth, onSelectMeeting }: Arch
     }, [user?.archivePinnedMeetingIds]);
 
     const archivePeopleForFilter = useMemo(() => {
-        const uid = user?._id != null ? String(user._id) : user?.id != null ? String(user.id) : null;
+        const uid =
+            user?._id != null
+                ? String(user._id)
+                : user?.id != null
+                  ? String(user.id)
+                  : null;
         const sessionPic = user?.profileImage ?? null;
         if (!uid || !sessionPic) return availablePeople;
         return availablePeople.map((p) => {
@@ -364,24 +474,40 @@ export default function ArchiveListView({ fetchWithAuth, onSelectMeeting }: Arch
     }, [availablePeople, user?._id, user?.id, user?.profileImage]);
 
     const tagsOptions = useMemo(
-        () => availableTags.map((t) => ({ value: t, label: t, color: availableTagColors[t] })),
+        () =>
+            availableTags.map((t) => ({
+                value: t,
+                label: t,
+                color: availableTagColors[t],
+            })),
         [availableTags, availableTagColors],
     );
 
     const peopleOptions = useMemo(
-        () => archivePeopleForFilter.map((p) => ({
-            value: p._id,
-            label: p.name || p.email || "Participant",
-            email: p.email,
-            profileImage: p.profileImage ?? null,
-        })),
+        () =>
+            archivePeopleForFilter.map((p) => ({
+                value: p._id,
+                label: p.name || p.email || "Participant",
+                email: p.email,
+                profileImage: p.profileImage ?? null,
+            })),
         [archivePeopleForFilter],
     );
 
     const search = useCallback(
-        async (searchInput: string, tags: string[], people: string[], pageNum: number, perPage: ArchivePageSize) => {
-            const { textQuery, dateFrom, dateTo } = parseArchiveSearchInput(searchInput);
-            const startedMs = typeof performance !== "undefined" ? performance.now() : Date.now();
+        async (
+            searchInput: string,
+            tags: string[],
+            people: string[],
+            pageNum: number,
+            perPage: ArchivePageSize,
+        ) => {
+            const { textQuery, dateFrom, dateTo } =
+                parseArchiveSearchInput(searchInput);
+            const startedMs =
+                typeof performance !== "undefined"
+                    ? performance.now()
+                    : Date.now();
             setLoading(true);
             let nextMeetings: ArchiveMeeting[] | null = null;
             let nextTotal: number | null = null;
@@ -395,7 +521,9 @@ export default function ArchiveListView({ fetchWithAuth, onSelectMeeting }: Arch
                 params.set("limit", String(perPage));
                 params.set("page", String(pageNum));
 
-                const res = await (fetchWithAuth || fetch)(`${API_BASE}/archive?${params.toString()}`);
+                const res = await (fetchWithAuth || fetch)(
+                    `${API_BASE}/archive?${params.toString()}`,
+                );
                 if (res.ok) {
                     const data: ArchiveListResponse = await res.json();
                     nextMeetings = data.meetings ?? [];
@@ -404,9 +532,15 @@ export default function ArchiveListView({ fetchWithAuth, onSelectMeeting }: Arch
             } catch (err) {
                 console.error("Archive search failed:", err);
             }
-            const elapsed = (typeof performance !== "undefined" ? performance.now() : Date.now()) - startedMs;
+            const elapsed =
+                (typeof performance !== "undefined"
+                    ? performance.now()
+                    : Date.now()) - startedMs;
             await new Promise<void>((resolve) => {
-                setTimeout(resolve, Math.max(0, archiveLoadingMinVisibleMs() - elapsed));
+                setTimeout(
+                    resolve,
+                    Math.max(0, archiveLoadingMinVisibleMs() - elapsed),
+                );
             });
             if (nextMeetings !== null && nextTotal !== null) {
                 setResults(nextMeetings);
@@ -423,18 +557,25 @@ export default function ArchiveListView({ fetchWithAuth, onSelectMeeting }: Arch
 
     const persistArchivePins = useCallback(
         async (meetingIds: string[]) => {
-            const res = await (fetchWithAuth || fetch)(`${API_BASE}/profile/archive-pins`, {
-                method: "PUT",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ meetingIds }),
-            });
+            const res = await (fetchWithAuth || fetch)(
+                `${API_BASE}/profile/archive-pins`,
+                {
+                    method: "PUT",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ meetingIds }),
+                },
+            );
             if (!res.ok) {
                 const err = await res.json().catch(() => ({}));
-                throw new Error((err as { message?: string }).message || res.statusText);
+                throw new Error(
+                    (err as { message?: string }).message || res.statusText,
+                );
             }
             const data = await res.json();
             updateUser({
-                archivePinnedMeetingIds: Array.isArray(data.archivePinnedMeetingIds)
+                archivePinnedMeetingIds: Array.isArray(
+                    data.archivePinnedMeetingIds,
+                )
                     ? data.archivePinnedMeetingIds.map(String)
                     : meetingIds,
             });
@@ -508,14 +649,25 @@ export default function ArchiveListView({ fetchWithAuth, onSelectMeeting }: Arch
         ),
     );
 
-    const totalPages = useMemo(() => Math.max(0, Math.ceil(totalCount / pageSize)), [totalCount, pageSize]);
+    const totalPages = useMemo(
+        () => Math.max(0, Math.ceil(totalCount / pageSize)),
+        [totalCount, pageSize],
+    );
 
-    const paginationSlots = useMemo(() => archivePaginationSlots(page, Math.max(totalPages, 1)), [page, totalPages]);
+    const paginationSlots = useMemo(
+        () => archivePaginationSlots(page, Math.max(totalPages, 1)),
+        [page, totalPages],
+    );
 
     const rangeFrom = totalCount === 0 ? 0 : (page - 1) * pageSize + 1;
     const rangeTo = Math.min(page * pageSize, totalCount);
 
-    const sessionUserId = user?._id != null ? String(user._id) : user?.id != null ? String(user.id) : null;
+    const sessionUserId =
+        user?._id != null
+            ? String(user._id)
+            : user?.id != null
+              ? String(user.id)
+              : null;
 
     const { pinnedMeetings, groupedUnpinned } = useMemo(() => {
         const pinSet = new Set(archivePinOrder);
@@ -528,7 +680,10 @@ export default function ArchiveListView({ fetchWithAuth, onSelectMeeting }: Arch
             const id = resolvedInternalMeetingId(x);
             return !!(id && !pinSet.has(id));
         });
-        return { pinnedMeetings: pinned, groupedUnpinned: groupArchiveMeetingsByRecency(unpinned) };
+        return {
+            pinnedMeetings: pinned,
+            groupedUnpinned: groupArchiveMeetingsByRecency(unpinned),
+        };
     }, [archivePinOrder, results]);
 
     const flatMeetingList = useMemo(() => {
@@ -555,10 +710,18 @@ export default function ArchiveListView({ fetchWithAuth, onSelectMeeting }: Arch
     }, [flatMeetingList.length]);
 
     useLayoutEffect(() => {
-        if (selectedFlatIndex < 0 || selectedFlatIndex >= flatMeetingList.length) return;
-        const id = resolvedInternalMeetingId(flatMeetingList[selectedFlatIndex]);
+        if (
+            selectedFlatIndex < 0 ||
+            selectedFlatIndex >= flatMeetingList.length
+        )
+            return;
+        const id = resolvedInternalMeetingId(
+            flatMeetingList[selectedFlatIndex],
+        );
         if (!id) return;
-        rowRefs.current.get(id)?.scrollIntoView({ block: "nearest", behavior: "smooth" });
+        rowRefs.current
+            .get(id)
+            ?.scrollIntoView({ block: "nearest", behavior: "smooth" });
     }, [flatMeetingList, selectedFlatIndex]);
 
     useEffect(() => {
@@ -566,7 +729,8 @@ export default function ArchiveListView({ fetchWithAuth, onSelectMeeting }: Arch
         const onDown = (e: MouseEvent) => {
             const t = e.target as Node;
             if (menuContainerRef.current?.contains(t)) return;
-            if ([...moreBtnRefs.current.values()].some((b) => b?.contains(t))) return;
+            if ([...moreBtnRefs.current.values()].some((b) => b?.contains(t)))
+                return;
             setMenuOpenForInternalId(null);
         };
         document.addEventListener("mousedown", onDown);
@@ -586,7 +750,9 @@ export default function ArchiveListView({ fetchWithAuth, onSelectMeeting }: Arch
 
     /* Real pointer movement ends keyboard-nav mode. */
     useEffect(() => {
-        const onMove = () => { keyboardNavRef.current = false; };
+        const onMove = () => {
+            keyboardNavRef.current = false;
+        };
         window.addEventListener("mousemove", onMove, { passive: true });
         return () => window.removeEventListener("mousemove", onMove);
     }, []);
@@ -608,17 +774,22 @@ export default function ArchiveListView({ fetchWithAuth, onSelectMeeting }: Arch
                 closeArchiveRowMenu();
             } catch (e) {
                 console.error(e);
-                window.alert(e instanceof Error ? e.message : "Could not update pins");
+                window.alert(
+                    e instanceof Error ? e.message : "Could not update pins",
+                );
             }
         },
         [archivePinOrder, closeArchiveRowMenu, persistArchivePins],
     );
 
-    const openRenameMeeting = useCallback((meeting: ArchiveMeeting) => {
-        closeArchiveRowMenu();
-        setRenameTarget(meeting);
-        setRenameDraft(meeting.title ?? "");
-    }, [closeArchiveRowMenu]);
+    const openRenameMeeting = useCallback(
+        (meeting: ArchiveMeeting) => {
+            closeArchiveRowMenu();
+            setRenameTarget(meeting);
+            setRenameDraft(meeting.title ?? "");
+        },
+        [closeArchiveRowMenu],
+    );
 
     const deleteMeetingConfirmed = useCallback(
         async (meeting: ArchiveMeeting) => {
@@ -627,11 +798,18 @@ export default function ArchiveListView({ fetchWithAuth, onSelectMeeting }: Arch
             if (!fetchWithAuth) return;
             closeArchiveRowMenu();
             try {
-                const res = await fetchWithAuth(`${API_BASE}/archive/meeting/${encodeURIComponent(seg)}`, {
-                    method: "DELETE",
-                });
+                const res = await fetchWithAuth(
+                    `${API_BASE}/archive/meeting/${encodeURIComponent(seg)}`,
+                    {
+                        method: "DELETE",
+                    },
+                );
                 const errBody = await res.json().catch(() => ({}));
-                if (!res.ok) throw new Error((errBody as { message?: string }).message || res.statusText);
+                if (!res.ok)
+                    throw new Error(
+                        (errBody as { message?: string }).message ||
+                            res.statusText,
+                    );
                 rerunArchiveSearch();
                 setSelectedFlatIndex(-1);
             } catch (e) {
@@ -650,7 +828,10 @@ export default function ArchiveListView({ fetchWithAuth, onSelectMeeting }: Arch
             const isArrowUp = e.key === "ArrowUp" || e.code === "ArrowUp";
             if (isArrowDown || isArrowUp) keyboardNavRef.current = true;
 
-            const filtersOpen = !!(tagsDropdownRef.current?.isOpen() || peopleDropdownRef.current?.isOpen());
+            const filtersOpen = !!(
+                tagsDropdownRef.current?.isOpen() ||
+                peopleDropdownRef.current?.isOpen()
+            );
             const ae = document.activeElement;
             const tn = ae?.tagName ?? "";
 
@@ -663,9 +844,13 @@ export default function ArchiveListView({ fetchWithAuth, onSelectMeeting }: Arch
                 tn === "INPUT";
 
             const modPrimary = IS_MAC ? e.metaKey : e.ctrlKey;
-            const menuChord = modPrimary && e.shiftKey && !e.altKey && e.key === ",";
+            const menuChord =
+                modPrimary && e.shiftKey && !e.altKey && e.key === ",";
             const pinChord =
-                modPrimary && e.shiftKey && !e.altKey && e.key.toLowerCase() === "p";
+                modPrimary &&
+                e.shiftKey &&
+                !e.altKey &&
+                e.key.toLowerCase() === "p";
             const renameChord =
                 e.ctrlKey &&
                 e.altKey &&
@@ -680,7 +865,8 @@ export default function ArchiveListView({ fetchWithAuth, onSelectMeeting }: Arch
                 (e.key === "Delete" || e.key === "Backspace");
 
             const selectedMeeting =
-                selectedFlatIndex >= 0 && selectedFlatIndex < flatMeetingList.length
+                selectedFlatIndex >= 0 &&
+                selectedFlatIndex < flatMeetingList.length
                     ? flatMeetingList[selectedFlatIndex]
                     : null;
 
@@ -689,7 +875,9 @@ export default function ArchiveListView({ fetchWithAuth, onSelectMeeting }: Arch
                 if (!selectedMeeting) return;
                 const sid = resolvedInternalMeetingId(selectedMeeting);
                 if (sid)
-                    setMenuOpenForInternalId((prev) => (prev === sid ? null : sid));
+                    setMenuOpenForInternalId((prev) =>
+                        prev === sid ? null : sid,
+                    );
                 return;
             }
             if (pinChord) {
@@ -699,7 +887,11 @@ export default function ArchiveListView({ fetchWithAuth, onSelectMeeting }: Arch
             }
             if (renameChord) {
                 if (inField) return;
-                if (!selectedMeeting || !isArchiveMeetingHost(selectedMeeting, sessionUserId)) return;
+                if (
+                    !selectedMeeting ||
+                    !isArchiveMeetingHost(selectedMeeting, sessionUserId)
+                )
+                    return;
                 e.preventDefault();
                 openRenameMeeting(selectedMeeting);
                 return;
@@ -711,7 +903,9 @@ export default function ArchiveListView({ fetchWithAuth, onSelectMeeting }: Arch
             ) {
                 if (inField) return;
                 e.preventDefault();
-                window.confirm(`Delete archived meeting "${selectedMeeting.title}"?`)
+                window.confirm(
+                    `Delete archived meeting "${selectedMeeting.title}"?`,
+                )
                     ? void deleteMeetingConfirmed(selectedMeeting)
                     : undefined;
                 return;
@@ -719,15 +913,21 @@ export default function ArchiveListView({ fetchWithAuth, onSelectMeeting }: Arch
 
             if (menuOpenForInternalId && !filtersOpen) {
                 const items = Array.from(
-                    menuContainerRef.current?.querySelectorAll<HTMLElement>('[role="menuitem"]') ?? [],
+                    menuContainerRef.current?.querySelectorAll<HTMLElement>(
+                        '[role="menuitem"]',
+                    ) ?? [],
                 );
                 if (isArrowDown) {
                     e.preventDefault();
                     e.stopPropagation();
                     if (items.length === 0) return;
                     menuContainerRef.current?.setAttribute("data-kbd-nav", "");
-                    const cur = items.indexOf(document.activeElement as HTMLElement);
-                    items[cur < 0 ? 0 : (cur + 1) % items.length].focus({ preventScroll: true });
+                    const cur = items.indexOf(
+                        document.activeElement as HTMLElement,
+                    );
+                    items[cur < 0 ? 0 : (cur + 1) % items.length].focus({
+                        preventScroll: true,
+                    });
                     return;
                 }
                 if (isArrowUp) {
@@ -735,8 +935,12 @@ export default function ArchiveListView({ fetchWithAuth, onSelectMeeting }: Arch
                     e.stopPropagation();
                     if (items.length === 0) return;
                     menuContainerRef.current?.setAttribute("data-kbd-nav", "");
-                    const cur = items.indexOf(document.activeElement as HTMLElement);
-                    items[cur <= 0 ? items.length - 1 : cur - 1].focus({ preventScroll: true });
+                    const cur = items.indexOf(
+                        document.activeElement as HTMLElement,
+                    );
+                    items[cur <= 0 ? items.length - 1 : cur - 1].focus({
+                        preventScroll: true,
+                    });
                     return;
                 }
                 if (e.key === "Escape") {
@@ -759,7 +963,9 @@ export default function ArchiveListView({ fetchWithAuth, onSelectMeeting }: Arch
             if (isArrowDown) {
                 if (flatMeetingList.length === 0) return;
                 e.preventDefault();
-                setSelectedFlatIndex((i) => Math.min(flatMeetingList.length - 1, i < 0 ? 0 : i + 1));
+                setSelectedFlatIndex((i) =>
+                    Math.min(flatMeetingList.length - 1, i < 0 ? 0 : i + 1),
+                );
                 return;
             }
             if (isArrowUp) {
@@ -821,13 +1027,19 @@ export default function ArchiveListView({ fetchWithAuth, onSelectMeeting }: Arch
         const seg = meetingApiSegment(renameTarget);
         if (!seg) return;
         try {
-            const res = await (fetchWithAuth || fetch)(`${API_BASE}/archive/meeting/${encodeURIComponent(seg)}/title`, {
-                method: "PATCH",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ title }),
-            });
+            const res = await (fetchWithAuth || fetch)(
+                `${API_BASE}/archive/meeting/${encodeURIComponent(seg)}/title`,
+                {
+                    method: "PATCH",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ title }),
+                },
+            );
             const errBody = await res.json().catch(() => ({}));
-            if (!res.ok) throw new Error((errBody as { message?: string }).message || res.statusText);
+            if (!res.ok)
+                throw new Error(
+                    (errBody as { message?: string }).message || res.statusText,
+                );
             setRenameTarget(null);
             setRenameDraft("");
             rerunArchiveSearch();
@@ -871,11 +1083,15 @@ export default function ArchiveListView({ fetchWithAuth, onSelectMeeting }: Arch
                 }}
                 menuContainerRefProp={menuContainerRef}
                 onToggleMenu={() =>
-                    setMenuOpenForInternalId((prev) => (prev === internal ? null : internal))
+                    setMenuOpenForInternalId((prev) =>
+                        prev === internal ? null : internal,
+                    )
                 }
                 onRename={() => openRenameMeeting(meeting)}
                 onDelete={() =>
-                    window.confirm(`Delete archived meeting "${meeting.title}"?`)
+                    window.confirm(
+                        `Delete archived meeting "${meeting.title}"?`,
+                    )
                         ? void deleteMeetingConfirmed(meeting)
                         : undefined
                 }
@@ -898,17 +1114,24 @@ export default function ArchiveListView({ fetchWithAuth, onSelectMeeting }: Arch
             <header className="page-header">
                 <h2 className="page-header-title">Archives</h2>
                 <p className="page-header-description">
-                    Search and browse past meeting transcripts, summaries, and tasks.
+                    Search and browse past meeting transcripts, summaries, and
+                    tasks.
                 </p>
             </header>
 
             <div className="archive-search-bar">
                 <div
                     className={`archive-search-input-wrap archive-search-box${
-                        query.trim() !== "" ? " archive-search-box--has-value" : ""
+                        query.trim() !== ""
+                            ? " archive-search-box--has-value"
+                            : ""
                     }`}
                 >
-                    <Icon icon={Search01Icon} size={14} className="archive-search-box-icon" />
+                    <Icon
+                        icon={Search01Icon}
+                        size={14}
+                        className="archive-search-box-icon"
+                    />
                     <input
                         ref={archiveMainSearchRef}
                         type="search"
@@ -943,7 +1166,9 @@ export default function ArchiveListView({ fetchWithAuth, onSelectMeeting }: Arch
                         label="People"
                         shortcutTooltipKeys={["mod", "shift", "U"]}
                         shortcutTooltipLabel="Toggle people filter"
-                        onTabForwardFromPanelSearch={focusPaginationOrMainSearchKeyboard}
+                        onTabForwardFromPanelSearch={
+                            focusPaginationOrMainSearchKeyboard
+                        }
                         onShiftTabBackFromPanelSearch={openTagsPanelKeyboard}
                         onShiftTabBackFromClosedTrigger={openTagsPanelKeyboard}
                     />
@@ -957,105 +1182,161 @@ export default function ArchiveListView({ fetchWithAuth, onSelectMeeting }: Arch
             >
                 <div className="archive-meeting-list-column">
                     {pinnedMeetings.length > 0 ? (
-                        <div className="archive-results-group" role="group" aria-label="Pinned">
-                            <h3 className="archive-results-group-heading">Pinned</h3>
-                            {pinnedMeetings.map((meeting) => renderMeetingRow(meeting, true))}
+                        <div
+                            className="archive-results-group"
+                            role="group"
+                            aria-label="Pinned"
+                        >
+                            <h3 className="archive-results-group-heading">
+                                Pinned
+                            </h3>
+                            {pinnedMeetings.map((meeting) =>
+                                renderMeetingRow(meeting, true),
+                            )}
                         </div>
                     ) : null}
                     {groupedUnpinned.map((group) => (
-                        <div key={group.id} className="archive-results-group" role="group" aria-label={group.label}>
-                            <h3 className="archive-results-group-heading">{group.label}</h3>
-                            {group.meetings.map((meeting) => renderMeetingRow(meeting, false))}
+                        <div
+                            key={group.id}
+                            className="archive-results-group"
+                            role="group"
+                            aria-label={group.label}
+                        >
+                            <h3 className="archive-results-group-heading">
+                                {group.label}
+                            </h3>
+                            {group.meetings.map((meeting) =>
+                                renderMeetingRow(meeting, false),
+                            )}
                         </div>
                     ))}
                     {results.length === 0 && !loading && (
-                        <p className="archive-no-results">No completed meetings found.</p>
+                        <p className="archive-no-results">
+                            No completed meetings found.
+                        </p>
                     )}
 
                     {!loading && totalCount > 0 ? (
-                            <div className="archive-pagination-row" role="navigation" aria-label="Archive pagination">
-                                <div className="archive-pagination-left">
-                                    <label className="archive-pagination-page-size-label">
-                                        <span className="archive-pagination-muted">Results per page</span>
-                                        <select
-                                            ref={archivePaginationSelectRef}
-                                            className="archive-pagination-select"
-                                            value={pageSize}
-                                            onChange={(e) => {
-                                                const v = Number(e.target.value);
-                                                if (
-                                                    v === 5 ||
-                                                    v === 10 ||
-                                                    v === 15 ||
-                                                    v === 20
-                                                ) {
-                                                    setPageSize(v);
-                                                    setPage(1);
-                                                }
-                                            }}
-                                            onKeyDown={(e) => {
-                                                if (e.key === "Tab" && e.shiftKey) {
-                                                    e.preventDefault();
-                                                    openPeoplePanelKeyboard();
-                                                }
-                                            }}
-                                        >
-                                            {ARCHIVE_PAGE_SIZES.map((n) => (
-                                                <option key={n} value={n}>
-                                                    {n}
-                                                </option>
-                                            ))}
-                                        </select>
-                                    </label>
+                        <div
+                            className="archive-pagination-row"
+                            role="navigation"
+                            aria-label="Archive pagination"
+                        >
+                            <div className="archive-pagination-left">
+                                <label className="archive-pagination-page-size-label">
                                     <span className="archive-pagination-muted">
-                                        {rangeFrom}-{rangeTo} of {totalCount}
+                                        Results per page
                                     </span>
-                                </div>
-                                <nav className="archive-pagination-nav" aria-label="Pages">
-                                    <button
-                                        type="button"
-                                        className="btn btn-secondary btn-sm archive-pagination-step"
-                                        disabled={!canGoBack}
-                                        onClick={() => setPage((p) => Math.max(1, p - 1))}
+                                    <select
+                                        ref={archivePaginationSelectRef}
+                                        className="archive-pagination-select"
+                                        value={pageSize}
+                                        onChange={(e) => {
+                                            const v = Number(e.target.value);
+                                            if (
+                                                v === 5 ||
+                                                v === 10 ||
+                                                v === 15 ||
+                                                v === 20
+                                            ) {
+                                                setPageSize(v);
+                                                setPage(1);
+                                            }
+                                        }}
+                                        onKeyDown={(e) => {
+                                            if (e.key === "Tab" && e.shiftKey) {
+                                                e.preventDefault();
+                                                openPeoplePanelKeyboard();
+                                            }
+                                        }}
                                     >
-                                        Previous
-                                    </button>
-                                    {paginationSlots.map((slot, idx) =>
-                                        slot === "gap" ? (
-                                            <span key={`gap-${idx}`} className="archive-pagination-gap" aria-hidden>
-                                                …
-                                            </span>
-                                        ) : (
-                                            <button
-                                                key={slot}
-                                                type="button"
-                                                aria-current={slot === page ? "page" : undefined}
-                                                className={`btn btn-sm archive-pagination-page${slot === page ? " btn-primary archive-pagination-page--current" : " btn-secondary"}`}
-                                                onClick={() => setPage(slot)}
-                                            >
-                                                {slot}
-                                            </button>
-                                        ),
-                                    )}
-                                    <button
-                                        type="button"
-                                        className="btn btn-secondary btn-sm archive-pagination-step"
-                                        disabled={!canGoForward}
-                                        onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
-                                    >
-                                        Next
-                                    </button>
-                                </nav>
+                                        {ARCHIVE_PAGE_SIZES.map((n) => (
+                                            <option key={n} value={n}>
+                                                {n}
+                                            </option>
+                                        ))}
+                                    </select>
+                                </label>
+                                <span className="archive-pagination-muted">
+                                    {rangeFrom}-{rangeTo} of {totalCount}
+                                </span>
                             </div>
-                        ) : null}
+                            <nav
+                                className="archive-pagination-nav"
+                                aria-label="Pages"
+                            >
+                                <button
+                                    type="button"
+                                    className="btn btn-secondary btn-sm archive-pagination-step"
+                                    disabled={!canGoBack}
+                                    onClick={() =>
+                                        setPage((p) => Math.max(1, p - 1))
+                                    }
+                                >
+                                    Previous
+                                </button>
+                                {paginationSlots.map((slot, idx) =>
+                                    slot === "gap" ? (
+                                        <span
+                                            key={`gap-${idx}`}
+                                            className="archive-pagination-gap"
+                                            aria-hidden
+                                        >
+                                            …
+                                        </span>
+                                    ) : (
+                                        <button
+                                            key={slot}
+                                            type="button"
+                                            aria-current={
+                                                slot === page
+                                                    ? "page"
+                                                    : undefined
+                                            }
+                                            className={`btn btn-sm archive-pagination-page${slot === page ? " btn-primary archive-pagination-page--current" : " btn-secondary"}`}
+                                            onClick={() => setPage(slot)}
+                                        >
+                                            {slot}
+                                        </button>
+                                    ),
+                                )}
+                                <button
+                                    type="button"
+                                    className="btn btn-secondary btn-sm archive-pagination-step"
+                                    disabled={!canGoForward}
+                                    onClick={() =>
+                                        setPage((p) =>
+                                            Math.min(totalPages, p + 1),
+                                        )
+                                    }
+                                >
+                                    Next
+                                </button>
+                            </nav>
+                        </div>
+                    ) : null}
                 </div>
                 {loading && (
                     <>
-                        <div className="archive-results-loading-overlay" aria-busy="true" />
-                        <div className="archive-searching-loading-viewport" aria-live="polite">
-                            <div className="archive-searching-loading" role="status">
-                                <span className="archive-searching-loading-spinner" aria-hidden />
-                                <span className="archive-searching-loading-text">Searching</span>
+                        <div
+                            className="archive-results-loading-overlay"
+                            aria-busy="true"
+                        />
+                        <div
+                            className="archive-searching-loading-viewport"
+                            aria-live="polite"
+                        >
+                            <div
+                                className="archive-searching-loading"
+                                role="status"
+                            >
+                                <span
+                                    className="archive-searching-loading-spinner"
+                                    aria-hidden
+                                />
+                                <span className="archive-searching-loading-text">
+                                    Searching
+                                </span>
                             </div>
                         </div>
                     </>
@@ -1074,8 +1355,14 @@ export default function ArchiveListView({ fetchWithAuth, onSelectMeeting }: Arch
                         }
                     }}
                 >
-                    <div className="archive-rename-dialog glass-card" onMouseDown={(e) => e.stopPropagation()}>
-                        <h3 id="archive-rename-title" className="page-header-title archive-rename-title">
+                    <div
+                        className="archive-rename-dialog glass-card"
+                        onMouseDown={(e) => e.stopPropagation()}
+                    >
+                        <h3
+                            id="archive-rename-title"
+                            className="page-header-title archive-rename-title"
+                        >
                             Rename meeting
                         </h3>
                         <input
@@ -1097,7 +1384,11 @@ export default function ArchiveListView({ fetchWithAuth, onSelectMeeting }: Arch
                             >
                                 Cancel
                             </button>
-                            <button type="button" className="btn btn-primary btn-sm" onClick={() => void saveRenameMeeting()}>
+                            <button
+                                type="button"
+                                className="btn btn-primary btn-sm"
+                                onClick={() => void saveRenameMeeting()}
+                            >
                                 Save
                             </button>
                         </div>
@@ -1156,7 +1447,12 @@ function ArchiveMultiSelectRowAvatar({
     }
 
     return (
-        <UserAvatar name={label} profileImage={profileImage} userId={userId} size={16} />
+        <UserAvatar
+            name={label}
+            profileImage={profileImage}
+            userId={userId}
+            size={16}
+        />
     );
 }
 
@@ -1168,7 +1464,7 @@ function ArchiveFilterStackDiscPeople({ opt }: { opt: ArchiveMultiOption }) {
                 profileImage={opt.profileImage}
                 userId={opt.value}
                 size={18}
-                style={{ border: 'none', borderRadius: '50%' }}
+                style={{ border: "none", borderRadius: "50%" }}
             />
         </span>
     );
@@ -1226,7 +1522,10 @@ function ArchiveFilterStack({
                     className={`archive-filter-stack-slot archive-filter-stack-slot--overlap`}
                     style={{ zIndex: visible.length + 1 }}
                 >
-                    <span className="archive-filter-stack-more" aria-label={`${overflow} more selected`}>
+                    <span
+                        className="archive-filter-stack-more"
+                        aria-label={`${overflow} more selected`}
+                    >
                         +{overflow}
                     </span>
                 </div>
@@ -1251,267 +1550,330 @@ type ArchiveMultiSelectDropdownProps = {
     onShiftTabBackFromClosedTrigger?: () => void;
 };
 
-const ArchiveMultiSelectDropdown = forwardRef(function ArchiveMultiSelectDropdown(
-    {
-        variant,
-        options,
-        selected,
-        onChange,
-        label,
-        shortcutTooltipKeys,
-        shortcutTooltipLabel,
-        onTabForwardFromPanelSearch,
-        onShiftTabBackFromPanelSearch,
-        onShiftTabBackFromClosedTrigger,
-    }: ArchiveMultiSelectDropdownProps,
-    ref: ForwardedRef<ArchiveMultiSelectHandle>,
-) {
-    const [open, setOpen] = useState(false);
-    const [filterText, setFilterText] = useState("");
-    const [focusPanelSearchNonce, setFocusPanelSearchNonce] = useState(0);
-    const [highlightIndex, setHighlightIndex] = useState(-1);
-    const rootRef = useRef<HTMLDivElement>(null);
-    const panelSearchRef = useRef<HTMLInputElement>(null);
-    const listRef = useRef<HTMLDivElement>(null);
-    const highlightIndexRef = useRef(-1);
-    const listKbdNavRef = useRef(false);
-
-    const normalizedFilter = filterText.trim().toLowerCase();
-
-    const filtered = useMemo(() => {
-        if (!normalizedFilter) return options;
-        return options.filter((o) => {
-            const nm = (o.label || "").toLowerCase();
-            const em = (o.email || "").toLowerCase();
-            return nm.includes(normalizedFilter) || (variant === "people" && em.includes(normalizedFilter));
-        });
-    }, [options, normalizedFilter, variant]);
-
-    const close = useCallback(() => {
-        setOpen(false);
-    }, []);
-
-    const activateAndFocusSearch = useCallback(() => {
-        setOpen(true);
-        setFocusPanelSearchNonce((x) => x + 1);
-    }, []);
-
-    useImperativeHandle(
-        ref,
-        () => ({
-            close,
-            activateAndFocusSearch,
-            isOpen: () => open,
-        }),
-        [close, activateAndFocusSearch, open],
-    );
-
-    useLayoutEffect(() => {
-        if (!open || focusPanelSearchNonce === 0) return;
-        panelSearchRef.current?.focus();
-        panelSearchRef.current?.select();
-    }, [open, focusPanelSearchNonce]);
-
-    useLayoutEffect(() => {
-        highlightIndexRef.current = highlightIndex;
-    }, [highlightIndex]);
-
-    useEffect(() => {
-        if (!open) return;
-        if (!normalizedFilter) {
-            setHighlightIndex(-1);
-            return;
-        }
-        if (filtered.length > 0) setHighlightIndex(0);
-        else setHighlightIndex(-1);
-    }, [open, normalizedFilter, filtered]);
-
-    useLayoutEffect(() => {
-        if (!open || highlightIndex < 0) return;
-        const el = listRef.current?.querySelector(`[data-archive-row-index="${highlightIndex}"]`);
-        el?.scrollIntoView({ block: "nearest" });
-    }, [highlightIndex, open, filtered]);
-    useEffect(() => {
-        if (!open) setFilterText("");
-    }, [open]);
-
-    const onPanelSearchKeyDown = useCallback(
-        (e: React.KeyboardEvent<HTMLInputElement>) => {
-            if (e.key === "Tab") {
-                const forward = !e.shiftKey && onTabForwardFromPanelSearch;
-                const backward = e.shiftKey && onShiftTabBackFromPanelSearch;
-                if (forward || backward) {
-                    e.preventDefault();
-                    setOpen(false);
-                    if (forward && onTabForwardFromPanelSearch) {
-                        onTabForwardFromPanelSearch();
-                    } else if (backward && onShiftTabBackFromPanelSearch) {
-                        onShiftTabBackFromPanelSearch();
-                    }
-                    return;
-                }
-            }
-            if (filtered.length === 0) return;
-            if (e.key === "ArrowDown") {
-                e.preventDefault();
-                listKbdNavRef.current = true;
-                listRef.current?.setAttribute("data-kbd-nav", "");
-                setHighlightIndex((i) => (i < 0 ? 0 : Math.min(i + 1, filtered.length - 1)));
-            } else if (e.key === "ArrowUp") {
-                e.preventDefault();
-                listKbdNavRef.current = true;
-                listRef.current?.setAttribute("data-kbd-nav", "");
-                setHighlightIndex((i) => Math.max(-1, i - 1));
-            } else if (e.key === "Enter") {
-                const i = highlightIndexRef.current;
-                if (i >= 0 && i < filtered.length) {
-                    e.preventDefault();
-                    const v = filtered[i].value;
-                    if (selected.includes(v)) onChange(selected.filter((x) => x !== v));
-                    else onChange([...selected, v]);
-                }
-            }
-        },
-        [
-            filtered,
-            onChange,
+const ArchiveMultiSelectDropdown = forwardRef(
+    function ArchiveMultiSelectDropdown(
+        {
+            variant,
+            options,
             selected,
+            onChange,
+            label,
+            shortcutTooltipKeys,
+            shortcutTooltipLabel,
             onTabForwardFromPanelSearch,
             onShiftTabBackFromPanelSearch,
-        ],
-    );
+            onShiftTabBackFromClosedTrigger,
+        }: ArchiveMultiSelectDropdownProps,
+        ref: ForwardedRef<ArchiveMultiSelectHandle>,
+    ) {
+        const [open, setOpen] = useState(false);
+        const [filterText, setFilterText] = useState("");
+        const [focusPanelSearchNonce, setFocusPanelSearchNonce] = useState(0);
+        const [highlightIndex, setHighlightIndex] = useState(-1);
+        const rootRef = useRef<HTMLDivElement>(null);
+        const panelSearchRef = useRef<HTMLInputElement>(null);
+        const listRef = useRef<HTMLDivElement>(null);
+        const highlightIndexRef = useRef(-1);
+        const listKbdNavRef = useRef(false);
 
-    useEffect(() => {
-        if (!open) return;
-        const onDocMouse = (ev: MouseEvent) => {
-            const el = rootRef.current;
-            if (el && ev.target instanceof Node && !el.contains(ev.target)) setOpen(false);
+        const normalizedFilter = filterText.trim().toLowerCase();
+
+        const filtered = useMemo(() => {
+            if (!normalizedFilter) return options;
+            return options.filter((o) => {
+                const nm = (o.label || "").toLowerCase();
+                const em = (o.email || "").toLowerCase();
+                return (
+                    nm.includes(normalizedFilter) ||
+                    (variant === "people" && em.includes(normalizedFilter))
+                );
+            });
+        }, [options, normalizedFilter, variant]);
+
+        const close = useCallback(() => {
+            setOpen(false);
+        }, []);
+
+        const activateAndFocusSearch = useCallback(() => {
+            setOpen(true);
+            setFocusPanelSearchNonce((x) => x + 1);
+        }, []);
+
+        useImperativeHandle(
+            ref,
+            () => ({
+                close,
+                activateAndFocusSearch,
+                isOpen: () => open,
+            }),
+            [close, activateAndFocusSearch, open],
+        );
+
+        useLayoutEffect(() => {
+            if (!open || focusPanelSearchNonce === 0) return;
+            panelSearchRef.current?.focus();
+            panelSearchRef.current?.select();
+        }, [open, focusPanelSearchNonce]);
+
+        useLayoutEffect(() => {
+            highlightIndexRef.current = highlightIndex;
+        }, [highlightIndex]);
+
+        useEffect(() => {
+            if (!open) return;
+            if (!normalizedFilter) {
+                setHighlightIndex(-1);
+                return;
+            }
+            if (filtered.length > 0) setHighlightIndex(0);
+            else setHighlightIndex(-1);
+        }, [open, normalizedFilter, filtered]);
+
+        useLayoutEffect(() => {
+            if (!open || highlightIndex < 0) return;
+            const el = listRef.current?.querySelector(
+                `[data-archive-row-index="${highlightIndex}"]`,
+            );
+            el?.scrollIntoView({ block: "nearest" });
+        }, [highlightIndex, open, filtered]);
+        useEffect(() => {
+            if (!open) setFilterText("");
+        }, [open]);
+
+        const onPanelSearchKeyDown = useCallback(
+            (e: React.KeyboardEvent<HTMLInputElement>) => {
+                if (e.key === "Tab") {
+                    const forward = !e.shiftKey && onTabForwardFromPanelSearch;
+                    const backward =
+                        e.shiftKey && onShiftTabBackFromPanelSearch;
+                    if (forward || backward) {
+                        e.preventDefault();
+                        setOpen(false);
+                        if (forward && onTabForwardFromPanelSearch) {
+                            onTabForwardFromPanelSearch();
+                        } else if (backward && onShiftTabBackFromPanelSearch) {
+                            onShiftTabBackFromPanelSearch();
+                        }
+                        return;
+                    }
+                }
+                if (filtered.length === 0) return;
+                if (e.key === "ArrowDown") {
+                    e.preventDefault();
+                    listKbdNavRef.current = true;
+                    listRef.current?.setAttribute("data-kbd-nav", "");
+                    setHighlightIndex((i) =>
+                        i < 0 ? 0 : Math.min(i + 1, filtered.length - 1),
+                    );
+                } else if (e.key === "ArrowUp") {
+                    e.preventDefault();
+                    listKbdNavRef.current = true;
+                    listRef.current?.setAttribute("data-kbd-nav", "");
+                    setHighlightIndex((i) => Math.max(-1, i - 1));
+                } else if (e.key === "Enter") {
+                    const i = highlightIndexRef.current;
+                    if (i >= 0 && i < filtered.length) {
+                        e.preventDefault();
+                        const v = filtered[i].value;
+                        if (selected.includes(v))
+                            onChange(selected.filter((x) => x !== v));
+                        else onChange([...selected, v]);
+                    }
+                }
+            },
+            [
+                filtered,
+                onChange,
+                selected,
+                onTabForwardFromPanelSearch,
+                onShiftTabBackFromPanelSearch,
+            ],
+        );
+
+        useEffect(() => {
+            if (!open) return;
+            const onDocMouse = (ev: MouseEvent) => {
+                const el = rootRef.current;
+                if (el && ev.target instanceof Node && !el.contains(ev.target))
+                    setOpen(false);
+            };
+            const onKey = (ev: KeyboardEvent) => {
+                if (ev.key === "Escape") setOpen(false);
+            };
+            document.addEventListener("mousedown", onDocMouse);
+            document.addEventListener("keydown", onKey);
+            return () => {
+                document.removeEventListener("mousedown", onDocMouse);
+                document.removeEventListener("keydown", onKey);
+            };
+        }, [open]);
+
+        const toggle = (value: string) => {
+            if (selected.includes(value))
+                onChange(selected.filter((v) => v !== value));
+            else onChange([...selected, value]);
         };
-        const onKey = (ev: KeyboardEvent) => {
-            if (ev.key === "Escape") setOpen(false);
-        };
-        document.addEventListener("mousedown", onDocMouse);
-        document.addEventListener("keydown", onKey);
-        return () => {
-            document.removeEventListener("mousedown", onDocMouse);
-            document.removeEventListener("keydown", onKey);
-        };
-    }, [open]);
 
-    const toggle = (value: string) => {
-        if (selected.includes(value)) onChange(selected.filter((v) => v !== value));
-        else onChange([...selected, value]);
-    };
+        const rowAvatarUrl = (o: ArchiveMultiOption) =>
+            variant === "people" ? (o.profileImage ?? null) : null;
 
-    const rowAvatarUrl = (o: ArchiveMultiOption) =>
-        variant === "people" ? (o.profileImage ?? null) : null;
+        const searchAria = `${label}: search options`;
 
-    const searchAria = `${label}: search options`;
-
-    return (
-        <div className="archive-multi-select" ref={rootRef}>
-            <ShortcutTooltip
-                fullWidth
-                disabled={open}
-                keys={shortcutTooltipKeys}
-                label={shortcutTooltipLabel}
-                position="top"
-            >
-                <div className="archive-multi-select-pill">
-                    <button
-                        type="button"
-                        className="archive-multi-select-trigger"
-                        onClick={() => { if (open) { setOpen(false); } else { activateAndFocusSearch(); } }}
-                        aria-expanded={open}
-                        aria-haspopup="listbox"
-                        aria-label={`${label} filter`}
-                        onKeyDown={(e) => {
-                            if (e.repeat || e.key !== "Tab") return;
-                            if (!e.shiftKey && !open) {
-                                e.preventDefault();
-                                activateAndFocusSearch();
-                            } else if (e.shiftKey && !open && onShiftTabBackFromClosedTrigger) {
-                                e.preventDefault();
-                                onShiftTabBackFromClosedTrigger();
-                            }
-                        }}
+        return (
+            <div className="archive-multi-select" ref={rootRef}>
+                <ShortcutTooltip
+                    fullWidth
+                    disabled={open}
+                    keys={shortcutTooltipKeys}
+                    label={shortcutTooltipLabel}
+                    position="top"
+                >
+                    <div className="archive-multi-select-pill">
+                        <button
+                            type="button"
+                            className="archive-multi-select-trigger"
+                            onClick={() => {
+                                if (open) {
+                                    setOpen(false);
+                                } else {
+                                    activateAndFocusSearch();
+                                }
+                            }}
+                            aria-expanded={open}
+                            aria-haspopup="listbox"
+                            aria-label={`${label} filter`}
+                            onKeyDown={(e) => {
+                                if (e.repeat || e.key !== "Tab") return;
+                                if (!e.shiftKey && !open) {
+                                    e.preventDefault();
+                                    activateAndFocusSearch();
+                                } else if (
+                                    e.shiftKey &&
+                                    !open &&
+                                    onShiftTabBackFromClosedTrigger
+                                ) {
+                                    e.preventDefault();
+                                    onShiftTabBackFromClosedTrigger();
+                                }
+                            }}
+                        >
+                            <span className="archive-multi-select-trigger-title">
+                                {label}
+                            </span>
+                            <ArchiveFilterStack
+                                variant={variant}
+                                selectedOrdered={selected}
+                                options={options}
+                            />
+                            <span
+                                className="archive-multi-select-trigger-spacer"
+                                aria-hidden
+                            />
+                            <span className="archive-multi-select-trigger-chevron">
+                                <Icon
+                                    icon={
+                                        open ? ArrowUp01Icon : ArrowDown01Icon
+                                    }
+                                    size={14}
+                                />
+                            </span>
+                        </button>
+                    </div>
+                </ShortcutTooltip>
+                {open && (
+                    <div
+                        className="archive-multi-select-panel"
+                        role="listbox"
+                        aria-multiselectable="true"
                     >
-                        <span className="archive-multi-select-trigger-title">{label}</span>
-                        <ArchiveFilterStack variant={variant} selectedOrdered={selected} options={options} />
-                        <span className="archive-multi-select-trigger-spacer" aria-hidden />
-                        <span className="archive-multi-select-trigger-chevron">
-                            <Icon icon={open ? ArrowUp01Icon : ArrowDown01Icon} size={14} />
-                        </span>
-                    </button>
-                </div>
-            </ShortcutTooltip>
-            {open && (
-                <div className="archive-multi-select-panel" role="listbox" aria-multiselectable="true">
-                    <div className="archive-multi-select-search-wrap">
-                        <Icon icon={Search01Icon} size={14} className="archive-multi-select-search-icon" />
-                        <input
-                            ref={panelSearchRef}
-                            className="archive-multi-select-search"
-                            placeholder="Search…"
-                            value={filterText}
-                            onChange={(e) => setFilterText(e.target.value)}
-                            onKeyDown={onPanelSearchKeyDown}
-                            aria-label={searchAria}
-                            onClick={(e) => e.stopPropagation()}
-                            onMouseDown={(e) => e.stopPropagation()}
-                            autoComplete="off"
-                        />
+                        <div className="archive-multi-select-search-wrap">
+                            <Icon
+                                icon={Search01Icon}
+                                size={14}
+                                className="archive-multi-select-search-icon"
+                            />
+                            <input
+                                ref={panelSearchRef}
+                                className="archive-multi-select-search"
+                                placeholder="Search…"
+                                value={filterText}
+                                onChange={(e) => setFilterText(e.target.value)}
+                                onKeyDown={onPanelSearchKeyDown}
+                                aria-label={searchAria}
+                                onClick={(e) => e.stopPropagation()}
+                                onMouseDown={(e) => e.stopPropagation()}
+                                autoComplete="off"
+                            />
+                        </div>
+                        <div
+                            ref={listRef}
+                            className="archive-multi-select-list"
+                        >
+                            {options.length === 0 ? (
+                                <div className="archive-multi-select-empty">
+                                    No options available
+                                </div>
+                            ) : filtered.length === 0 ? (
+                                <div className="archive-multi-select-empty">
+                                    No results
+                                </div>
+                            ) : (
+                                filtered.map((opt, idx) => {
+                                    const sel = selected.includes(opt.value);
+                                    const kbdHi = highlightIndex === idx;
+                                    return (
+                                        <button
+                                            key={opt.value}
+                                            type="button"
+                                            role="option"
+                                            aria-selected={sel}
+                                            data-archive-row-index={idx}
+                                            className={`archive-multi-select-row archive-multi-select-row--${variant}${sel ? " is-selected" : ""}${kbdHi ? " is-keyboard-highlight" : ""}`}
+                                            onMouseEnter={() => {
+                                                listRef.current?.removeAttribute(
+                                                    "data-kbd-nav",
+                                                );
+                                                listKbdNavRef.current = false;
+                                                setHighlightIndex(idx);
+                                            }}
+                                            onClick={(e) => {
+                                                e.preventDefault();
+                                                toggle(opt.value);
+                                            }}
+                                        >
+                                            <span
+                                                className={`archive-multi-select-check${sel ? " is-checked" : ""}`}
+                                            >
+                                                <span
+                                                    className="archive-multi-select-check-mark"
+                                                    aria-hidden
+                                                />
+                                            </span>
+                                            <ArchiveMultiSelectRowAvatar
+                                                variant={variant}
+                                                profileImage={rowAvatarUrl(opt)}
+                                                userId={opt.value}
+                                                label={opt.label}
+                                                color={opt.color}
+                                            />
+                                            <span className="archive-multi-select-name">
+                                                {opt.label}
+                                            </span>
+                                            {variant === "people" ? (
+                                                <span className="archive-multi-select-email">
+                                                    {opt.email ?? ""}
+                                                </span>
+                                            ) : null}
+                                        </button>
+                                    );
+                                })
+                            )}
+                        </div>
                     </div>
-                    <div ref={listRef} className="archive-multi-select-list">
-                        {options.length === 0 ? (
-                            <div className="archive-multi-select-empty">No options available</div>
-                        ) : filtered.length === 0 ? (
-                            <div className="archive-multi-select-empty">No results</div>
-                        ) : (
-                            filtered.map((opt, idx) => {
-                                const sel = selected.includes(opt.value);
-                                const kbdHi = highlightIndex === idx;
-                                return (
-                                    <button
-                                        key={opt.value}
-                                        type="button"
-                                        role="option"
-                                        aria-selected={sel}
-                                        data-archive-row-index={idx}
-                                        className={`archive-multi-select-row archive-multi-select-row--${variant}${sel ? " is-selected" : ""}${kbdHi ? " is-keyboard-highlight" : ""}`}
-                                        onMouseEnter={() => {
-                                            listRef.current?.removeAttribute("data-kbd-nav");
-                                            listKbdNavRef.current = false;
-                                            setHighlightIndex(idx);
-                                        }}
-                                        onClick={(e) => {
-                                            e.preventDefault();
-                                            toggle(opt.value);
-                                        }}
-                                    >
-                                        <span className={`archive-multi-select-check${sel ? " is-checked" : ""}`}>
-                                            <span className="archive-multi-select-check-mark" aria-hidden />
-                                        </span>
-                                        <ArchiveMultiSelectRowAvatar
-                                            variant={variant}
-                                            profileImage={rowAvatarUrl(opt)}
-                                            userId={opt.value}
-                                            label={opt.label}
-                                            color={opt.color}
-                                        />
-                                        <span className="archive-multi-select-name">{opt.label}</span>
-                                        {variant === "people" ? (
-                                            <span className="archive-multi-select-email">{opt.email ?? ""}</span>
-                                        ) : null}
-                                    </button>
-                                );
-                            })
-                        )}
-                    </div>
-                </div>
-            )}
-        </div>
-    );
-});
+                )}
+            </div>
+        );
+    },
+);
 
 ArchiveMultiSelectDropdown.displayName = "ArchiveMultiSelectDropdown";
