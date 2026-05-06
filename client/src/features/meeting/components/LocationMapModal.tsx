@@ -42,134 +42,34 @@ export default function LocationMapModal({ address, onClose }: LocationMapModalP
   }, [onClose]);
 
   return createPortal(
-    <div
-      style={{
-        position: "fixed",
-        inset: 0,
-        zIndex: 9999,
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "center",
-        background: "rgba(var(--flexoki-black-rgb), 0.55)",
-        backdropFilter: "blur(4px)",
-      }}
-      onClick={onClose}
-    >
-      <div
-        onClick={(e) => e.stopPropagation()}
-        style={{
-          background: "var(--bg-secondary)",
-          borderRadius: "var(--radius-md, 12px)",
-          boxShadow: "var(--shadow-xl)",
-          border: "1px solid var(--border)",
-          width: "min(520px, 92vw)",
-          overflow: "hidden",
-          animation: "modalIn 0.2s ease",
-        }}
-      >
-        <div
-          style={{
-            display: "flex",
-            alignItems: "flex-start",
-            gap: "0.625rem",
-            padding: "1rem 1.125rem 0.75rem",
-            borderBottom: "1px solid var(--border)",
-          }}
-        >
-          <div
-            style={{
-              width: 32,
-              height: 32,
-              borderRadius: "var(--radius-sm)",
-              background: "var(--primary-muted)",
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              flexShrink: 0,
-              color: "var(--primary)",
-            }}
-          >
+    <div className="map-modal-backdrop" onClick={onClose}>
+      <div className="map-modal-card" onClick={(e) => e.stopPropagation()}>
+        <div className="map-modal-header-row">
+          <div className="map-modal-icon-wrap">
             <Icon icon={Location01Icon} size={16} />
           </div>
-          <div style={{ flex: 1, minWidth: 0 }}>
-            <p
-              style={{
-                fontSize: "0.65rem",
-                fontWeight: 600,
-                color: "var(--text-muted)",
-                textTransform: "uppercase",
-                letterSpacing: "0.06em",
-                marginBottom: "2px",
-              }}
-            >
-              Meeting Location
-            </p>
-            <p
-              style={{
-                fontSize: "0.875rem",
-                fontWeight: 600,
-                color: "var(--text-primary)",
-                lineHeight: 1.4,
-                wordBreak: "break-word",
-              }}
-            >
-              {address}
-            </p>
+          <div className="map-modal-content-col">
+            <p className="map-modal-label">Meeting Location</p>
+            <p className="map-modal-address">{address}</p>
           </div>
           <button
             type="button"
             onClick={onClose}
-            style={{
-              background: "none",
-              border: "none",
-              cursor: "pointer",
-              color: "var(--text-muted)",
-              padding: "2px",
-              borderRadius: "4px",
-              flexShrink: 0,
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-            }}
+            className="map-modal-close-btn"
           >
             <Icon icon={Cancel01Icon} size={16} />
           </button>
         </div>
 
-        <div style={{ height: 300, position: "relative", background: "var(--bg-elevated)" }}>
+        <div className="map-modal-map-wrap">
           {loading && (
-            <div
-              style={{
-                position: "absolute",
-                inset: 0,
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                color: "var(--text-muted)",
-                fontSize: "0.875rem",
-                zIndex: 10,
-                background: "var(--bg-elevated)",
-              }}
-            >
+            <div className="map-modal-loading">
               Loading map…
             </div>
           )}
 
           {!loading && error && (
-            <div
-              style={{
-                position: "absolute",
-                inset: 0,
-                display: "flex",
-                flexDirection: "column",
-                alignItems: "center",
-                justifyContent: "center",
-                gap: "0.5rem",
-                color: "var(--text-muted)",
-                fontSize: "0.8125rem",
-                background: "var(--bg-elevated)",
-              }}
-            >
+            <div className="map-modal-error-state">
               <Icon icon={Location01Icon} size={24} />
               <span>Could not find this location on the map.</span>
             </div>
@@ -186,28 +86,15 @@ export default function LocationMapModal({ address, onClose }: LocationMapModalP
           )}
         </div>
 
-        <div
-          style={{
-            padding: "0.625rem 1.125rem",
-            display: "flex",
-            justifyContent: "space-between",
-            alignItems: "center",
-            borderTop: "1px solid var(--border)",
-          }}
-        >
-          <span style={{ fontSize: "0.7rem", color: "var(--text-muted)" }}>
+        <div className="map-modal-footer-row">
+          <span className="map-modal-muted-label">
             © OpenStreetMap contributors
           </span>
           <a
             href={`https://www.openstreetmap.org/search?query=${encodeURIComponent(address)}`}
             target="_blank"
             rel="noopener noreferrer"
-            style={{
-              fontSize: "0.75rem",
-              color: "var(--primary)",
-              textDecoration: "none",
-              fontWeight: 500,
-            }}
+            className="map-modal-link"
           >
             Open in full map ↗
           </a>

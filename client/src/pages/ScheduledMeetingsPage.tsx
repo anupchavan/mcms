@@ -163,8 +163,7 @@ export default function ScheduledMeetingsPage() {
                     >
                         {meeting.status === "pending_poll" && meeting.pollId && (
                             <button
-                                className="btn btn-sm btn-primary"
-                                style={{ position: "absolute", top: "var(--lk-size-md)", right: "var(--lk-size-md)" }}
+                                className="btn btn-sm btn-primary panel-close-abs"
                                 onClick={(e) => {
                                     e.stopPropagation();
                                     const pid = resolvedInternalMeetingId(meeting);
@@ -184,7 +183,7 @@ export default function ScheduledMeetingsPage() {
                             {(meeting.confirmedTime || meeting.time) && <span><Icon icon={Clock01Icon} size={14} /> {meeting.confirmedTime || meeting.time}</span>}
                             {shouldShowMeetingLocation(meeting) && (
                                 <span
-                                    style={{ cursor: "pointer", textDecoration: "underline", color: "var(--primary)", fontWeight: 500 }}
+                                    className="smp-location-link"
                                     onClick={(e) => { e.stopPropagation(); openLocationModal(meeting.location!); }}
                                 >
                                     <Icon icon={Location01Icon} size={14} /> {meeting.location}

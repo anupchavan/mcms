@@ -29,7 +29,7 @@ interface ChatPanelProps {
   onUnpinMessage?: () => void;
   /** When false, user must join the call before viewing or sending chat (online/hybrid). */
   chatSessionActive?: boolean;
-  /** Same as main “Join Meeting” — used from the chat gate. */
+  /** Same as main "Join Meeting" — used from the chat gate. */
   onRequestJoinMeeting?: () => void | Promise<void>;
 }
 
@@ -38,7 +38,7 @@ const LinkifyContent = ({ text, isSelf }: { text: string; isSelf?: boolean }) =>
   const parts = text.split(urlRegex);
   const linkColor = isSelf ? "rgba(var(--flexoki-paper-rgb), 0.92)" : "var(--primary)";
   return (
-    <span style={{ wordBreak: 'break-word' }}>
+    <span className="chat-linkify-break">
       {parts.map((part, i) => {
         if (part.match(urlRegex)) {
           return (
@@ -95,22 +95,10 @@ const PinnedChatBanner: FC<{
   }, [message.text, expanded]);
 
   return (
-    <div
-      className="chat-pinned-banner"
-      style={{
-        flexShrink: 0,
-        zIndex: 6,
-        padding: '0.75rem 1rem',
-        background: 'color-mix(in srgb, var(--bg-elevated) 82%, transparent)',
-        backdropFilter: 'blur(12px)',
-        WebkitBackdropFilter: 'blur(12px)',
-        borderBottom: '1px solid var(--border)',
-        boxShadow: '0 12px 78px color-mix(in srgb, var(--text-primary) 14%, transparent)',
-      }}
-    >
-      <div style={{ display: 'flex', alignItems: 'flex-start', gap: '0.5rem' }}>
-        <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ fontSize: '0.65rem', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.04em', color: 'var(--text-muted)', marginBottom: 4 }}>
+    <div className="chat-pinned-banner chat-pinned-banner-inner">
+      <div className="chat-pinned-body">
+        <div className="chat-pinned-content">
+          <div className="chat-pinned-meta">
             Pinned by host · {message.senderName}
           </div>
 
@@ -138,16 +126,7 @@ const PinnedChatBanner: FC<{
             <button
               type="button"
               onClick={() => setExpanded(e => !e)}
-              style={{
-                marginTop: 6,
-                padding: 0,
-                border: 'none',
-                background: 'none',
-                cursor: 'pointer',
-                fontSize: '0.75rem',
-                fontWeight: 600,
-                color: 'var(--primary)',
-              }}
+              className="chat-pinned-expand-btn"
             >
               {expanded ? 'Less' : 'More'}
             </button>
@@ -159,20 +138,7 @@ const PinnedChatBanner: FC<{
             onClick={onUnpin}
             aria-label="Unpin message"
             title="Unpin"
-            style={{
-              flexShrink: 0,
-            //   marginTop: -2,
-              padding: 4,
-              border: 'none',
-              background: 'transparent',
-              cursor: 'pointer',
-              color: 'var(--primary)',
-			  fontSize: 'var(--font-size-label)',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              lineHeight: 0,
-            }}
+            className="chat-pinned-unpin-btn"
           >
             Unpin
           </button>
@@ -188,54 +154,21 @@ function PresenceRow({ msg }: { msg: ChatMessage }) {
   const isSelfRibbon = msg.presenceIsSelf === true;
   const selfLine = `You ${verb} the meeting`;
   return (
-    <div
-      style={{
-        display: 'flex',
-        justifyContent: 'center',
-        marginTop: 10,
-        marginBottom: 2,
-      }}
-    >
-      <div
-        style={{
-          display: 'inline-flex',
-          alignItems: 'center',
-          gap: 8,
-          maxWidth: '95%',
-          padding: '6px 12px',
-          borderRadius: 999,
-          fontSize: '0.72rem',
-          color: 'var(--text-muted)',
-        }}
-      >
-        <div
-          style={{
-            width: 20,
-            height: 20,
-            borderRadius: '50%',
-            overflow: 'hidden',
-            flexShrink: 0,
-            background: 'var(--primary)',
-            color: "var(--flexoki-paper)",
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            fontSize: '0.55rem',
-            fontWeight: 700,
-          }}
-        >
+    <div className="chat-presence-row">
+      <div className="chat-presence-pill">
+        <div className="chat-presence-avatar">
           {avatarSrc ? (
-            <img src={avatarSrc} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+            <img src={avatarSrc} alt="" className="chat-presence-avatar-img" />
           ) : (
             (isSelfRibbon ? 'Y' : (msg.senderName || '?').charAt(0).toUpperCase())
           )}
         </div>
-        <span style={{ textAlign: 'center', lineHeight: 1.35 }}>
+        <span className="chat-presence-text">
           {isSelfRibbon ? (
-            <span style={{ fontWeight: 600, color: 'var(--text-secondary)' }}>{selfLine}</span>
+            <span className="chat-presence-name">{selfLine}</span>
           ) : (
             <>
-              <span style={{ fontWeight: 600, color: 'var(--text-secondary)' }}>{msg.senderName}</span>
+              <span className="chat-presence-name">{msg.senderName}</span>
               {` ${verb} the meeting`}
             </>
           )}
@@ -259,20 +192,10 @@ const HostInlinePin: FC<{
         e.stopPropagation();
         onClick();
       }}
+      className="chat-inline-pin-btn"
       style={{
-        flexShrink: 0,
-        alignSelf: 'center',
-        padding: 2,
-        border: 'none',
-        background: 'transparent',
-        cursor: 'pointer',
         color: isPinned ? 'var(--primary)' : 'var(--text-muted)',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        lineHeight: 0,
         transform: isPinned ? 'rotate(-45deg)' : undefined,
-        // Always reserve space — visibility toggled so bubble width never shifts
         visibility: show ? 'visible' : 'hidden',
         pointerEvents: show ? 'auto' : 'none',
       }}
@@ -351,46 +274,23 @@ const ChatPanel: FC<ChatPanelProps> = ({
   };
 
   return (
-    <div className="agenda-panel panel chat-panel-root" style={{ display: 'flex', flexDirection: 'column', height: '100%', borderRadius: 'inherit' }}>
-      <div className="section-header" style={{ flexShrink: 0, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+    <div className="agenda-panel panel chat-panel-root chat-panel-root-inner">
+      <div className="section-header">
         <span className="section-title">Chat</span>
         {onClose && (
-            <button onClick={onClose} className="btn-icon" style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: 'var(--text-muted)' }}>
-                <span style={{ fontSize: '1.2rem', lineHeight: 1 }}>&times;</span>
+            <button onClick={onClose} className="btn-icon chat-close-btn">
+                <span className="chat-close-x">&times;</span>
             </button>
         )}
       </div>
 
       {!chatSessionActive ? (
-        <div
-          style={{
-            flex: 1,
-            minHeight: 0,
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            padding: '1.5rem',
-            textAlign: 'center',
-          }}
-        >
-          <p style={{ color: 'var(--text-secondary)', fontSize: '0.875rem', lineHeight: 1.6, maxWidth: 280 }}>
+        <div className="chat-gate-wrap">
+          <p className="chat-gate-text">
             <button
               type="button"
-              className="chat-gate-join-link"
+              className="chat-gate-join-link chat-gate-join-link-btn"
               onClick={() => onRequestJoinMeeting?.()}
-              style={{
-                display: 'inline',
-                padding: 0,
-                margin: 0,
-                border: 'none',
-                background: 'none',
-                cursor: 'pointer',
-                font: 'inherit',
-                fontWeight: 700,
-                color: 'var(--primary)',
-                textDecoration: 'underline',
-                textUnderlineOffset: 3,
-              }}
             >
               Join the meeting
             </button>
@@ -399,36 +299,18 @@ const ChatPanel: FC<ChatPanelProps> = ({
         </div>
       ) : (
         <>
-      <div
-        style={{
-          flex: 1,
-          minHeight: 0,
-          minWidth: 0,
-          display: 'flex',
-          flexDirection: 'column',
-        }}
-      >
+      <div className="chat-messages-outer">
         {pinnedMessage && (
           <PinnedChatBanner message={pinnedMessage} isHost={isHost} onUnpin={onUnpinMessage} />
         )}
-        <div style={{ flex: 1, minHeight: 0, position: 'relative' }}>
+        <div className="chat-scroll-wrap">
         <div
           ref={messagesScrollRef}
           className="chat-messages-container"
           onScroll={updateScrollMetrics}
-          style={{
-            position: 'relative',
-            height: '100%',
-            overflowY: 'auto',
-            padding: '1rem',
-            display: 'flex',
-            flexDirection: 'column',
-            gap: 0,
-            zIndex: 1,
-          }}
         >
         {messages.length === 0 ? (
-          <div style={{ textAlign: 'center', color: 'var(--text-secondary)', fontSize: '0.875rem', margin: 'auto 0' }}>
+          <div className="chat-empty-msg">
             No messages yet. Say hello!
           </div>
         ) : (
@@ -453,63 +335,30 @@ const ChatPanel: FC<ChatPanelProps> = ({
                 key={msg.id}
                 className={`chat-message-row ${isSelf ? 'self' : 'peer'}`}
                 style={{
-                  display: 'flex',
                   flexDirection: isSelf ? 'row-reverse' : 'row',
-                  alignItems: 'flex-end',
-                  gap: '0.5rem',
                   marginTop: index === 0 ? 0 : (sameRun ? 3 : 12),
                 }}
                 onMouseEnter={() => setHoverMsgId(msg.id)}
                 onMouseLeave={() => setHoverMsgId(null)}
               >
                 {!isSelf && (
-                  <div
-                    style={{
-                      display: 'flex',
-                      flexDirection: 'column',
-                      alignItems: 'flex-start',
-                      maxWidth: '85%',
-                      minWidth: 0,
-                    }}
-                  >
+                  <div className="chat-peer-col">
                     {showHead && (
-                      <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)', marginBottom: '0.125rem', marginLeft: '0.25rem' }}>
+                      <span className="chat-peer-name-label">
                         {msg.senderName}
                       </span>
                     )}
-                    <div
-                      style={{
-                        display: 'flex',
-                        flexDirection: 'row',
-                        alignItems: 'flex-end',
-                        gap: '0.35rem',
-                        maxWidth: '100%',
-                      }}
-                    >
+                    <div className="chat-peer-bubble-row">
                       {showHead ? (
-                        <div
-                          style={{
-                            width: '28px',
-                            height: '28px',
-                            borderRadius: '50%',
-                            background: 'var(--primary)',
-                            color: 'white',
-                            display: 'flex',
-                            alignItems: 'center',
-                            justifyContent: 'center',
-                            fontSize: '0.75rem',
-                            fontWeight: 600,
-                            flexShrink: 0,
-                          }}
-                        >
+                        <div className="chat-peer-avatar-div">
                           {peerAvatarSrc ? (
-                            <img src={peerAvatarSrc} alt="" style={{ width: '100%', height: '100%', borderRadius: '50%', objectFit: 'cover' }} />
+                            <img src={peerAvatarSrc} alt="" className="chat-peer-avatar-img" />
                           ) : (
                             msg.senderName.charAt(0).toUpperCase()
                           )}
                         </div>
                       ) : (
-                        <div style={{ width: '28px', flexShrink: 0 }} aria-hidden />
+                        <div className="chat-peer-spacer" aria-hidden />
                       )}
                       <ChatBubbleSurface variant="others" showTail={showTail}>
                         <LinkifyContent text={msg.text} isSelf={false} />
@@ -521,14 +370,7 @@ const ChatPanel: FC<ChatPanelProps> = ({
                       />
                     </div>
                     {showTime && (
-                      <span
-                        style={{
-                          fontSize: '0.625rem',
-                          color: 'var(--text-muted)',
-                          marginTop: '0.25rem',
-                          marginLeft: 'calc(28px + 0.5rem)',
-                        }}
-                      >
+                      <span className="chat-peer-time">
                         {new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                       </span>
                     )}
@@ -536,20 +378,8 @@ const ChatPanel: FC<ChatPanelProps> = ({
                 )}
 
                 {isSelf && (
-                <div style={{
-                  display: 'flex', flexDirection: 'column',
-                  alignItems: 'flex-end',
-                  maxWidth: '85%',
-                }}
-                >
-                  <div
-                    style={{
-                      display: 'flex',
-                      flexDirection: 'row',
-                      alignItems: 'flex-end',
-                      gap: '0.35rem',
-                    }}
-                  >
+                <div className="chat-self-col">
+                  <div className="chat-self-bubble-row">
                     <HostInlinePin
                       isPinned={isPinned}
                       show={pinVisible}
@@ -560,7 +390,7 @@ const ChatPanel: FC<ChatPanelProps> = ({
                     </ChatBubbleSurface>
                   </div>
                   {showTime && (
-                    <span style={{ fontSize: '0.625rem', color: 'var(--text-muted)', marginTop: '0.25rem', marginRight: '0.25rem' }}>
+                    <span className="chat-self-time">
                       {new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                     </span>
                   )}
@@ -577,23 +407,7 @@ const ChatPanel: FC<ChatPanelProps> = ({
             type="button"
             aria-label="Scroll to latest messages"
             onClick={jumpScrollToBottom}
-            style={{
-              position: 'absolute',
-              right: 12,
-              bottom: 12,
-              zIndex: 8,
-              width: 36,
-              height: 36,
-              borderRadius: '50%',
-              border: '1px solid var(--border)',
-              background: 'var(--bg-elevated)',
-              color: 'var(--text-primary)',
-              boxShadow: '0 4px 14px color-mix(in srgb, var(--text-primary) 12%, transparent)',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              cursor: 'pointer',
-            }}
+            className="chat-jump-btn"
           >
             <Icon icon={ArrowDown02Icon} size={18} />
           </button>
@@ -601,43 +415,28 @@ const ChatPanel: FC<ChatPanelProps> = ({
         </div>
       </div>
 
-      <div className="chat-input-container" style={{ flexShrink: 0, padding: '1rem', borderTop: '1px solid var(--border)', background: 'var(--bg-primary)' }}>
-        <div style={{ display: 'flex', gap: '0.5rem', background: 'var(--bg-elevated)', border: '1px solid var(--border)', borderRadius: 'var(--radius-xl)', padding: '0.25rem 0.25rem 0.25rem 1rem', alignItems: 'center' }}>
+      <div className="chat-input-container chat-input-bar">
+        <div className="chat-input-inner">
           <input
             type="text"
             placeholder="Type a message or paste a link..."
             value={inputText}
             onChange={(e) => setInputText(e.target.value)}
             onKeyDown={handleKeyDown}
-            style={{
-              flex: 1,
-              background: 'transparent',
-              border: 'none',
-              outline: 'none',
-              color: 'var(--text-primary)',
-              fontSize: '0.875rem',
-            }}
+            className="chat-text-input"
           />
           <button
             type="button"
             onClick={handleSend}
             disabled={!canSend}
             aria-label="Send message"
+            className="chat-send-btn-base"
             style={{
-              width: '32px',
-              height: '32px',
-              borderRadius: '50%',
-              flexShrink: 0,
               background: canSend
                 ? 'var(--primary)'
                 : 'color-mix(in srgb, var(--text-muted) 22%, var(--bg-elevated))',
               color: canSend ? "var(--flexoki-paper)" : "var(--text-muted)",
-              border: 'none',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
               cursor: canSend ? 'pointer' : 'not-allowed',
-              transition: 'background-color 0.2s, color 0.2s',
             }}
           >
             <Icon icon={ArrowUp02Icon} size={16} />

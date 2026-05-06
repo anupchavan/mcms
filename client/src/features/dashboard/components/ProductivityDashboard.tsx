@@ -210,16 +210,16 @@ export default function ProductivityDashboard({ stats, userName, personalRoomId,
             {activeTab === 'overview' && (
                 <div className="dashboard-grid">
                     {personalRoomId && (
-                        <div className="stat-card glass-card" style={{ gridColumn: 'span 2', background: 'linear-gradient(145deg, rgba(var(--primary-rgb), 0.1) 0%, rgba(var(--ui-shine-rgb), 0.03) 100%)', borderColor: 'var(--primary-muted)' }}>
-                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                        <div className="stat-card glass-card stat-span-2-room">
+                            <div className="stat-row-between">
                                 <div>
-                                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.25rem' }}>
-                                        <Icon icon={UserGroupIcon} size={20} style={{ color: 'var(--primary)' }} />
-                                        <h3 style={{ fontSize: '1rem', fontWeight: 600, color: 'var(--text-primary)' }}>Your Personal Room</h3>
+                                    <div className="stat-icon-row-mb-sm">
+                                        <Icon icon={UserGroupIcon} size={20} className="stat-icon-primary" />
+                                        <h3 className="stat-room-title">Your Personal Room</h3>
                                     </div>
-                                    <p style={{ fontSize: '0.8125rem', color: 'var(--text-secondary)' }}>An always-on meeting space. Share this link for instant meetings.</p>
+                                    <p className="stat-room-desc">An always-on meeting space. Share this link for instant meetings.</p>
                                 </div>
-                                <div style={{ display: 'flex', gap: '0.5rem' }}>
+                                <div className="stat-btn-row">
                                     <button
                                         className="btn btn-secondary btn-sm"
                                         onClick={() => {
@@ -245,32 +245,32 @@ export default function ProductivityDashboard({ stats, userName, personalRoomId,
                     )}
 
                     <div className="stat-card glass-card">
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                            <Icon icon={Calendar02Icon} size={18} style={{ color: 'var(--primary)' }} />
+                        <div className="stat-icon-row">
+                            <Icon icon={Calendar02Icon} size={18} className="stat-icon-primary" />
                             <span className="stat-label">Meetings Attended</span>
                         </div>
                         <div className="stat-value">{stats.totalMeetings}</div>
                     </div>
 
                     <div className="stat-card glass-card">
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                            <Icon icon={Clock01Icon} size={18} style={{ color: 'var(--accent-violet)' }} />
+                        <div className="stat-icon-row">
+                            <Icon icon={Clock01Icon} size={18} className="stat-icon-violet" />
                             <span className="stat-label">Total Hours</span>
                         </div>
                         <div className="stat-value">{stats.totalHours}</div>
                     </div>
 
                     <div className="stat-card glass-card">
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                            <Icon icon={ChartIncreaseIcon} size={18} style={{ color: 'var(--accent-emerald)' }} />
+                        <div className="stat-icon-row">
+                            <Icon icon={ChartIncreaseIcon} size={18} className="stat-icon-emerald" />
                             <span className="stat-label">Punctuality Rate</span>
                         </div>
                         <div className="stat-value">{stats.punctualityRate}%</div>
                     </div>
 
                     <div className="stat-card glass-card">
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                            <Icon icon={CheckmarkSquare01Icon} size={18} style={{ color: 'var(--accent-amber)' }} />
+                        <div className="stat-icon-row">
+                            <Icon icon={CheckmarkSquare01Icon} size={18} className="stat-icon-amber" />
                             <span className="stat-label">Tasks Completed</span>
                         </div>
                         <div className="stat-value">{stats.tasksCompleted}/{stats.tasksTotal}</div>
@@ -305,9 +305,9 @@ export default function ProductivityDashboard({ stats, userName, personalRoomId,
                         })()}
                     </div>
 
-                    <div className="stat-card glass-card" style={{ gridColumn: 'span 2' }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.75rem' }}>
-                            <Icon icon={BarChartIcon} size={18} style={{ color: 'var(--accent-cyan)' }} />
+                    <div className="stat-card glass-card stat-span-2">
+                        <div className="stat-icon-row-mb">
+                            <Icon icon={BarChartIcon} size={18} className="stat-icon-cyan" />
                             <span className="stat-label">Weekly Meeting Load Heatmap</span>
                         </div>
                         <div className="heatmap-bar">
@@ -318,7 +318,7 @@ export default function ProductivityDashboard({ stats, userName, personalRoomId,
                                         style={{ height: `${(day.hours / maxHours) * 100}%` }}
                                     ></div>
                                     <span className="heatmap-label">{day.day}</span>
-                                    <span style={{ fontSize: '0.6875rem', color: 'var(--text-secondary)', fontWeight: 600 }}>
+                                    <span className="stat-heat-val">
                                         {day.hours}h
                                     </span>
                                 </div>
@@ -326,16 +326,16 @@ export default function ProductivityDashboard({ stats, userName, personalRoomId,
                         </div>
                     </div>
 
-                    <div className="stat-card glass-card" style={{ gridColumn: 'span 2' }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.75rem' }}>
-                            <Icon icon={Award01Icon} size={18} style={{ color: 'var(--accent-amber)' }} />
+                    <div className="stat-card glass-card stat-span-2">
+                        <div className="stat-icon-row-mb">
+                            <Icon icon={Award01Icon} size={18} className="stat-icon-amber" />
                             <span className="stat-label">Badges & Achievements</span>
                         </div>
                         <div className="badges-grid">
                             {stats.badges.map((badge, i) => (
                                 <div key={i} className="badge-item animate-in" style={{ animationDelay: `${i * 0.1}s` }}>
                                     <span className="badge-icon">
-                                        <Icon icon={badgeIcon(badge)} size={20} style={{ color: 'var(--accent-amber)' }} />
+                                        <Icon icon={badgeIcon(badge)} size={20} className="stat-icon-amber" />
                                     </span>
                                     <div>
                                         <div className="badge-name">{badge.name}</div>
@@ -347,26 +347,26 @@ export default function ProductivityDashboard({ stats, userName, personalRoomId,
                     </div>
 
                     <div className="stat-card glass-card">
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.75rem' }}>
-                            <Icon icon={FireIcon} size={18} style={{ color: 'var(--accent-amber)' }} />
+                        <div className="stat-icon-row-mb">
+                            <Icon icon={FireIcon} size={18} className="stat-icon-amber" />
                             <span className="stat-label">Meeting Streak</span>
                         </div>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                        <div className="stat-streak-row">
                             <div className="stat-value">{stats.streak}</div>
-                            <span style={{ fontSize: '0.8125rem', color: 'var(--text-muted)' }}>consecutive on-time</span>
+                            <span className="stat-muted-note">consecutive on-time</span>
                         </div>
                     </div>
 
                     <div className="stat-card glass-card">
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.75rem' }}>
-                            <Icon icon={Mic01Icon} size={18} style={{ color: 'var(--accent-violet)' }} />
+                        <div className="stat-icon-row-mb">
+                            <Icon icon={Mic01Icon} size={18} className="stat-icon-violet" />
                             <span className="stat-label">Speaking Time</span>
                         </div>
-                        <div style={{ display: 'flex', alignItems: 'baseline', gap: '0.5rem' }}>
+                        <div className="stat-baseline-row">
                             <div className="stat-value">{stats.speakingTime}</div>
-                            <span style={{ fontSize: '0.8125rem', color: 'var(--text-muted)' }}>minutes total</span>
+                            <span className="stat-muted-note">minutes total</span>
                         </div>
-                        <div style={{ fontSize: '0.6875rem', color: 'var(--text-muted)', marginTop: '0.25rem' }}>
+                        <div className="stat-sub-note">
                             ~{speakingSharePct}% of total meeting time
                         </div>
                     </div>
@@ -375,9 +375,9 @@ export default function ProductivityDashboard({ stats, userName, personalRoomId,
 
             {activeTab === 'attendance' && (
                 <div className="dashboard-grid">
-                    <div className="stat-card glass-card" style={{ gridColumn: 'span 2' }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '1rem' }}>
-                            <Icon icon={Calendar02Icon} size={18} style={{ color: 'var(--primary)' }} />
+                    <div className="stat-card glass-card stat-span-2">
+                        <div className="stat-icon-row-mb-lg">
+                            <Icon icon={Calendar02Icon} size={18} className="stat-icon-primary" />
                             <span className="stat-label">Monthly Attendance</span>
                         </div>
                         <div className="attendance-chart">
@@ -396,24 +396,24 @@ export default function ProductivityDashboard({ stats, userName, personalRoomId,
                         </div>
                     </div>
 
-                    <div className="stat-card glass-card" style={{ gridColumn: 'span 2' }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.75rem' }}>
-                            <Icon icon={Clock01Icon} size={18} style={{ color: 'var(--accent-violet)' }} />
+                    <div className="stat-card glass-card stat-span-2">
+                        <div className="stat-icon-row-mb">
+                            <Icon icon={Clock01Icon} size={18} className="stat-icon-violet" />
                             <span className="stat-label">Speaking Time vs Average Meeting Duration</span>
                         </div>
-                        <div style={{ display: 'flex', gap: '1.5rem', alignItems: 'center', padding: '0.75rem 0' }}>
+                        <div className="stat-compare-row">
                             <div>
-                                <div style={{ fontSize: '1.75rem', fontWeight: 700, color: 'var(--primary)' }}>
+                                <div className="stat-big-val-primary">
                                     {stats.speakingTime} min
                                 </div>
-                                <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Total Speaking Time</div>
+                                <div className="stat-val-label">Total Speaking Time</div>
                             </div>
-                            <div style={{ width: '0.0625rem', height: '2.5rem', background: 'var(--border)' }}></div>
+                            <div className="stat-divider"></div>
                             <div>
-                                <div style={{ fontSize: '1.75rem', fontWeight: 700, color: 'var(--accent-violet)' }}>
+                                <div className="stat-big-val-violet">
                                     {stats.avgMeetingDuration} min
                                 </div>
-                                <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Avg Meeting Duration</div>
+                                <div className="stat-val-label">Avg Meeting Duration</div>
                             </div>
                         </div>
                     </div>
@@ -422,9 +422,9 @@ export default function ProductivityDashboard({ stats, userName, personalRoomId,
 
             {activeTab === 'engagement' && (
                 <div className="dashboard-grid">
-                    <div className="stat-card glass-card" style={{ gridColumn: 'span 2' }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.75rem' }}>
-                            <Icon icon={Award01Icon} size={18} style={{ color: 'var(--accent-amber)' }} />
+                    <div className="stat-card glass-card stat-span-2">
+                        <div className="stat-icon-row-mb">
+                            <Icon icon={Award01Icon} size={18} className="stat-icon-amber" />
                             <span className="stat-label">Contribution & Engagement</span>
                         </div>
                         <div className="engagement-metrics">
@@ -432,33 +432,33 @@ export default function ProductivityDashboard({ stats, userName, personalRoomId,
                                 <div className="engagement-circle" style={{ '--pct': `${taskCompletionPct}%` } as React.CSSProperties & Record<string, string>}>
                                     <span>{taskCompletionPct}%</span>
                                 </div>
-                                <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '0.5rem' }}>Task Completion</div>
+                                <div className="stat-circle-label">Task Completion</div>
                             </div>
                             <div className="engagement-metric">
                                 <div className="engagement-circle" style={{ '--pct': `${stats.punctualityRate}%` } as React.CSSProperties & Record<string, string>}>
                                     <span>{stats.punctualityRate}%</span>
                                 </div>
-                                <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '0.5rem' }}>Punctuality</div>
+                                <div className="stat-circle-label">Punctuality</div>
                             </div>
                             <div className="engagement-metric">
                                 <div className="engagement-circle" style={{ '--pct': `${speakingSharePct}%` } as React.CSSProperties & Record<string, string>}>
                                     <span>{speakingSharePct}%</span>
                                 </div>
-                                <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '0.5rem' }}>Share of Voice</div>
+                                <div className="stat-circle-label">Share of Voice</div>
                             </div>
                         </div>
                     </div>
 
-                    <div className="stat-card glass-card" style={{ gridColumn: 'span 2' }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.75rem' }}>
-                            <Icon icon={ChartIncreaseIcon} size={18} style={{ color: 'var(--accent-emerald)' }} />
+                    <div className="stat-card glass-card stat-span-2">
+                        <div className="stat-icon-row-mb">
+                            <Icon icon={ChartIncreaseIcon} size={18} className="stat-icon-emerald" />
                             <span className="stat-label">AI-Generated Recommendations</span>
                         </div>
                         <div className="recommendations">
                             {recommendations.map((r) => (
                                 <div className="recommendation-item" key={r.id}>
                                     <span className="rec-icon">
-                                        <Icon icon={r.icon} size={18} style={{ color: 'var(--primary)' }} />
+                                        <Icon icon={r.icon} size={18} className="stat-icon-primary" />
                                     </span>
                                     <p>{r.text}</p>
                                 </div>

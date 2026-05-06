@@ -73,11 +73,8 @@ function RequireAuth() {
 
     if (loading) {
         return (
-            <div style={{
-                display: "flex", alignItems: "center", justifyContent: "center",
-                height: "100vh", background: "var(--bg-primary)",
-            }}>
-                <div style={{ color: "var(--primary)", fontSize: "1.5rem" }}>MCMS Loading...</div>
+            <div className="app-loading-root">
+                <div className="app-loading-text">MCMS Loading...</div>
             </div>
         );
     }

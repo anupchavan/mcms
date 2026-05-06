@@ -494,8 +494,7 @@ function KanbanCard({
                             ))}
                             {renderableAssignees.length > 3 && (
                                 <div
-                                    className="archive-filter-stack-slot archive-filter-stack-slot--overlap"
-                                    style={{ zIndex: 4 }}
+                                    className="archive-filter-stack-slot archive-filter-stack-slot--overlap my-task-stack-zidx-4"
                                 >
                                     <span className="archive-filter-stack-more">+{renderableAssignees.length - 3}</span>
                                 </div>

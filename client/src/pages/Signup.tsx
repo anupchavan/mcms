@@ -30,12 +30,12 @@ export default function Signup() {
 
     return (
         <div className="auth-container">
-            <div className="auth-card glass-card animate-in fade-in zoom-in" style={{ animationDuration: '0.5s' }}>
+            <div className="auth-card glass-card animate-in fade-in zoom-in auth-card-anim">
                 <div className="auth-header">
-                    <div className="logo-icon" style={{ marginBottom: 'var(--lk-size-sm)' }}>
+                    <div className="logo-icon auth-logo-gap">
                         <span className="brand-name">Concord</span>
                     </div>
-                    <p style={{ color: 'var(--text-muted)', fontSize: 'var(--font-size-label)' }}>Meeting and communication management system for power users.</p>
+                    <p className="auth-tagline">Meeting and communication management system for power users.</p>
                 </div>
 
                 {error && (
@@ -92,14 +92,14 @@ export default function Signup() {
                         </div>
                     </div>
 
-                    <button type="submit" className="btn btn-primary" style={{ width: '100%', marginTop: '8px', padding: '12px', justifyContent: 'center' }} disabled={isLoading}>
+                    <button type="submit" className="btn btn-primary auth-submit-btn" disabled={isLoading}>
                         {isLoading ? 'Creating Account...' : 'Sign Up'}
                         {!isLoading && <Icon icon={ArrowRight01Icon} size={16} />}
                     </button>
                 </form>
 
                 <div className="auth-footer">
-                    <p style={{ color: 'var(--text-muted)', fontSize: '14px' }}>
+                    <p className="auth-footer-text">
                         Already have an account?{' '}
                         <button className="text-btn" onClick={() => navigate('/login')}>Sign in</button>
                     </p>

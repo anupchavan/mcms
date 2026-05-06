@@ -89,7 +89,7 @@ export const ChatBubbleSurface: FC<ChatBubbleSurfaceProps> = ({ variant, showTai
         }}
       >
         {showTail && <TailSvg fill={bg} forOthers={!isMe} />}
-        <div style={{ position: "relative", zIndex: 1 }}>{children}</div>
+        <div className="chat-bubble-content">{children}</div>
       </div>
     </div>
   );

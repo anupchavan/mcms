@@ -418,8 +418,7 @@ function MyTasksTaskRow({
                             ))}
                             {renderableAssignees.length > 3 ? (
                                 <div
-                                    className="archive-filter-stack-slot archive-filter-stack-slot--overlap"
-                                    style={{ zIndex: 4 }}
+                                    className="archive-filter-stack-slot archive-filter-stack-slot--overlap my-task-stack-zidx-4"
                                 >
                                     <span className="archive-filter-stack-more">+{renderableAssignees.length - 3}</span>
                                 </div>
@@ -438,17 +437,16 @@ function MyTasksTaskRow({
                     <span style={{ fontSize: "0.8125rem", color: CATEGORY_TEXT_COLOR[task.category] || "var(--text-secondary)" }}>
                         {task.category}
                     </span>
-                ) : <span style={{ color: "var(--text-muted)" }}>—</span>}
+                ) : <span className="my-task-no-value">—</span>}
             </div>
             <div className="my-tasks-task-table-cell my-tasks-task-table-cell--deadline" role="cell">
                 {isHost ? (
                     <input
                         type="date"
-                        className="input-field tasks-date-input"
+                        className="input-field tasks-date-input my-task-deadline-input"
                         value={deadlineDraft}
                         onChange={(e) => setDeadlineDraft(e.target.value)}
                         onBlur={(e) => commitDeadline(e.target.value)}
-                        style={{ fontSize: "0.8125rem", minWidth: 0, width: "100%" }}
                     />
                 ) : (
                     <span style={{ fontSize: "0.8125rem", color: task.deadline ? "var(--text-primary)" : "var(--text-muted)" }}>

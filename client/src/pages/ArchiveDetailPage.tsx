@@ -12,9 +12,9 @@ export default function ArchiveDetailPage() {
                 <header className="page-header">
                     <h2 className="page-header-title">Archive</h2>
                 </header>
-                <div className="page-body-gutter-x" style={{ paddingBottom: "1.5rem" }}>
-                    <div role="status" style={{ color: "var(--text-muted)" }}>Invalid archive id.</div>
-                    <Link to="/archives" className="archive-detail-crumb-link" style={{ marginTop: "0.75rem", display: "inline-block" }}>
+                <div className="page-body-gutter-x adp-pad-bottom">
+                    <div role="status" className="adp-status-text">Invalid archive id.</div>
+                    <Link to="/archives" className="archive-detail-crumb-link adp-back-link">
                         Archives
                     </Link>
                 </div>

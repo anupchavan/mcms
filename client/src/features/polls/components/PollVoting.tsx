@@ -147,7 +147,7 @@ export default function PollVoting({ meetingId, onClose }: PollVotingProps) {
                 </div>
 
                 {error && !poll && (
-                    <div style={{ padding: '2rem', textAlign: 'center', color: 'var(--text-muted)' }}>{error}</div>
+                    <div className="poll-error-state">{error}</div>
                 )}
 
                 {poll && (
@@ -204,7 +204,7 @@ export default function PollVoting({ meetingId, onClose }: PollVotingProps) {
                         </div>
 
                         {isResolved && shareableMeetingUrl && modality !== 'Offline' && (
-                            <div className="jitsi-link-card" style={{ marginTop: '1rem' }}>
+                            <div className="jitsi-link-card poll-jitsi-gap">
                                 <div className="jitsi-link-label">
                                     <Icon icon={Link01Icon} size={14} />
                                     Meeting Link
@@ -221,7 +221,7 @@ export default function PollVoting({ meetingId, onClose }: PollVotingProps) {
                     </div>
                 )}
 
-                <div style={{ display: 'flex', gap: '0.75rem', justifyContent: 'flex-end', marginTop: '1.5rem' }}>
+                <div className="poll-footer-row">
                     {!isResolved && (
                         <button
                             className="btn btn-primary"

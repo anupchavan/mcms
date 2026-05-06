@@ -752,8 +752,8 @@ export default function VideoArea({
     <div className="video-area">
       {showToast && <div className={`focus-toast show`}>{showToast}</div>}
       <div className="video-header">
-        <div style={{ flex: 1, minWidth: 0, display: 'flex', alignItems: 'center', gap: '1rem' }}>
-          <div style={{ flex: 1, minWidth: 0 }}>
+        <div className="va-info-row">
+          <div className="va-info-text">
             <h2 className="video-meeting-title">{meetingTitle || "No Active Meeting"}</h2>
             <div className="video-meeting-meta">
               <span className={`offline-dot ${connected ? 'connected' : ''}`} />
@@ -764,7 +764,7 @@ export default function VideoArea({
                   : hasJoined ? `${totalParticipants} in call` : `${participants?.length || 0} participants`
                 }
               </span>
-              {modality === "Offline" && <span className="chip chip-emerald" style={{ fontSize: '0.625rem' }}>Offline Focus</span>}
+              {modality === "Offline" && <span className="chip chip-emerald chip-xs">Offline Focus</span>}
             </div>
           </div>
           {modality === "Offline" && (
@@ -866,11 +866,11 @@ export default function VideoArea({
                           <span className="focus-av-name">{p.name || "User"}</span>
                         </div>
                       ))}
-                      {participants?.length === 0 && <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>No attendees listed</span>}
+                      {participants?.length === 0 && <span className="va-empty-text">No attendees listed</span>}
                     </div>
                   </div>
 
-                  <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
+                  <div className="va-panel-col">
                     <div className="focus-section-label">Tasks · {tasks.length}</div>
                     <div className="focus-action-feed">
                       {tasks.length === 0 ? (
@@ -894,7 +894,7 @@ export default function VideoArea({
                     <div className="focus-parking-lot">
                       <div className="focus-pl-title">Off-topic items</div>
                       {parkingLotItems.length === 0 ? (
-                        <div style={{ fontSize: '0.75rem', opacity: 0.5 }}>Empty</div>
+                        <div className="va-empty-label">Empty</div>
                       ) : (
                         parkingLotItems.map((item, i) => (
                           <div key={i} className="focus-pl-item">{item}</div>
@@ -905,7 +905,7 @@ export default function VideoArea({
 
                   <div className="focus-sync-banner">
                     <div className="focus-sync-text">Changes synced to server</div>
-                    <Icon icon={CheckmarkCircle01Icon} size={12} style={{ color: 'var(--accent-emerald)' }} />
+                    <Icon icon={CheckmarkCircle01Icon} size={12} className="stat-icon-emerald" />
                   </div>
                 </div>
               </div>
@@ -914,7 +914,7 @@ export default function VideoArea({
             <div className="video-prejoin">
               <div className="prejoin-card">
                 {mediaError && (
-                  <p style={{ color: "var(--danger)", fontSize: "0.875rem", textAlign: "center", marginBottom: "0.5rem" }}>{mediaError}</p>
+                  <p className="va-error-msg">{mediaError}</p>
                 )}
                 <UserAvatar
                   name={currentUser?.name || ''}
@@ -939,7 +939,7 @@ export default function VideoArea({
           ) : (
             <>
               {mediaError && (
-                <div style={{ padding: "0.5rem 1rem", fontSize: "0.75rem", color: "var(--flexoki-yellow-600)", background: "rgba(var(--flexoki-yellow-400-rgb), 0.1)", borderRadius: "0.375rem", marginBottom: "0.375rem", textAlign: "center" }}>
+                <div className="va-media-warn">
                   {mediaError}
                 </div>
               )}

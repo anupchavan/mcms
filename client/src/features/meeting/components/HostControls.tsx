@@ -417,30 +417,28 @@ const HostControls = forwardRef<HostControlsRef, HostControlsProps>(function Hos
                     </button>
                 </div>
 
-                <div style={{ display: 'flex', gap: '6px' }}>
+                <div className="hc-end-actions">
                     {(hasJoined || isOffline) && (
                         <>
                             {isHost && (
                                 <ShortcutTooltip label="End meeting for all" keys={['mod', 'Shift', 'E']} position="top">
                                     <button
-                                        className="btn btn-danger"
+                                        className="btn btn-danger hc-action-btn"
                                         onClick={handleEndMeeting}
-                                        style={{ fontSize: '12px', padding: '8px 16px' }}
                                         title="End meeting for all participants (host only)"
                                     >
                                         <Icon icon={StopIcon} size={14} />
-                                        <span style={{ marginLeft: '4px' }}>End</span>
+                                        <span className="hc-btn-label">End</span>
                                     </button>
                                 </ShortcutTooltip>
                             )}
                             <ShortcutTooltip label="Leave" keys={['mod', 'Shift', 'L']} position="top">
                                 <button
-                                    className="btn btn-secondary"
+                                    className="btn btn-secondary hc-action-btn"
                                     onClick={onLeave}
-                                    style={{ fontSize: '12px', padding: '8px 16px' }}
                                 >
                                     <Icon icon={Cancel01Icon} size={14} />
-                                    <span style={{ marginLeft: '4px' }}>Leave</span>
+                                    <span className="hc-btn-label">Leave</span>
                                 </button>
                             </ShortcutTooltip>
                         </>
@@ -449,26 +447,7 @@ const HostControls = forwardRef<HostControlsRef, HostControlsProps>(function Hos
             </div>
 
             {recordingError && (
-                <div
-                    role="alert"
-                    style={{
-                        position: 'fixed',
-                        bottom: '88px',
-                        left: '50%',
-                        transform: 'translateX(-50%)',
-                        background: "rgba(var(--flexoki-red-400-rgb), 0.95)",
-                        color: "var(--flexoki-paper)",
-                        padding: "10px 18px",
-                        borderRadius: "8px",
-                        fontSize: "13px",
-                        fontWeight: 500,
-                        maxWidth: "420px",
-                        textAlign: "center",
-                        boxShadow: "0 4px 16px rgba(var(--flexoki-black-rgb), 0.3)",
-                        zIndex: 9999,
-                        animation: 'fadeIn 0.2s ease',
-                    }}
-                >
+                <div role="alert" className="hc-recording-error">
                     ⚠️ {recordingError}
                 </div>
             )}
@@ -478,26 +457,15 @@ const HostControls = forwardRef<HostControlsRef, HostControlsProps>(function Hos
             {showParticipants && panelPos && createPortal(
                 <div
                     ref={participantsPanelRef}
-                    className="archive-multi-select-panel"
-                    style={{
-                        position: 'fixed',
-                        top: 'auto',
-                        bottom: panelPos.bottom,
-                        left: panelPos.left,
-                        right: 'auto',
-                        zIndex: 99999,
-                        minWidth: 280,
-                        maxWidth: 340,
-                        display: 'flex',
-                        flexDirection: 'column',
-                    }}
+                    className="archive-multi-select-panel participants-panel-portal"
+                    style={{ bottom: panelPos.bottom, left: panelPos.left }}
                 >
-                    <div style={{ position: 'relative' }}>
-                    <div ref={listRef} className="archive-multi-select-list" style={{ overflowY: 'auto' }}>
+                    <div className="hc-list-relative">
+                    <div ref={listRef} className="archive-multi-select-list participants-list">
                         {!participantSearch.trim() ? (
                             /* Show current participants when search is empty */
                             participants.length === 0 ? (
-                                <div className="archive-multi-select-empty" style={{ padding: '16px 12px', textAlign: 'center', fontSize: '0.8125rem', color: 'var(--text-muted)' }}>
+                                <div className="archive-multi-select-empty participants-empty">
                                     No participants yet
                                 </div>
                             ) : (
@@ -506,28 +474,27 @@ const HostControls = forwardRef<HostControlsRef, HostControlsProps>(function Hos
                                     return (
                                         <div
                                             key={pid}
-                                            className="archive-multi-select-row archive-multi-select-row--transcript-speaker"
-                                            style={{ display: 'flex', alignItems: 'center', gap: '8px', justifyContent: 'space-between' }}
+                                            className="archive-multi-select-row archive-multi-select-row--transcript-speaker participants-row"
                                         >
-                                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flex: 1, minWidth: 0 }}>
+                                            <div className="participants-row-user">
                                                 <UserAvatar
                                                     name={p.name || p.email || ''}
                                                     userId={pid}
                                                     profileImage={p.profileImage}
                                                     size={24}
                                                 />
-                                                <div style={{ minWidth: 0 }}>
+                                                <div className="participants-name-col">
                                                     <div className="archive-multi-select-name">
                                                         {p.name || p.email || 'User'}
                                                     </div>
                                                     {p.name && p.email && (
-                                                        <div style={{ fontSize: '0.6875rem', color: 'var(--text-muted)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                                        <div className="participants-email">
                                                             {p.email}
                                                         </div>
                                                     )}
                                                 </div>
                                             </div>
-                                            <span style={{ fontSize: '0.6875rem', color: 'var(--text-muted)', flexShrink: 0 }}>
+                                            <span className="participants-status">
                                                 {connectedUserIds.has(pid) ? 'In meeting' : 'Invited'}
                                             </span>
                                         </div>
@@ -535,7 +502,7 @@ const HostControls = forwardRef<HostControlsRef, HostControlsProps>(function Hos
                                 })
                             )
                         ) : displayList.length === 0 ? (
-                            <div className="archive-multi-select-empty" style={{ padding: '16px 12px', textAlign: 'center', fontSize: '0.8125rem', color: 'var(--text-muted)' }}>
+                            <div className="archive-multi-select-empty participants-empty">
                                 No users found
                             </div>
                         ) : (
@@ -547,42 +514,41 @@ const HostControls = forwardRef<HostControlsRef, HostControlsProps>(function Hos
                                 return (
                                     <div
                                         key={uid}
-                                        className={`archive-multi-select-row archive-multi-select-row--transcript-speaker${idx === highlightIndex ? ' is-keyboard-highlight' : ''}`}
-                                        style={{ display: 'flex', alignItems: 'center', gap: '8px', justifyContent: 'space-between', cursor: canInvite ? 'pointer' : 'default' }}
+                                        className={`archive-multi-select-row archive-multi-select-row--transcript-speaker participants-row${idx === highlightIndex ? ' is-keyboard-highlight' : ''}`}
+                                        style={{ cursor: canInvite ? 'pointer' : 'default' }}
                                         onMouseEnter={() => setHighlightIndex(idx)}
                                         onMouseLeave={() => setHighlightIndex(-1)}
                                         onClick={() => { if (canInvite) handleInvite(uid); }}
                                     >
-                                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flex: 1, minWidth: 0 }}>
+                                        <div className="participants-row-user">
                                             <UserAvatar
                                                 name={u.name || u.email || ''}
                                                 userId={uid}
                                                 profileImage={u.profileImage}
                                                 size={24}
                                             />
-                                            <div style={{ minWidth: 0 }}>
+                                            <div className="participants-name-col">
                                                 <div className="archive-multi-select-name">
                                                     {u.name || u.email || 'User'}
                                                 </div>
                                                 {u.name && u.email && (
-                                                    <div style={{ fontSize: '0.6875rem', color: 'var(--text-muted)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                                    <div className="participants-email">
                                                         {u.email}
                                                     </div>
                                                 )}
                                             </div>
                                         </div>
                                         {isConnected ? (
-                                            <span style={{ fontSize: '0.6875rem', color: 'var(--text-muted)', flexShrink: 0 }}>In meeting</span>
+                                            <span className="participants-status">In meeting</span>
                                         ) : isIn ? (
-                                            <span style={{ fontSize: '0.6875rem', color: 'var(--text-muted)', flexShrink: 0 }}>Invited</span>
+                                            <span className="participants-status">Invited</span>
                                         ) : isHost ? (
                                             <button
                                                 type="button"
-                                                className="btn-icon btn-icon-sm"
+                                                className="btn-icon btn-icon-sm participants-invite-btn"
                                                 title="Add to meeting"
                                                 disabled={inviting === uid}
                                                 onClick={e => { e.stopPropagation(); handleInvite(uid); }}
-                                                style={{ flexShrink: 0 }}
                                             >
                                                 <Icon icon={UserAdd01Icon} size={13} />
                                             </button>
@@ -603,7 +569,7 @@ const HostControls = forwardRef<HostControlsRef, HostControlsProps>(function Hos
                     </div>
 
                     {/* Search input — bottom */}
-                    <div className="archive-multi-select-search-wrap" style={{ borderTop: '1px solid var(--border)', borderBottom: 'none', flexShrink: 0 }}>
+                    <div className="archive-multi-select-search-wrap participants-search-bottom">
                         <Icon icon={Search01Icon} size={14} className="archive-multi-select-search-icon" />
                         <input
                             type="text"

@@ -259,7 +259,7 @@ export default function MeetingNotes({ meetingId }: MeetingNotesProps) {
                             active={editor.isActive('code')}
                             title={`Inline code (${modKey}+E)`}
                         >
-                            <span style={{ fontSize: '0.75rem', fontWeight: 600, fontFamily: 'monospace' }}>&lt;&gt;</span>
+                            <span className="meeting-notes-code-label">&lt;&gt;</span>
                         </ToolBtn>
                         <ToolBtn
                             onClick={() => editor.chain().focus().toggleCodeBlock().run()}
@@ -297,7 +297,7 @@ export default function MeetingNotes({ meetingId }: MeetingNotesProps) {
                             <Icon icon={TaskDone01Icon} size={15} />
                         </ToolBtn>
 
-                        <div style={{ flex: 1 }} />
+                        <div className="meeting-notes-spacer" />
                         <ToolBtn
                             onClick={() => {
                                 editor.commands.clearContent();
