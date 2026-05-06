@@ -1,6 +1,14 @@
-import { createContext, useContext, useEffect, useMemo, useRef, useState, ReactNode } from 'react';
-import { io, Socket } from 'socket.io-client';
-import { useAuth } from './AuthContext';
+import {
+    createContext,
+    useContext,
+    useEffect,
+    useMemo,
+    useRef,
+    useState,
+    ReactNode,
+} from "react";
+import { io, Socket } from "socket.io-client";
+import { useAuth } from "./AuthContext";
 
 export interface SocketContextValue {
     socket: Socket | null;
@@ -11,9 +19,10 @@ const SocketContext = createContext<SocketContextValue | null>(null);
 
 export const useSocket = () => useContext(SocketContext);
 
-const SOCKET_URL = import.meta.env.VITE_SOCKET_URL
-    || import.meta.env.VITE_API_URL?.replace(/(\/api\/?)+$/, '')
-    || 'http://localhost:5001';
+const SOCKET_URL =
+    import.meta.env.VITE_SOCKET_URL ||
+    import.meta.env.VITE_API_URL?.replace(/(\/api\/?)+$/, "") ||
+    "http://localhost:5001";
 
 interface SocketProviderProps {
     children: ReactNode;
@@ -36,11 +45,11 @@ export const SocketProvider = ({ children }: SocketProviderProps) => {
 
         const socket = io(SOCKET_URL, {
             auth: { token: user.token },
-            transports: ['websocket', 'polling'],
+            transports: ["websocket", "polling"],
         });
 
-        socket.on('connect', () => setConnected(true));
-        socket.on('disconnect', () => setConnected(false));
+        socket.on("connect", () => setConnected(true));
+        socket.on("disconnect", () => setConnected(false));
 
         socketRef.current = socket;
 

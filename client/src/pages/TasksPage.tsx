@@ -5,13 +5,32 @@ import { MyTasksKanban } from "../features/dashboard/components/MyTasksKanban";
 import type { MineOverviewTask } from "../features/dashboard/components/MyTasksTaskTable";
 import useDashboardContext from "../hooks/useDashboardContext";
 import Icon from "../shared/components/Icon";
-import { Table01Icon, KanbanIcon, Archive01Icon, Unarchive03Icon, Delete01Icon } from "@hugeicons/core-free-icons";
+import {
+    Table01Icon,
+    KanbanIcon,
+    Archive01Icon,
+    Unarchive03Icon,
+    Delete01Icon,
+} from "@hugeicons/core-free-icons";
 import { ArrowDown01Icon, ArrowUp01Icon } from "@hugeicons/core-free-icons";
 import useKeyboardShortcuts from "../hooks/useKeyboardShortcuts";
 import Kbd from "../shared/components/Kbd";
 
 const API_BASE = import.meta.env.VITE_API_URL || "http://localhost:5001/api";
-const MONTH_ABBR = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+const MONTH_ABBR = [
+    "Jan",
+    "Feb",
+    "Mar",
+    "Apr",
+    "May",
+    "Jun",
+    "Jul",
+    "Aug",
+    "Sep",
+    "Oct",
+    "Nov",
+    "Dec",
+];
 
 type TasksTab = "assignedToMe" | "assignedByMe";
 type ViewMode = "table" | "kanban";
@@ -19,8 +38,13 @@ type ViewMode = "table" | "kanban";
 const VIEW_STORAGE_KEY = "tasks-view-mode";
 
 function readStoredView(): ViewMode {
-    try { return localStorage.getItem(VIEW_STORAGE_KEY) === "kanban" ? "kanban" : "table"; }
-    catch { return "table"; }
+    try {
+        return localStorage.getItem(VIEW_STORAGE_KEY) === "kanban"
+            ? "kanban"
+            : "table";
+    } catch {
+        return "table";
+    }
 }
 
 function formatDate(v: string | undefined | null) {
@@ -42,7 +66,10 @@ export default function TasksPage() {
     const [archivedTasks, setArchivedTasks] = useState<MineOverviewTask[]>([]);
     const [archivedLoading, setArchivedLoading] = useState(false);
 
-    const activeTaskItems = tasksTab === "assignedToMe" ? myTasks.assignedToMe : myTasks.assignedByMe;
+    const activeTaskItems =
+        tasksTab === "assignedToMe"
+            ? myTasks.assignedToMe
+            : myTasks.assignedByMe;
     const activeTaskEmptyMessage =
         tasksTab === "assignedToMe"
             ? "Nothing is waiting on you — or tasks haven't synced yet."
@@ -51,7 +78,11 @@ export default function TasksPage() {
     const changeView = (mode: ViewMode) => {
         setViewMode(mode);
         setViewDropOpen(false);
-        try { localStorage.setItem(VIEW_STORAGE_KEY, mode); } catch { /* ignore */ }
+        try {
+            localStorage.setItem(VIEW_STORAGE_KEY, mode);
+        } catch {
+            /* ignore */
+        }
     };
 
     // Keyboard shortcuts: t = table, k = kanban
@@ -64,12 +95,21 @@ export default function TasksPage() {
     useEffect(() => {
         if (!viewDropOpen) return;
         const onDoc = (e: MouseEvent) => {
-            if (viewDropRef.current && !viewDropRef.current.contains(e.target as Node)) setViewDropOpen(false);
+            if (
+                viewDropRef.current &&
+                !viewDropRef.current.contains(e.target as Node)
+            )
+                setViewDropOpen(false);
         };
-        const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") setViewDropOpen(false); };
+        const onKey = (e: KeyboardEvent) => {
+            if (e.key === "Escape") setViewDropOpen(false);
+        };
         document.addEventListener("mousedown", onDoc);
         document.addEventListener("keydown", onKey);
-        return () => { document.removeEventListener("mousedown", onDoc); document.removeEventListener("keydown", onKey); };
+        return () => {
+            document.removeEventListener("mousedown", onDoc);
+            document.removeEventListener("keydown", onKey);
+        };
     }, [viewDropOpen]);
 
     const loadArchived = useCallback(async () => {
@@ -77,26 +117,45 @@ export default function TasksPage() {
         try {
             const res = await fetchWithAuth(`${API_BASE}/tasks/mine/archived`);
             if (res.ok) setArchivedTasks(await res.json());
-        } finally { setArchivedLoading(false); }
+        } finally {
+            setArchivedLoading(false);
+        }
     }, [fetchWithAuth]);
 
-    const openArchived = () => { setArchivedOpen(true); loadArchived(); };
+    const openArchived = () => {
+        setArchivedOpen(true);
+        loadArchived();
+    };
     const closeArchived = () => setArchivedOpen(false);
 
-    const handleUnarchive = useCallback(async (taskId: string) => {
-        const res = await fetchWithAuth(`${API_BASE}/tasks/${taskId}`, {
-            method: "PUT",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ archived: false }),
-        });
-        if (res.ok) { await loadArchived(); refreshMyTasks(); }
-    }, [fetchWithAuth, loadArchived, refreshMyTasks]);
+    const handleUnarchive = useCallback(
+        async (taskId: string) => {
+            const res = await fetchWithAuth(`${API_BASE}/tasks/${taskId}`, {
+                method: "PUT",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ archived: false }),
+            });
+            if (res.ok) {
+                await loadArchived();
+                refreshMyTasks();
+            }
+        },
+        [fetchWithAuth, loadArchived, refreshMyTasks],
+    );
 
-    const handleDeleteArchived = useCallback(async (taskId: string) => {
-        if (!window.confirm("Permanently delete this task?")) return;
-        const res = await fetchWithAuth(`${API_BASE}/tasks/${taskId}`, { method: "DELETE" });
-        if (res.ok) { await loadArchived(); refreshMyTasks(); }
-    }, [fetchWithAuth, loadArchived, refreshMyTasks]);
+    const handleDeleteArchived = useCallback(
+        async (taskId: string) => {
+            if (!window.confirm("Permanently delete this task?")) return;
+            const res = await fetchWithAuth(`${API_BASE}/tasks/${taskId}`, {
+                method: "DELETE",
+            });
+            if (res.ok) {
+                await loadArchived();
+                refreshMyTasks();
+            }
+        },
+        [fetchWithAuth, loadArchived, refreshMyTasks],
+    );
 
     const viewLabel = viewMode === "kanban" ? "Kanban" : "Table";
     const viewIcon = viewMode === "kanban" ? KanbanIcon : Table01Icon;
@@ -106,7 +165,8 @@ export default function TasksPage() {
             <header className="page-header">
                 <h2 className="page-header-title">My Tasks</h2>
                 <p className="page-header-description">
-                    Tasks from your meetings — verify work, track deadlines, and keep commitments visible.
+                    Tasks from your meetings — verify work, track deadlines, and
+                    keep commitments visible.
                 </p>
             </header>
 
@@ -154,33 +214,73 @@ export default function TasksPage() {
                             <Icon icon={viewIcon} size={14} />
                             <span>{viewLabel}</span>
                             <Icon
-                                icon={viewDropOpen ? ArrowUp01Icon : ArrowDown01Icon}
+                                icon={
+                                    viewDropOpen
+                                        ? ArrowUp01Icon
+                                        : ArrowDown01Icon
+                                }
                                 size={10}
                                 className="tasks-view-toggle-chevron"
                             />
                         </button>
 
                         {viewDropOpen && (
-                            <div className="tasks-view-toggle-panel" role="listbox">
-                                {(["table", "kanban"] as ViewMode[]).map((mode) => (
-                                    <button
-                                        key={mode}
-                                        type="button"
-                                        role="option"
-                                        aria-selected={viewMode === mode}
-                                        className={`tasks-view-toggle-option${viewMode === mode ? " is-selected" : ""}`}
-                                        onClick={() => changeView(mode)}
-                                    >
-                                        <Icon icon={mode === "table" ? Table01Icon : KanbanIcon} size={13} />
-                                        <span>{mode === "table" ? "Table" : "Kanban"}</span>
-                                        {viewMode === mode && (
-                                            <svg width="12" height="12" viewBox="0 0 12 12" fill="none" aria-hidden="true" className="tasks-view-toggle-check">
-                                                <path d="M2 6 L5 9 L10 3" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" />
-                                            </svg>
-                                        )}
-                                        <Kbd keys={[mode === "table" ? "T" : "K"]} className="kbd-hint" />
-                                    </button>
-                                ))}
+                            <div
+                                className="tasks-view-toggle-panel"
+                                role="listbox"
+                            >
+                                {(["table", "kanban"] as ViewMode[]).map(
+                                    (mode) => (
+                                        <button
+                                            key={mode}
+                                            type="button"
+                                            role="option"
+                                            aria-selected={viewMode === mode}
+                                            className={`tasks-view-toggle-option${viewMode === mode ? " is-selected" : ""}`}
+                                            onClick={() => changeView(mode)}
+                                        >
+                                            <Icon
+                                                icon={
+                                                    mode === "table"
+                                                        ? Table01Icon
+                                                        : KanbanIcon
+                                                }
+                                                size={13}
+                                            />
+                                            <span>
+                                                {mode === "table"
+                                                    ? "Table"
+                                                    : "Kanban"}
+                                            </span>
+                                            {viewMode === mode && (
+                                                <svg
+                                                    width="12"
+                                                    height="12"
+                                                    viewBox="0 0 12 12"
+                                                    fill="none"
+                                                    aria-hidden="true"
+                                                    className="tasks-view-toggle-check"
+                                                >
+                                                    <path
+                                                        d="M2 6 L5 9 L10 3"
+                                                        stroke="currentColor"
+                                                        strokeWidth="1.75"
+                                                        strokeLinecap="round"
+                                                        strokeLinejoin="round"
+                                                    />
+                                                </svg>
+                                            )}
+                                            <Kbd
+                                                keys={[
+                                                    mode === "table"
+                                                        ? "T"
+                                                        : "K",
+                                                ]}
+                                                className="kbd-hint"
+                                            />
+                                        </button>
+                                    ),
+                                )}
                             </div>
                         )}
                     </div>
@@ -207,76 +307,191 @@ export default function TasksPage() {
 
             {/* Archived tasks overlay */}
             {archivedOpen && (
-                <div className="archived-overlay" role="dialog" aria-modal="true" aria-label="Archived Tasks">
+                <div
+                    className="archived-overlay"
+                    role="dialog"
+                    aria-modal="true"
+                    aria-label="Archived Tasks"
+                >
                     <div className="archived-panel">
                         <div className="archived-panel-header">
                             <div className="archived-panel-title">
                                 <Icon icon={Archive01Icon} size={16} />
                                 <span>Archived Tasks</span>
                             </div>
-                            <button type="button" className="archived-panel-close" onClick={closeArchived} aria-label="Close">
+                            <button
+                                type="button"
+                                className="archived-panel-close"
+                                onClick={closeArchived}
+                                aria-label="Close"
+                            >
                                 ✕
                             </button>
                         </div>
 
                         <div className="archived-panel-body">
                             {archivedLoading ? (
-                                <div className="archived-panel-loading">Loading…</div>
+                                <div className="archived-panel-loading">
+                                    Loading…
+                                </div>
                             ) : archivedTasks.length === 0 ? (
-                                <div className="archived-panel-empty">No archived tasks.</div>
+                                <div className="archived-panel-empty">
+                                    No archived tasks.
+                                </div>
                             ) : (
                                 <div className="archived-table" role="table">
-                                    <div className="archived-table-head" role="row">
-                                        <div className="archived-table-cell archived-table-cell--title" role="columnheader">Task</div>
-                                        <div className="archived-table-cell archived-table-cell--meeting" role="columnheader">Meeting</div>
-                                        <div className="archived-table-cell archived-table-cell--date" role="columnheader">Assigned on</div>
-                                        <div className="archived-table-cell archived-table-cell--date" role="columnheader">Completed on</div>
-                                        <div className="archived-table-cell archived-table-cell--assignees" role="columnheader">Assigned to</div>
-                                        <div className="archived-table-cell archived-table-cell--actions" role="columnheader" />
+                                    <div
+                                        className="archived-table-head"
+                                        role="row"
+                                    >
+                                        <div
+                                            className="archived-table-cell archived-table-cell--title"
+                                            role="columnheader"
+                                        >
+                                            Task
+                                        </div>
+                                        <div
+                                            className="archived-table-cell archived-table-cell--meeting"
+                                            role="columnheader"
+                                        >
+                                            Meeting
+                                        </div>
+                                        <div
+                                            className="archived-table-cell archived-table-cell--date"
+                                            role="columnheader"
+                                        >
+                                            Assigned on
+                                        </div>
+                                        <div
+                                            className="archived-table-cell archived-table-cell--date"
+                                            role="columnheader"
+                                        >
+                                            Completed on
+                                        </div>
+                                        <div
+                                            className="archived-table-cell archived-table-cell--assignees"
+                                            role="columnheader"
+                                        >
+                                            Assigned to
+                                        </div>
+                                        <div
+                                            className="archived-table-cell archived-table-cell--actions"
+                                            role="columnheader"
+                                        />
                                     </div>
                                     <div className="archived-table-body">
                                         {archivedTasks.map((task) => {
-                                            const meetingHref = (task.meetingShortId || task.meetingId)
-                                                ? `/archives/${encodeURIComponent(task.meetingShortId || task.meetingId!)}` : null;
-                                            const assigneeNames = (task.assignees || []).map((a) => a.name || a.email || "User").join(", ") || "—";
+                                            const meetingHref =
+                                                task.meetingShortId ||
+                                                task.meetingId
+                                                    ? `/archives/${encodeURIComponent(task.meetingShortId || task.meetingId!)}`
+                                                    : null;
+                                            const assigneeNames =
+                                                (task.assignees || [])
+                                                    .map(
+                                                        (a) =>
+                                                            a.name ||
+                                                            a.email ||
+                                                            "User",
+                                                    )
+                                                    .join(", ") || "—";
                                             return (
-                                                <div key={task.id} className="archived-table-row" role="row">
-                                                    <div className="archived-table-cell archived-table-cell--title" role="cell">
-                                                        <span className="archived-task-title">{task.title}</span>
+                                                <div
+                                                    key={task.id}
+                                                    className="archived-table-row"
+                                                    role="row"
+                                                >
+                                                    <div
+                                                        className="archived-table-cell archived-table-cell--title"
+                                                        role="cell"
+                                                    >
+                                                        <span className="archived-task-title">
+                                                            {task.title}
+                                                        </span>
                                                     </div>
-                                                    <div className="archived-table-cell archived-table-cell--meeting" role="cell">
+                                                    <div
+                                                        className="archived-table-cell archived-table-cell--meeting"
+                                                        role="cell"
+                                                    >
                                                         {meetingHref ? (
-                                                            <Link to={meetingHref} className="my-tasks-meeting-link" onClick={closeArchived}>
-                                                                {task.meetingTitle || "Open archive"}
+                                                            <Link
+                                                                to={meetingHref}
+                                                                className="my-tasks-meeting-link"
+                                                                onClick={
+                                                                    closeArchived
+                                                                }
+                                                            >
+                                                                {task.meetingTitle ||
+                                                                    "Open archive"}
                                                             </Link>
-                                                        ) : <span className="my-tasks-meeting-fallback">—</span>}
+                                                        ) : (
+                                                            <span className="my-tasks-meeting-fallback">
+                                                                —
+                                                            </span>
+                                                        )}
                                                     </div>
-                                                    <div className="archived-table-cell archived-table-cell--date" role="cell">
-                                                        {formatDate(task.assignedAt)}
+                                                    <div
+                                                        className="archived-table-cell archived-table-cell--date"
+                                                        role="cell"
+                                                    >
+                                                        {formatDate(
+                                                            task.assignedAt,
+                                                        )}
                                                     </div>
-                                                    <div className="archived-table-cell archived-table-cell--date" role="cell">
-                                                        {formatDate(task.verifiedAt)}
+                                                    <div
+                                                        className="archived-table-cell archived-table-cell--date"
+                                                        role="cell"
+                                                    >
+                                                        {formatDate(
+                                                            task.verifiedAt,
+                                                        )}
                                                     </div>
-                                                    <div className="archived-table-cell archived-table-cell--assignees" role="cell">
-                                                        <span className="archived-assignee-names">{assigneeNames}</span>
+                                                    <div
+                                                        className="archived-table-cell archived-table-cell--assignees"
+                                                        role="cell"
+                                                    >
+                                                        <span className="archived-assignee-names">
+                                                            {assigneeNames}
+                                                        </span>
                                                     </div>
-                                                    <div className="archived-table-cell archived-table-cell--actions" role="cell">
+                                                    <div
+                                                        className="archived-table-cell archived-table-cell--actions"
+                                                        role="cell"
+                                                    >
                                                         <div className="task-row-actions">
                                                             <button
                                                                 type="button"
                                                                 className="task-action-btn task-action-btn--archive"
                                                                 title="Unarchive task"
-                                                                onClick={() => handleUnarchive(task.id)}
+                                                                onClick={() =>
+                                                                    handleUnarchive(
+                                                                        task.id,
+                                                                    )
+                                                                }
                                                             >
-                                                                <Icon icon={Unarchive03Icon} size={14} />
+                                                                <Icon
+                                                                    icon={
+                                                                        Unarchive03Icon
+                                                                    }
+                                                                    size={14}
+                                                                />
                                                             </button>
                                                             <button
                                                                 type="button"
                                                                 className="task-action-btn task-action-btn--delete"
                                                                 title="Delete task"
-                                                                onClick={() => handleDeleteArchived(task.id)}
+                                                                onClick={() =>
+                                                                    handleDeleteArchived(
+                                                                        task.id,
+                                                                    )
+                                                                }
                                                             >
-                                                                <Icon icon={Delete01Icon} size={14} />
+                                                                <Icon
+                                                                    icon={
+                                                                        Delete01Icon
+                                                                    }
+                                                                    size={14}
+                                                                />
                                                             </button>
                                                         </div>
                                                     </div>

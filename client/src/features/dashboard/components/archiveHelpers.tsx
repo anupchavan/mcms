@@ -13,7 +13,7 @@ export const ARCHIVE_SEARCH_MIN_LOADING_MS = 450;
 export const ARCHIVE_SEARCH_LOADING_UI_HOLD_MS = 0;
 
 export function archiveLoadingMinVisibleMs(): number {
-	return ARCHIVE_SEARCH_MIN_LOADING_MS + ARCHIVE_SEARCH_LOADING_UI_HOLD_MS;
+    return ARCHIVE_SEARCH_MIN_LOADING_MS + ARCHIVE_SEARCH_LOADING_UI_HOLD_MS;
 }
 
 export interface ArchiveMeeting {
@@ -26,12 +26,18 @@ export interface ArchiveMeeting {
     host: string;
     hostId?: string | { _id?: string };
     modality?: string;
-    matchedTranscripts?: Array<{ speaker: string; text: string; timestamp?: string }>;
+    matchedTranscripts?: Array<{
+        speaker: string;
+        text: string;
+        timestamp?: string;
+    }>;
     matchedAgendaItems?: Array<{ title: string }>;
 }
 
 /** Chip class for archived meeting modality (Online / Offline / Hybrid). */
-export function archiveModalityChipClass(modality: string | undefined | null): string {
+export function archiveModalityChipClass(
+    modality: string | undefined | null,
+): string {
     const m = (modality || "").trim().toLowerCase();
     if (m === "online") return "chip chip-blue";
     if (m === "offline") return "chip chip-amber";
@@ -39,7 +45,9 @@ export function archiveModalityChipClass(modality: string | undefined | null): s
     return "chip";
 }
 
-export function archiveModalityLabel(modality: string | undefined | null): string | null {
+export function archiveModalityLabel(
+    modality: string | undefined | null,
+): string | null {
     const raw = (modality || "").trim();
     if (!raw) return null;
     return raw;
@@ -105,12 +113,21 @@ export interface ArchiveDetail {
         participants?: ArchiveParticipant[];
     };
     agendaItems: Array<{ id: string; title: string; duration: number }>;
-    transcriptsByAgenda: Record<string, Array<{ id: string; speaker: string; timestamp: string; text: string }>>;
+    transcriptsByAgenda: Record<
+        string,
+        Array<{ id: string; speaker: string; timestamp: string; text: string }>
+    >;
     transcriptFlat?: TranscriptSegment[];
     tasks: ArchiveTask[];
     /** Legacy alias kept for components that still consume the old field name. */
     actionItems?: ArchiveTask[];
-    pins: Array<{ id: string; type: string; url?: string; label?: string; transcriptTimestamp?: string }>;
+    pins: Array<{
+        id: string;
+        type: string;
+        url?: string;
+        label?: string;
+        transcriptTimestamp?: string;
+    }>;
     meetingSummary?: {
         overview: string;
         discussionPoints: string[];
@@ -130,7 +147,9 @@ export function formatArchiveDate(dateStr?: string): string {
 }
 
 /** Local calendar start-of-day for YYYY-MM-DD archive dates; `null` if missing/invalid. */
-export function parseArchiveDateToLocalDay(dateStr?: string | null): Date | null {
+export function parseArchiveDateToLocalDay(
+    dateStr?: string | null,
+): Date | null {
     if (dateStr == null) return null;
     const iso = String(dateStr).trim().slice(0, 10);
     if (!/^\d{4}-\d{2}-\d{2}$/.test(iso)) return null;
@@ -139,9 +158,18 @@ export function parseArchiveDateToLocalDay(dateStr?: string | null): Date | null
     return new Date(d.getFullYear(), d.getMonth(), d.getDate());
 }
 
-export type ArchiveRecencyGroupId = "today" | "yesterday" | "thisMonth" | "older";
+export type ArchiveRecencyGroupId =
+    | "today"
+    | "yesterday"
+    | "thisMonth"
+    | "older";
 
-const ARCHIVE_RECENCY_ORDER: ArchiveRecencyGroupId[] = ["today", "yesterday", "thisMonth", "older"];
+const ARCHIVE_RECENCY_ORDER: ArchiveRecencyGroupId[] = [
+    "today",
+    "yesterday",
+    "thisMonth",
+    "older",
+];
 const ARCHIVE_RECENCY_LABEL: Record<ArchiveRecencyGroupId, string> = {
     today: "Today",
     yesterday: "Yesterday",
@@ -149,11 +177,18 @@ const ARCHIVE_RECENCY_LABEL: Record<ArchiveRecencyGroupId, string> = {
     older: "Older",
 };
 
-export function archiveMeetingRecencyGroup(dateStr: string | undefined | null, now = new Date()): ArchiveRecencyGroupId {
+export function archiveMeetingRecencyGroup(
+    dateStr: string | undefined | null,
+    now = new Date(),
+): ArchiveRecencyGroupId {
     const day = parseArchiveDateToLocalDay(dateStr);
     if (!day) return "older";
 
-    const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const todayStart = new Date(
+        now.getFullYear(),
+        now.getMonth(),
+        now.getDate(),
+    );
     const yesterdayStart = new Date(todayStart);
     yesterdayStart.setDate(yesterdayStart.getDate() - 1);
     const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
@@ -161,14 +196,19 @@ export function archiveMeetingRecencyGroup(dateStr: string | undefined | null, n
     const t = day.getTime();
     if (t === todayStart.getTime()) return "today";
     if (t === yesterdayStart.getTime()) return "yesterday";
-    if (t >= monthStart.getTime() && t < todayStart.getTime()) return "thisMonth";
+    if (t >= monthStart.getTime() && t < todayStart.getTime())
+        return "thisMonth";
     return "older";
 }
 
 export function groupArchiveMeetingsByRecency(
     meetings: ArchiveMeeting[],
     now = new Date(),
-): Array<{ id: ArchiveRecencyGroupId; label: string; meetings: ArchiveMeeting[] }> {
+): Array<{
+    id: ArchiveRecencyGroupId;
+    label: string;
+    meetings: ArchiveMeeting[];
+}> {
     const buckets: Record<ArchiveRecencyGroupId, ArchiveMeeting[]> = {
         today: [],
         yesterday: [],
@@ -178,16 +218,25 @@ export function groupArchiveMeetingsByRecency(
     for (const m of meetings) {
         buckets[archiveMeetingRecencyGroup(m.date, now)].push(m);
     }
-    return ARCHIVE_RECENCY_ORDER
-        .filter((id) => buckets[id].length > 0)
-        .map((id) => ({ id, label: ARCHIVE_RECENCY_LABEL[id], meetings: buckets[id] }));
+    return ARCHIVE_RECENCY_ORDER.filter((id) => buckets[id].length > 0).map(
+        (id) => ({
+            id,
+            label: ARCHIVE_RECENCY_LABEL[id],
+            meetings: buckets[id],
+        }),
+    );
 }
 
 /** Parse natural language date range from search input. Returns { textQuery, dateFrom, dateTo }. */
 export function parseArchiveSearchInput(input: string) {
     const trimmed = input.trim();
     const now = new Date();
-    if (!trimmed) return { textQuery: "", dateFrom: null as string | null, dateTo: null as string | null };
+    if (!trimmed)
+        return {
+            textQuery: "",
+            dateFrom: null as string | null,
+            dateTo: null as string | null,
+        };
 
     const parsed = chrono.parse(trimmed, now);
     let textQuery = trimmed;
@@ -195,7 +244,10 @@ export function parseArchiveSearchInput(input: string) {
     let dateTo: Date | null = null;
 
     for (const p of parsed) textQuery = textQuery.replace(p.text, " ");
-    textQuery = textQuery.replace(/\b(from|since|till|to|until)\b\s*/gi, "").replace(/\s+/g, " ").trim();
+    textQuery = textQuery
+        .replace(/\b(from|since|till|to|until)\b\s*/gi, "")
+        .replace(/\s+/g, " ")
+        .trim();
 
     const lower = trimmed.toLowerCase();
     const hasFrom = /\b(from|since)\b/.test(lower);
@@ -208,12 +260,19 @@ export function parseArchiveSearchInput(input: string) {
     } else if (parsed.length === 1) {
         const p = parsed[0];
         const d = p.start.date();
-        const startOfDay = (dt: Date) => new Date(dt.getFullYear(), dt.getMonth(), dt.getDate(), 0, 0, 0);
-        const endOfDay = (dt: Date) => new Date(dt.getFullYear(), dt.getMonth(), dt.getDate(), 23, 59, 59);
-        if (p.end) { dateFrom = startOfDay(p.start.date()); dateTo = endOfDay(p.end.date()); }
-        else if (hasFrom && !hasTo) dateFrom = startOfDay(d);
+        const startOfDay = (dt: Date) =>
+            new Date(dt.getFullYear(), dt.getMonth(), dt.getDate(), 0, 0, 0);
+        const endOfDay = (dt: Date) =>
+            new Date(dt.getFullYear(), dt.getMonth(), dt.getDate(), 23, 59, 59);
+        if (p.end) {
+            dateFrom = startOfDay(p.start.date());
+            dateTo = endOfDay(p.end.date());
+        } else if (hasFrom && !hasTo) dateFrom = startOfDay(d);
         else if (hasTo && !hasFrom) dateTo = endOfDay(d);
-        else { dateFrom = startOfDay(d); dateTo = endOfDay(d); }
+        else {
+            dateFrom = startOfDay(d);
+            dateTo = endOfDay(d);
+        }
     }
 
     return {
@@ -225,16 +284,25 @@ export function parseArchiveSearchInput(input: string) {
 
 export function groupTasksByAgenda(detail: ArchiveDetail) {
     const tasks = detail.tasks || detail.actionItems || [];
-    const groups = detail.agendaItems.map((agendaItem) => ({
-        key: agendaItem.id,
-        title: agendaItem.title,
-        items: tasks.filter((item) => item.agendaItemId === agendaItem.id),
-    })).filter((group) => group.items.length > 0);
+    const groups = detail.agendaItems
+        .map((agendaItem) => ({
+            key: agendaItem.id,
+            title: agendaItem.title,
+            items: tasks.filter((item) => item.agendaItemId === agendaItem.id),
+        }))
+        .filter((group) => group.items.length > 0);
 
     const agendaIds = new Set(detail.agendaItems.map((item) => item.id));
-    const unlinkedItems = tasks.filter((item) => !item.agendaItemId || !agendaIds.has(String(item.agendaItemId)));
+    const unlinkedItems = tasks.filter(
+        (item) =>
+            !item.agendaItemId || !agendaIds.has(String(item.agendaItemId)),
+    );
     if (unlinkedItems.length > 0) {
-        groups.push({ key: "_unlinked", title: "General / Unlinked", items: unlinkedItems });
+        groups.push({
+            key: "_unlinked",
+            title: "General / Unlinked",
+            items: unlinkedItems,
+        });
     }
 
     return groups;

@@ -1,26 +1,30 @@
-import { useState, useRef } from 'react';
-import { useAuth } from '../../../stores/AuthContext';
-import Icon from '../../../shared/components/Icon';
-import { UserIcon, Camera01Icon } from '@hugeicons/core-free-icons';
+import { useState, useRef } from "react";
+import { useAuth } from "../../../stores/AuthContext";
+import Icon from "../../../shared/components/Icon";
+import { UserIcon, Camera01Icon } from "@hugeicons/core-free-icons";
 
-const _raw = import.meta.env.VITE_API_URL || 'http://localhost:5001/api';
-const SERVER_BASE = _raw.replace(/(\/api\/?)+$/, '');
+const _raw = import.meta.env.VITE_API_URL || "http://localhost:5001/api";
+const SERVER_BASE = _raw.replace(/(\/api\/?)+$/, "");
 const API_BASE = `${SERVER_BASE}/api`;
 
 export default function ProfileSettings() {
     const { user, updateUser, logout } = useAuth();
 
-    const [editField, setEditField] = useState<'name' | 'email' | 'password' | null>(null);
-    const [nameVal, setNameVal] = useState(user?.name || '');
-    const [emailVal, setEmailVal] = useState(user?.email || '');
-    const [currentPw, setCurrentPw] = useState('');
-    const [newPw, setNewPw] = useState('');
-    const [fieldLoading, setFieldLoading] = useState<'name' | 'email' | 'password' | null>(null);
+    const [editField, setEditField] = useState<
+        "name" | "email" | "password" | null
+    >(null);
+    const [nameVal, setNameVal] = useState(user?.name || "");
+    const [emailVal, setEmailVal] = useState(user?.email || "");
+    const [currentPw, setCurrentPw] = useState("");
+    const [newPw, setNewPw] = useState("");
+    const [fieldLoading, setFieldLoading] = useState<
+        "name" | "email" | "password" | null
+    >(null);
     const [fieldError, setFieldError] = useState<string | null>(null);
     const [fieldSuccess, setFieldSuccess] = useState<string | null>(null);
 
     const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
-    const [deletePw, setDeletePw] = useState('');
+    const [deletePw, setDeletePw] = useState("");
     const [deleteError, setDeleteError] = useState<string | null>(null);
     const [deleteLoading, setDeleteLoading] = useState(false);
 
@@ -29,11 +33,13 @@ export default function ProfileSettings() {
 
     const authHeaders = {
         Authorization: `Bearer ${user?.token}`,
-        'Content-Type': 'application/json',
+        "Content-Type": "application/json",
     };
 
-    const avatarUrl = user?.profileImage ? `${SERVER_BASE}${user.profileImage}` : null;
-    const initial = user?.name?.charAt(0)?.toUpperCase() || 'U';
+    const avatarUrl = user?.profileImage
+        ? `${SERVER_BASE}${user.profileImage}`
+        : null;
+    const initial = user?.name?.charAt(0)?.toUpperCase() || "U";
 
     const clearMessages = () => {
         setFieldError(null);
@@ -42,17 +48,18 @@ export default function ProfileSettings() {
 
     const handleSaveName = async () => {
         clearMessages();
-        if (!nameVal.trim()) return setFieldError('Name cannot be empty');
-        setFieldLoading('name');
+        if (!nameVal.trim()) return setFieldError("Name cannot be empty");
+        setFieldLoading("name");
         try {
             const res = await fetch(`${API_BASE}/profile/name`, {
-                method: 'PUT', headers: authHeaders,
+                method: "PUT",
+                headers: authHeaders,
                 body: JSON.stringify({ name: nameVal.trim() }),
             });
             const data = await res.json();
             if (!res.ok) throw new Error(data.message);
             updateUser({ name: data.name });
-            setFieldSuccess('Name updated');
+            setFieldSuccess("Name updated");
             setEditField(null);
         } catch (err) {
             setFieldError(err.message);
@@ -63,17 +70,18 @@ export default function ProfileSettings() {
 
     const handleSaveEmail = async () => {
         clearMessages();
-        if (!emailVal.trim()) return setFieldError('Email cannot be empty');
-        setFieldLoading('email');
+        if (!emailVal.trim()) return setFieldError("Email cannot be empty");
+        setFieldLoading("email");
         try {
             const res = await fetch(`${API_BASE}/profile/email`, {
-                method: 'PUT', headers: authHeaders,
+                method: "PUT",
+                headers: authHeaders,
                 body: JSON.stringify({ email: emailVal.trim() }),
             });
             const data = await res.json();
             if (!res.ok) throw new Error(data.message);
             updateUser({ email: data.email });
-            setFieldSuccess('Email updated');
+            setFieldSuccess("Email updated");
             setEditField(null);
         } catch (err) {
             setFieldError(err.message);
@@ -84,19 +92,25 @@ export default function ProfileSettings() {
 
     const handleSavePassword = async () => {
         clearMessages();
-        if (!currentPw || !newPw) return setFieldError('Both fields are required');
-        if (newPw.length < 6) return setFieldError('New password must be at least 6 characters');
-        setFieldLoading('password');
+        if (!currentPw || !newPw)
+            return setFieldError("Both fields are required");
+        if (newPw.length < 6)
+            return setFieldError("New password must be at least 6 characters");
+        setFieldLoading("password");
         try {
             const res = await fetch(`${API_BASE}/profile/password`, {
-                method: 'PUT', headers: authHeaders,
-                body: JSON.stringify({ currentPassword: currentPw, newPassword: newPw }),
+                method: "PUT",
+                headers: authHeaders,
+                body: JSON.stringify({
+                    currentPassword: currentPw,
+                    newPassword: newPw,
+                }),
             });
             const data = await res.json();
             if (!res.ok) throw new Error(data.message);
-            setFieldSuccess('Password updated');
-            setCurrentPw('');
-            setNewPw('');
+            setFieldSuccess("Password updated");
+            setCurrentPw("");
+            setNewPw("");
             setEditField(null);
         } catch (err) {
             setFieldError(err.message);
@@ -105,29 +119,37 @@ export default function ProfileSettings() {
         }
     };
 
-    const handleAvatarUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const handleAvatarUpload = async (
+        e: React.ChangeEvent<HTMLInputElement>,
+    ) => {
         const file = e.target.files?.[0];
         if (!file) return;
         setAvatarLoading(true);
         clearMessages();
         try {
             const formData = new FormData();
-            formData.append('avatar', file);
+            formData.append("avatar", file);
             const res = await fetch(`${API_BASE}/profile/avatar`, {
-                method: 'POST',
+                method: "POST",
                 headers: { Authorization: `Bearer ${user?.token}` },
                 body: formData,
             });
             const text = await res.text();
             let data;
-            try { data = JSON.parse(text); } catch { throw new Error('Server returned an invalid response. Make sure the server is restarted.'); }
-            if (!res.ok) throw new Error(data.message || 'Upload failed');
+            try {
+                data = JSON.parse(text);
+            } catch {
+                throw new Error(
+                    "Server returned an invalid response. Make sure the server is restarted.",
+                );
+            }
+            if (!res.ok) throw new Error(data.message || "Upload failed");
             updateUser({ profileImage: data.profileImage });
         } catch (err) {
             setFieldError(err.message);
         } finally {
             setAvatarLoading(false);
-            if (fileInputRef.current) fileInputRef.current.value = '';
+            if (fileInputRef.current) fileInputRef.current.value = "";
         }
     };
 
@@ -136,7 +158,7 @@ export default function ProfileSettings() {
         clearMessages();
         try {
             const res = await fetch(`${API_BASE}/profile/avatar`, {
-                method: 'DELETE',
+                method: "DELETE",
                 headers: authHeaders,
             });
             if (!res.ok) {
@@ -153,11 +175,12 @@ export default function ProfileSettings() {
 
     const handleDeleteAccount = async () => {
         setDeleteError(null);
-        if (!deletePw) return setDeleteError('Password is required');
+        if (!deletePw) return setDeleteError("Password is required");
         setDeleteLoading(true);
         try {
             const res = await fetch(`${API_BASE}/profile/account`, {
-                method: 'DELETE', headers: authHeaders,
+                method: "DELETE",
+                headers: authHeaders,
                 body: JSON.stringify({ password: deletePw }),
             });
             const data = await res.json();
@@ -170,15 +193,30 @@ export default function ProfileSettings() {
         }
     };
 
-    const renderField = (label: string, value: string, field: 'name' | 'email' | 'password', inputType: string = 'text') => {
+    const renderField = (
+        label: string,
+        value: string,
+        field: "name" | "email" | "password",
+        inputType: string = "text",
+    ) => {
         const isEditing = editField === field;
-        const isPassword = field === 'password';
-        const displayValue = isPassword ? '••••••••' : value;
-        const saveHandler = isPassword ? handleSavePassword : field === 'name' ? handleSaveName : handleSaveEmail;
+        const isPassword = field === "password";
+        const displayValue = isPassword ? "••••••••" : value;
+        const saveHandler = isPassword
+            ? handleSavePassword
+            : field === "name"
+              ? handleSaveName
+              : handleSaveEmail;
 
         const onKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
-            if (e.key === 'Enter') { e.preventDefault(); saveHandler(); }
-            if (e.key === 'Escape') { setEditField(null); clearMessages(); }
+            if (e.key === "Enter") {
+                e.preventDefault();
+                saveHandler();
+            }
+            if (e.key === "Escape") {
+                setEditField(null);
+                clearMessages();
+            }
         };
 
         return (
@@ -194,7 +232,9 @@ export default function ProfileSettings() {
                                         className="profile-field-input"
                                         placeholder="Current password"
                                         value={currentPw}
-                                        onChange={(e: React.ChangeEvent<HTMLInputElement>) => setCurrentPw(e.target.value)}
+                                        onChange={(
+                                            e: React.ChangeEvent<HTMLInputElement>,
+                                        ) => setCurrentPw(e.target.value)}
                                         onKeyDown={onKeyDown}
                                         autoFocus
                                     />
@@ -203,7 +243,9 @@ export default function ProfileSettings() {
                                         className="profile-field-input"
                                         placeholder="New password (min 6 chars)"
                                         value={newPw}
-                                        onChange={(e: React.ChangeEvent<HTMLInputElement>) => setNewPw(e.target.value)}
+                                        onChange={(
+                                            e: React.ChangeEvent<HTMLInputElement>,
+                                        ) => setNewPw(e.target.value)}
                                         onKeyDown={onKeyDown}
                                     />
                                 </>
@@ -211,8 +253,16 @@ export default function ProfileSettings() {
                                 <input
                                     type={inputType}
                                     className="profile-field-input"
-                                    value={field === 'name' ? nameVal : emailVal}
-                                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => field === 'name' ? setNameVal(e.target.value) : setEmailVal(e.target.value)}
+                                    value={
+                                        field === "name" ? nameVal : emailVal
+                                    }
+                                    onChange={(
+                                        e: React.ChangeEvent<HTMLInputElement>,
+                                    ) =>
+                                        field === "name"
+                                            ? setNameVal(e.target.value)
+                                            : setEmailVal(e.target.value)
+                                    }
                                     onKeyDown={onKeyDown}
                                     autoFocus
                                 />
@@ -223,19 +273,32 @@ export default function ProfileSettings() {
                                     disabled={fieldLoading === field}
                                     onClick={saveHandler}
                                 >
-                                    {fieldLoading === field ? 'Saving...' : 'Save'}
+                                    {fieldLoading === field
+                                        ? "Saving..."
+                                        : "Save"}
                                 </button>
-                                <button className="profile-btn-cancel" onClick={() => { setEditField(null); clearMessages(); }}>
+                                <button
+                                    className="profile-btn-cancel"
+                                    onClick={() => {
+                                        setEditField(null);
+                                        clearMessages();
+                                    }}
+                                >
                                     Cancel
                                 </button>
                             </div>
                         </div>
                     ) : (
                         <>
-                            <span className="profile-field-value">{displayValue}</span>
+                            <span className="profile-field-value">
+                                {displayValue}
+                            </span>
                             <button
                                 className="profile-btn-change"
-                                onClick={() => { clearMessages(); setEditField(field); }}
+                                onClick={() => {
+                                    clearMessages();
+                                    setEditField(field);
+                                }}
                             >
                                 Change
                             </button>
@@ -251,9 +314,16 @@ export default function ProfileSettings() {
             <div className="profile-settings-inner">
                 {/* Avatar section */}
                 <div className="profile-avatar-section">
-                    <div className="profile-avatar-wrapper" onClick={() => fileInputRef.current?.click()}>
+                    <div
+                        className="profile-avatar-wrapper"
+                        onClick={() => fileInputRef.current?.click()}
+                    >
                         {avatarUrl ? (
-                            <img src={avatarUrl} alt="Profile" className="profile-avatar-img" />
+                            <img
+                                src={avatarUrl}
+                                alt="Profile"
+                                className="profile-avatar-img"
+                            />
                         ) : (
                             <div className="profile-avatar-placeholder">
                                 <Icon icon={UserIcon} size={40} />
@@ -262,7 +332,9 @@ export default function ProfileSettings() {
                         <div className="profile-avatar-overlay">
                             <Icon icon={Camera01Icon} size={20} />
                         </div>
-                        {avatarLoading && <div className="profile-avatar-loading" />}
+                        {avatarLoading && (
+                            <div className="profile-avatar-loading" />
+                        )}
                     </div>
                     <input
                         ref={fileInputRef}
@@ -272,14 +344,24 @@ export default function ProfileSettings() {
                         onChange={handleAvatarUpload}
                     />
                     <div className="profile-avatar-info">
-                        <span className="profile-avatar-name">{user?.name}</span>
-                        <span className="profile-avatar-email">{user?.email}</span>
+                        <span className="profile-avatar-name">
+                            {user?.name}
+                        </span>
+                        <span className="profile-avatar-email">
+                            {user?.email}
+                        </span>
                         <div className="profile-avatar-btns">
-                            <button className="profile-btn-change" onClick={() => fileInputRef.current?.click()}>
+                            <button
+                                className="profile-btn-change"
+                                onClick={() => fileInputRef.current?.click()}
+                            >
                                 Upload photo
                             </button>
                             {avatarUrl && (
-                                <button className="profile-btn-remove" onClick={handleRemoveAvatar}>
+                                <button
+                                    className="profile-btn-remove"
+                                    onClick={handleRemoveAvatar}
+                                >
                                     Remove
                                 </button>
                             )}
@@ -288,54 +370,96 @@ export default function ProfileSettings() {
                 </div>
 
                 {/* Status messages */}
-                {fieldError && <div className="profile-msg profile-msg-error">{fieldError}</div>}
-                {fieldSuccess && <div className="profile-msg profile-msg-success">{fieldSuccess}</div>}
+                {fieldError && (
+                    <div className="profile-msg profile-msg-error">
+                        {fieldError}
+                    </div>
+                )}
+                {fieldSuccess && (
+                    <div className="profile-msg profile-msg-success">
+                        {fieldSuccess}
+                    </div>
+                )}
 
                 {/* Details section */}
                 <div className="profile-section">
                     <h3 className="profile-section-title">Details</h3>
                     <div className="profile-section-card">
-                        {renderField('Name', user?.name, 'name')}
-                        {renderField('Email', user?.email, 'email', 'email')}
-                        {renderField('Password', '', 'password', 'password')}
+                        {renderField("Name", user?.name, "name")}
+                        {renderField("Email", user?.email, "email", "email")}
+                        {renderField("Password", "", "password", "password")}
                     </div>
                 </div>
 
                 {/* Delete account */}
                 <div className="profile-section profile-section-danger">
-                    <h3 className="profile-section-title profile-danger-title">Delete account</h3>
+                    <h3 className="profile-section-title profile-danger-title">
+                        Delete account
+                    </h3>
                     <div className="profile-section-card">
                         <p className="profile-danger-text">
-                            Deleting your account will irreversibly delete all of your data, including your meeting notes and more.
+                            Deleting your account will irreversibly delete all
+                            of your data, including your meeting notes and more.
                         </p>
                         {!showDeleteConfirm ? (
-                            <button className="profile-btn-delete" onClick={() => setShowDeleteConfirm(true)}>
+                            <button
+                                className="profile-btn-delete"
+                                onClick={() => setShowDeleteConfirm(true)}
+                            >
                                 Delete your Account
                             </button>
                         ) : (
                             <div className="profile-delete-confirm">
                                 <p className="profile-danger-text profile-confirm-note">
-                                    Enter your password to confirm account deletion. This action cannot be undone.
+                                    Enter your password to confirm account
+                                    deletion. This action cannot be undone.
                                 </p>
                                 <input
                                     type="password"
                                     className="profile-field-input"
                                     placeholder="Enter your password"
                                     value={deletePw}
-                                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => setDeletePw(e.target.value)}
-                                    onKeyDown={(e: React.KeyboardEvent<HTMLInputElement>) => { if (e.key === 'Enter') { e.preventDefault(); handleDeleteAccount(); } if (e.key === 'Escape') { setShowDeleteConfirm(false); setDeletePw(''); setDeleteError(null); } }}
+                                    onChange={(
+                                        e: React.ChangeEvent<HTMLInputElement>,
+                                    ) => setDeletePw(e.target.value)}
+                                    onKeyDown={(
+                                        e: React.KeyboardEvent<HTMLInputElement>,
+                                    ) => {
+                                        if (e.key === "Enter") {
+                                            e.preventDefault();
+                                            handleDeleteAccount();
+                                        }
+                                        if (e.key === "Escape") {
+                                            setShowDeleteConfirm(false);
+                                            setDeletePw("");
+                                            setDeleteError(null);
+                                        }
+                                    }}
                                     autoFocus
                                 />
-                                {deleteError && <div className="profile-msg profile-msg-error">{deleteError}</div>}
+                                {deleteError && (
+                                    <div className="profile-msg profile-msg-error">
+                                        {deleteError}
+                                    </div>
+                                )}
                                 <div className="profile-field-actions">
                                     <button
                                         className="profile-btn-delete"
                                         onClick={handleDeleteAccount}
                                         disabled={deleteLoading}
                                     >
-                                        {deleteLoading ? 'Deleting...' : 'Confirm Delete'}
+                                        {deleteLoading
+                                            ? "Deleting..."
+                                            : "Confirm Delete"}
                                     </button>
-                                    <button className="profile-btn-cancel" onClick={() => { setShowDeleteConfirm(false); setDeletePw(''); setDeleteError(null); }}>
+                                    <button
+                                        className="profile-btn-cancel"
+                                        onClick={() => {
+                                            setShowDeleteConfirm(false);
+                                            setDeletePw("");
+                                            setDeleteError(null);
+                                        }}
+                                    >
                                         Cancel
                                     </button>
                                 </div>

@@ -6,7 +6,8 @@ export default function SettingsPage() {
             <header className="page-header">
                 <h2 className="page-header-title">Account</h2>
                 <p className="page-header-description">
-                    Manage your profile, sign-in credentials, and account deletion.
+                    Manage your profile, sign-in credentials, and account
+                    deletion.
                 </p>
             </header>
             <ProfileSettings />

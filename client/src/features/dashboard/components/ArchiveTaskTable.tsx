@@ -1,18 +1,13 @@
-import {
-    useCallback,
-    useEffect,
-    useMemo,
-    useRef,
-    useState,
-} from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import Icon from "../../../shared/components/Icon";
-import {
-    ArrowDown01Icon,
-    ArrowUp01Icon,
-} from "@hugeicons/core-free-icons";
+import { ArrowDown01Icon, ArrowUp01Icon } from "@hugeicons/core-free-icons";
 import { UserAvatar } from "../../../shared/components/UserAvatar";
-import type { ArchiveParticipant, ArchiveTask, ArchiveTaskAssignee } from "./archiveHelpers";
+import type {
+    ArchiveParticipant,
+    ArchiveTask,
+    ArchiveTaskAssignee,
+} from "./archiveHelpers";
 
 const STACK_MAX_VISIBLE_DISCS = 3;
 
@@ -26,11 +21,24 @@ export const CATEGORY_TEXT_COLOR: Record<string, string> = {
     "Follow-up": "var(--color-tx-normal)",
 };
 
-const MONTH_ABBR = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+const MONTH_ABBR = [
+    "Jan",
+    "Feb",
+    "Mar",
+    "Apr",
+    "May",
+    "Jun",
+    "Jul",
+    "Aug",
+    "Sep",
+    "Oct",
+    "Nov",
+    "Dec",
+];
 function formatDeadline(v: string): string {
     const d = new Date(v);
     if (Number.isNaN(d.getTime())) return v;
-    return `${String(d.getDate()).padStart(2,"0")} ${MONTH_ABBR[d.getMonth()]} ${d.getFullYear()}`;
+    return `${String(d.getDate()).padStart(2, "0")} ${MONTH_ABBR[d.getMonth()]} ${d.getFullYear()}`;
 }
 
 interface StatusOption {
@@ -41,25 +49,52 @@ interface StatusOption {
 }
 
 export const STATUS_OPTIONS: StatusOption[] = [
-    { value: "pending", label: "Pending", statusLabelClass: "archive-task-status-label archive-task-status-label--pending" },
-    { value: "in-progress", label: "In Progress", statusLabelClass: "archive-task-status-label archive-task-status-label--in-progress" },
+    {
+        value: "pending",
+        label: "Pending",
+        statusLabelClass:
+            "archive-task-status-label archive-task-status-label--pending",
+    },
+    {
+        value: "in-progress",
+        label: "In Progress",
+        statusLabelClass:
+            "archive-task-status-label archive-task-status-label--in-progress",
+    },
     {
         value: "completed",
         label: "Awaiting Verify",
-        statusLabelClass: "archive-task-status-label archive-task-status-label--awaiting-verify",
+        statusLabelClass:
+            "archive-task-status-label archive-task-status-label--awaiting-verify",
     },
-    { value: "verified", label: "Completed", statusLabelClass: "archive-task-status-label archive-task-status-label--completed" },
-    { value: "missing", label: "Missing", statusLabelClass: "archive-task-status-label archive-task-status-label--missing" },
-    { value: "draft", label: "Draft", statusLabelClass: "archive-task-status-label archive-task-status-label--draft" },
+    {
+        value: "verified",
+        label: "Completed",
+        statusLabelClass:
+            "archive-task-status-label archive-task-status-label--completed",
+    },
+    {
+        value: "missing",
+        label: "Missing",
+        statusLabelClass:
+            "archive-task-status-label archive-task-status-label--missing",
+    },
+    {
+        value: "draft",
+        label: "Draft",
+        statusLabelClass:
+            "archive-task-status-label archive-task-status-label--draft",
+    },
 ];
 
-export const STATUS_LOOKUP: Record<string, StatusOption> = STATUS_OPTIONS.reduce(
-    (acc, opt) => {
-        acc[opt.value] = opt;
-        return acc;
-    },
-    {} as Record<string, StatusOption>,
-);
+export const STATUS_LOOKUP: Record<string, StatusOption> =
+    STATUS_OPTIONS.reduce(
+        (acc, opt) => {
+            acc[opt.value] = opt;
+            return acc;
+        },
+        {} as Record<string, StatusOption>,
+    );
 
 interface ArchiveTaskTableProps {
     tasks: ArchiveTask[];
@@ -84,11 +119,36 @@ export function ArchiveTaskTable({
     return (
         <div className="archive-task-table" role="table" aria-label="Tasks">
             <div className="archive-task-table-head" role="row">
-                <div className="archive-task-table-cell archive-task-table-cell--title" role="columnheader">Task</div>
-                <div className="archive-task-table-cell archive-task-table-cell--assignees" role="columnheader">Assigned</div>
-                <div className="archive-task-table-cell archive-task-table-cell--type" role="columnheader">Type</div>
-                <div className="archive-task-table-cell archive-task-table-cell--deadline" role="columnheader">Deadline</div>
-                <div className="archive-task-table-cell archive-task-table-cell--status" role="columnheader">Status</div>
+                <div
+                    className="archive-task-table-cell archive-task-table-cell--title"
+                    role="columnheader"
+                >
+                    Task
+                </div>
+                <div
+                    className="archive-task-table-cell archive-task-table-cell--assignees"
+                    role="columnheader"
+                >
+                    Assigned
+                </div>
+                <div
+                    className="archive-task-table-cell archive-task-table-cell--type"
+                    role="columnheader"
+                >
+                    Type
+                </div>
+                <div
+                    className="archive-task-table-cell archive-task-table-cell--deadline"
+                    role="columnheader"
+                >
+                    Deadline
+                </div>
+                <div
+                    className="archive-task-table-cell archive-task-table-cell--status"
+                    role="columnheader"
+                >
+                    Status
+                </div>
             </div>
             <div className="archive-task-table-body">
                 {tasks.map((task) => (
@@ -116,7 +176,14 @@ interface ArchiveTaskRowProps {
     onTaskUpdated: (next: ArchiveTask) => void;
 }
 
-function ArchiveTaskRow({ task, participants, canEdit, fetchWithAuth, apiBase, onTaskUpdated }: ArchiveTaskRowProps) {
+function ArchiveTaskRow({
+    task,
+    participants,
+    canEdit,
+    fetchWithAuth,
+    apiBase,
+    onTaskUpdated,
+}: ArchiveTaskRowProps) {
     const [titleDraft, setTitleDraft] = useState(task.title);
     const titleEverFocusedRef = useRef(false);
     const [savingTitle, setSavingTitle] = useState(false);
@@ -127,18 +194,31 @@ function ArchiveTaskRow({ task, participants, canEdit, fetchWithAuth, apiBase, o
     }, [task.title]);
 
     const persistTask = useCallback(
-        async (patch: Partial<{ title: string; assignees: string[]; status: string; category: string; deadline: string | null }>) => {
-            const res = await (fetchWithAuth || fetch)(`${apiBase}/tasks/${task.id}`, {
-                method: "PUT",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify(patch),
-            });
+        async (
+            patch: Partial<{
+                title: string;
+                assignees: string[];
+                status: string;
+                category: string;
+                deadline: string | null;
+            }>,
+        ) => {
+            const res = await (fetchWithAuth || fetch)(
+                `${apiBase}/tasks/${task.id}`,
+                {
+                    method: "PUT",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify(patch),
+                },
+            );
             if (res.ok) {
                 const updated = await res.json();
                 onTaskUpdated({
                     ...task,
                     ...updated,
-                    assignees: Array.isArray(updated.assignees) ? updated.assignees : task.assignees,
+                    assignees: Array.isArray(updated.assignees)
+                        ? updated.assignees
+                        : task.assignees,
                 });
                 return true;
             }
@@ -163,7 +243,9 @@ function ArchiveTaskRow({ task, participants, canEdit, fetchWithAuth, apiBase, o
     const setAssignees = useCallback(
         async (ids: string[]) => {
             const enriched: ArchiveTaskAssignee[] = ids.map((id) => {
-                const p = participants.find((pp) => String(pp._id) === String(id));
+                const p = participants.find(
+                    (pp) => String(pp._id) === String(id),
+                );
                 return {
                     id: String(id),
                     name: p?.name ?? null,
@@ -193,14 +275,21 @@ function ArchiveTaskRow({ task, participants, canEdit, fetchWithAuth, apiBase, o
         [onTaskUpdated, persistTask, task],
     );
 
-    const [deadlineDraft, setDeadlineDraft] = useState(task.deadline ? task.deadline.slice(0, 10) : "");
-    useEffect(() => { setDeadlineDraft(task.deadline ? task.deadline.slice(0, 10) : ""); }, [task.deadline]);
+    const [deadlineDraft, setDeadlineDraft] = useState(
+        task.deadline ? task.deadline.slice(0, 10) : "",
+    );
+    useEffect(() => {
+        setDeadlineDraft(task.deadline ? task.deadline.slice(0, 10) : "");
+    }, [task.deadline]);
 
-    const commitDeadline = useCallback(async (val: string) => {
-        const next = val || null;
-        onTaskUpdated({ ...task, deadline: next });
-        await persistTask({ deadline: next });
-    }, [onTaskUpdated, persistTask, task]);
+    const commitDeadline = useCallback(
+        async (val: string) => {
+            const next = val || null;
+            onTaskUpdated({ ...task, deadline: next });
+            await persistTask({ deadline: next });
+        },
+        [onTaskUpdated, persistTask, task],
+    );
 
     const assigneeIds = useMemo(
         () => (task.assignees || []).map((a) => String(a.id)).filter(Boolean),
@@ -209,13 +298,18 @@ function ArchiveTaskRow({ task, participants, canEdit, fetchWithAuth, apiBase, o
 
     return (
         <div className="archive-task-table-row" role="row">
-            <div className="archive-task-table-cell archive-task-table-cell--title" role="cell">
+            <div
+                className="archive-task-table-cell archive-task-table-cell--title"
+                role="cell"
+            >
                 <input
                     type="text"
                     className="archive-task-title-input"
                     value={titleDraft}
                     disabled={!canEdit}
-                    onFocus={() => { titleEverFocusedRef.current = true; }}
+                    onFocus={() => {
+                        titleEverFocusedRef.current = true;
+                    }}
                     onChange={(e) => setTitleDraft(e.target.value)}
                     onBlur={commitTitle}
                     onKeyDown={(e) => {
@@ -229,9 +323,16 @@ function ArchiveTaskRow({ task, participants, canEdit, fetchWithAuth, apiBase, o
                     }}
                     aria-label="Task title"
                 />
-                {savingTitle ? <span className="archive-task-saving" aria-live="polite">Saving…</span> : null}
+                {savingTitle ? (
+                    <span className="archive-task-saving" aria-live="polite">
+                        Saving…
+                    </span>
+                ) : null}
             </div>
-            <div className="archive-task-table-cell archive-task-table-cell--assignees" role="cell">
+            <div
+                className="archive-task-table-cell archive-task-table-cell--assignees"
+                role="cell"
+            >
                 <TaskAssigneePicker
                     participants={participants}
                     value={assigneeIds}
@@ -240,19 +341,34 @@ function ArchiveTaskRow({ task, participants, canEdit, fetchWithAuth, apiBase, o
                     disabled={!canEdit}
                 />
             </div>
-            <div className="archive-task-table-cell archive-task-table-cell--type" role="cell">
+            <div
+                className="archive-task-table-cell archive-task-table-cell--type"
+                role="cell"
+            >
                 {canEdit ? (
                     <TaskCategorySelect
                         value={task.category || "Technical"}
                         onChange={setCategory}
                     />
                 ) : task.category ? (
-                    <span style={{ fontSize: "0.8125rem", color: CATEGORY_TEXT_COLOR[task.category] || "var(--text-secondary)" }}>
+                    <span
+                        style={{
+                            fontSize: "0.8125rem",
+                            color:
+                                CATEGORY_TEXT_COLOR[task.category] ||
+                                "var(--text-secondary)",
+                        }}
+                    >
                         {task.category}
                     </span>
-                ) : <span className="archive-task-no-value">—</span>}
+                ) : (
+                    <span className="archive-task-no-value">—</span>
+                )}
             </div>
-            <div className="archive-task-table-cell archive-task-table-cell--deadline" role="cell">
+            <div
+                className="archive-task-table-cell archive-task-table-cell--deadline"
+                role="cell"
+            >
                 {canEdit ? (
                     <input
                         type="date"
@@ -267,7 +383,10 @@ function ArchiveTaskRow({ task, participants, canEdit, fetchWithAuth, apiBase, o
                     </span>
                 )}
             </div>
-            <div className="archive-task-table-cell archive-task-table-cell--status" role="cell">
+            <div
+                className="archive-task-table-cell archive-task-table-cell--status"
+                role="cell"
+            >
                 <TaskStatusSelect
                     value={task.status}
                     onChange={setStatus}
@@ -304,7 +423,9 @@ export function TaskAssigneePicker({
     const renderableSelected = useMemo(() => {
         return value.map((id) => {
             const p = participants.find((pp) => String(pp._id) === String(id));
-            const fallback = selectedAssignees.find((a) => String(a.id) === String(id));
+            const fallback = selectedAssignees.find(
+                (a) => String(a.id) === String(id),
+            );
             return {
                 id: String(id),
                 name: p?.name ?? fallback?.name ?? "Unknown",
@@ -319,7 +440,8 @@ export function TaskAssigneePicker({
         if (!open) return;
         const onDoc = (ev: MouseEvent) => {
             const el = rootRef.current;
-            if (el && ev.target instanceof Node && !el.contains(ev.target)) close();
+            if (el && ev.target instanceof Node && !el.contains(ev.target))
+                close();
         };
         const onKey = (ev: KeyboardEvent) => {
             if (ev.key === "Escape") close();
@@ -351,7 +473,10 @@ export function TaskAssigneePicker({
             : `Assigned: ${renderableSelected.map((r) => r.name).join(", ")}`;
 
     return (
-        <div className="archive-multi-select archive-multi-select--task-assignees" ref={rootRef}>
+        <div
+            className="archive-multi-select archive-multi-select--task-assignees"
+            ref={rootRef}
+        >
             <button
                 type="button"
                 className="archive-task-cell-trigger archive-task-cell-trigger--assignees"
@@ -375,13 +500,19 @@ export function TaskAssigneePicker({
                                 className={`archive-filter-stack-slot${idx > 0 ? " archive-filter-stack-slot--overlap" : ""}`}
                                 style={{ zIndex: idx + 1 }}
                             >
-                                <span className="archive-filter-stack-disc" aria-hidden>
+                                <span
+                                    className="archive-filter-stack-disc"
+                                    aria-hidden
+                                >
                                     <UserAvatar
                                         name={opt.name}
                                         profileImage={opt.profileImage}
                                         userId={opt.id}
                                         size={18}
-                                        style={{ border: "none", borderRadius: "50%" }}
+                                        style={{
+                                            border: "none",
+                                            borderRadius: "50%",
+                                        }}
                                     />
                                 </span>
                             </div>
@@ -391,19 +522,31 @@ export function TaskAssigneePicker({
                                 className="archive-filter-stack-slot archive-filter-stack-slot--overlap"
                                 style={{ zIndex: stackVisible.length + 1 }}
                             >
-                                <span className="archive-filter-stack-more">+{stackOverflow}</span>
+                                <span className="archive-filter-stack-more">
+                                    +{stackOverflow}
+                                </span>
                             </div>
                         ) : null}
                     </div>
                 )}
                 {!disabled ? (
-                    <span className="archive-multi-select-trigger-chevron" aria-hidden>
-                        <Icon icon={open ? ArrowUp01Icon : ArrowDown01Icon} size={12} />
+                    <span
+                        className="archive-multi-select-trigger-chevron"
+                        aria-hidden
+                    >
+                        <Icon
+                            icon={open ? ArrowUp01Icon : ArrowDown01Icon}
+                            size={12}
+                        />
                     </span>
                 ) : null}
             </button>
             {open && (
-                <div className="archive-multi-select-panel archive-task-cell-panel archive-task-cell-panel--assignees" role="listbox" aria-multiselectable="true">
+                <div
+                    className="archive-multi-select-panel archive-task-cell-panel archive-task-cell-panel--assignees"
+                    role="listbox"
+                    aria-multiselectable="true"
+                >
                     <div className="archive-multi-select-list">
                         <button
                             type="button"
@@ -413,10 +556,14 @@ export function TaskAssigneePicker({
                                 clearAll();
                             }}
                         >
-                            <span className="archive-multi-select-name archive-multi-select-name--all">Unassigned</span>
+                            <span className="archive-multi-select-name archive-multi-select-name--all">
+                                Unassigned
+                            </span>
                         </button>
                         {participants.length === 0 ? (
-                            <div className="archive-multi-select-empty">No participants</div>
+                            <div className="archive-multi-select-empty">
+                                No participants
+                            </div>
                         ) : (
                             participants.map((p) => {
                                 const id = String(p._id);
@@ -433,8 +580,13 @@ export function TaskAssigneePicker({
                                             toggleOne(id);
                                         }}
                                     >
-                                        <span className={`archive-multi-select-check${sel ? " is-checked" : ""}`}>
-                                            <span className="archive-multi-select-check-mark" aria-hidden />
+                                        <span
+                                            className={`archive-multi-select-check${sel ? " is-checked" : ""}`}
+                                        >
+                                            <span
+                                                className="archive-multi-select-check-mark"
+                                                aria-hidden
+                                            />
                                         </span>
                                         <UserAvatar
                                             name={p.name || p.email || "User"}
@@ -442,7 +594,9 @@ export function TaskAssigneePicker({
                                             userId={id}
                                             size={16}
                                         />
-                                        <span className="archive-multi-select-name">{p.name || p.email || "User"}</span>
+                                        <span className="archive-multi-select-name">
+                                            {p.name || p.email || "User"}
+                                        </span>
                                     </button>
                                 );
                             })
@@ -467,9 +621,15 @@ export function TaskCategorySelect({
     const [open, setOpen] = useState(false);
     const rootRef = useRef<HTMLDivElement>(null);
     const panelRef = useRef<HTMLDivElement>(null);
-    const [panelPos, setPanelPos] = useState<{ top?: number; bottom?: number; left: number; minWidth: number } | null>(null);
+    const [panelPos, setPanelPos] = useState<{
+        top?: number;
+        bottom?: number;
+        left: number;
+        minWidth: number;
+    } | null>(null);
     const current = value || CATEGORIES[0];
-    const currentColor = CATEGORY_TEXT_COLOR[current] || "var(--text-secondary)";
+    const currentColor =
+        CATEGORY_TEXT_COLOR[current] || "var(--text-secondary)";
 
     const PANEL_MAX_H = 240;
     const handleToggle = useCallback(() => {
@@ -478,9 +638,17 @@ export function TaskCategorySelect({
             const rect = rootRef.current.getBoundingClientRect();
             const spaceBelow = window.innerHeight - rect.bottom;
             if (spaceBelow < PANEL_MAX_H) {
-                setPanelPos({ bottom: window.innerHeight - rect.top + 4, left: rect.left, minWidth: rect.width });
+                setPanelPos({
+                    bottom: window.innerHeight - rect.top + 4,
+                    left: rect.left,
+                    minWidth: rect.width,
+                });
             } else {
-                setPanelPos({ top: rect.bottom + 4, left: rect.left, minWidth: rect.width });
+                setPanelPos({
+                    top: rect.bottom + 4,
+                    left: rect.left,
+                    minWidth: rect.width,
+                });
             }
         }
         setOpen((o) => !o);
@@ -492,10 +660,12 @@ export function TaskCategorySelect({
             const root = rootRef.current;
             const panel = panelRef.current;
             const t = ev.target as Node;
-            if ((root?.contains(t)) || (panel?.contains(t))) return;
+            if (root?.contains(t) || panel?.contains(t)) return;
             setOpen(false);
         };
-        const onKey = (ev: KeyboardEvent) => { if (ev.key === "Escape") setOpen(false); };
+        const onKey = (ev: KeyboardEvent) => {
+            if (ev.key === "Escape") setOpen(false);
+        };
         const onScroll = () => setOpen(false);
         document.addEventListener("mousedown", onDoc);
         document.addEventListener("keydown", onKey);
@@ -508,7 +678,10 @@ export function TaskCategorySelect({
     }, [open]);
 
     return (
-        <div className="archive-multi-select archive-multi-select--task-status" ref={rootRef}>
+        <div
+            className="archive-multi-select archive-multi-select--task-status"
+            ref={rootRef}
+        >
             <button
                 type="button"
                 className="archive-task-cell-trigger"
@@ -517,47 +690,73 @@ export function TaskCategorySelect({
                 aria-haspopup="listbox"
                 aria-expanded={open}
             >
-                <span style={{ color: currentColor, fontSize: "0.8125rem", fontWeight: 500 }}>{current}</span>
+                <span
+                    style={{
+                        color: currentColor,
+                        fontSize: "0.8125rem",
+                        fontWeight: 500,
+                    }}
+                >
+                    {current}
+                </span>
                 {!disabled && (
-                    <span className="archive-multi-select-trigger-chevron" aria-hidden>
-                        <Icon icon={open ? ArrowUp01Icon : ArrowDown01Icon} size={12} />
+                    <span
+                        className="archive-multi-select-trigger-chevron"
+                        aria-hidden
+                    >
+                        <Icon
+                            icon={open ? ArrowUp01Icon : ArrowDown01Icon}
+                            size={12}
+                        />
                     </span>
                 )}
             </button>
-            {open && panelPos && createPortal(
-                <div
-                    ref={panelRef}
-                    className="archive-multi-select-list archive-cat-panel-portal"
-                    role="listbox"
-                    style={{
-                        top: panelPos.top,
-                        bottom: panelPos.bottom,
-                        left: panelPos.left,
-                        minWidth: panelPos.minWidth,
-                    }}
-                >
-                    {CATEGORIES.map((cat) => {
-                        const sel = cat === value;
-                        return (
-                            <button
-                                key={cat}
-                                type="button"
-                                role="option"
-                                aria-selected={sel}
-                                className={`archive-multi-select-row archive-task-status-row${sel ? " is-selected" : ""}`}
-                                onClick={(e) => {
-                                    e.preventDefault();
-                                    onChange(cat);
-                                    setOpen(false);
-                                }}
-                            >
-                                <span style={{ color: CATEGORY_TEXT_COLOR[cat] || "var(--text-secondary)", fontSize: "0.8125rem", fontWeight: 500 }}>{cat}</span>
-                            </button>
-                        );
-                    })}
-                </div>,
-                document.body,
-            )}
+            {open &&
+                panelPos &&
+                createPortal(
+                    <div
+                        ref={panelRef}
+                        className="archive-multi-select-list archive-cat-panel-portal"
+                        role="listbox"
+                        style={{
+                            top: panelPos.top,
+                            bottom: panelPos.bottom,
+                            left: panelPos.left,
+                            minWidth: panelPos.minWidth,
+                        }}
+                    >
+                        {CATEGORIES.map((cat) => {
+                            const sel = cat === value;
+                            return (
+                                <button
+                                    key={cat}
+                                    type="button"
+                                    role="option"
+                                    aria-selected={sel}
+                                    className={`archive-multi-select-row archive-task-status-row${sel ? " is-selected" : ""}`}
+                                    onClick={(e) => {
+                                        e.preventDefault();
+                                        onChange(cat);
+                                        setOpen(false);
+                                    }}
+                                >
+                                    <span
+                                        style={{
+                                            color:
+                                                CATEGORY_TEXT_COLOR[cat] ||
+                                                "var(--text-secondary)",
+                                            fontSize: "0.8125rem",
+                                            fontWeight: 500,
+                                        }}
+                                    >
+                                        {cat}
+                                    </span>
+                                </button>
+                            );
+                        })}
+                    </div>,
+                    document.body,
+                )}
         </div>
     );
 }
@@ -578,13 +777,20 @@ export function TaskStatusSelect({
     const [open, setOpen] = useState(false);
     const rootRef = useRef<HTMLDivElement>(null);
     const panelRef = useRef<HTMLDivElement>(null);
-    const [panelPos, setPanelPos] = useState<{ top?: number; bottom?: number; left: number; minWidth: number } | null>(null);
+    const [panelPos, setPanelPos] = useState<{
+        top?: number;
+        bottom?: number;
+        left: number;
+        minWidth: number;
+    } | null>(null);
     const current = STATUS_LOOKUP[value] || STATUS_OPTIONS[0];
 
     const dropdownOptions = useMemo(() => {
         let list =
             allowedStatuses?.length > 0
-                ? STATUS_OPTIONS.filter((o) => allowedStatuses.includes(o.value))
+                ? STATUS_OPTIONS.filter((o) =>
+                      allowedStatuses.includes(o.value),
+                  )
                 : STATUS_OPTIONS;
         if (!list.some((o) => o.value === value) && STATUS_LOOKUP[value]) {
             list = [STATUS_LOOKUP[value], ...list];
@@ -599,9 +805,17 @@ export function TaskStatusSelect({
             const rect = rootRef.current.getBoundingClientRect();
             const spaceBelow = window.innerHeight - rect.bottom;
             if (spaceBelow < STATUS_PANEL_MAX_H) {
-                setPanelPos({ bottom: window.innerHeight - rect.top + 4, left: rect.left, minWidth: rect.width });
+                setPanelPos({
+                    bottom: window.innerHeight - rect.top + 4,
+                    left: rect.left,
+                    minWidth: rect.width,
+                });
             } else {
-                setPanelPos({ top: rect.bottom + 4, left: rect.left, minWidth: rect.width });
+                setPanelPos({
+                    top: rect.bottom + 4,
+                    left: rect.left,
+                    minWidth: rect.width,
+                });
             }
         }
         setOpen((o) => !o);
@@ -613,10 +827,12 @@ export function TaskStatusSelect({
             const root = rootRef.current;
             const panel = panelRef.current;
             const t = ev.target as Node;
-            if ((root?.contains(t)) || (panel?.contains(t))) return;
+            if (root?.contains(t) || panel?.contains(t)) return;
             setOpen(false);
         };
-        const onKey = (ev: KeyboardEvent) => { if (ev.key === "Escape") setOpen(false); };
+        const onKey = (ev: KeyboardEvent) => {
+            if (ev.key === "Escape") setOpen(false);
+        };
         const onScroll = () => setOpen(false);
         document.addEventListener("mousedown", onDoc);
         document.addEventListener("keydown", onKey);
@@ -629,7 +845,10 @@ export function TaskStatusSelect({
     }, [open]);
 
     return (
-        <div className="archive-multi-select archive-multi-select--task-status" ref={rootRef}>
+        <div
+            className="archive-multi-select archive-multi-select--task-status"
+            ref={rootRef}
+        >
             <button
                 type="button"
                 className="archive-task-cell-trigger"
@@ -638,47 +857,59 @@ export function TaskStatusSelect({
                 aria-haspopup="listbox"
                 aria-expanded={open}
             >
-                <span className={current.statusLabelClass}>{current.label}</span>
+                <span className={current.statusLabelClass}>
+                    {current.label}
+                </span>
                 {!disabled ? (
-                    <span className="archive-multi-select-trigger-chevron" aria-hidden>
-                        <Icon icon={open ? ArrowUp01Icon : ArrowDown01Icon} size={12} />
+                    <span
+                        className="archive-multi-select-trigger-chevron"
+                        aria-hidden
+                    >
+                        <Icon
+                            icon={open ? ArrowUp01Icon : ArrowDown01Icon}
+                            size={12}
+                        />
                     </span>
                 ) : null}
             </button>
-            {open && panelPos && createPortal(
-                <div
-                    ref={panelRef}
-                    className="archive-multi-select-list archive-status-panel-portal"
-                    role="listbox"
-                    style={{
-                        top: panelPos.top,
-                        bottom: panelPos.bottom,
-                        left: panelPos.left,
-                        minWidth: panelPos.minWidth,
-                    }}
-                >
-                    {dropdownOptions.map((opt) => {
-                        const sel = opt.value === value;
-                        return (
-                            <button
-                                key={opt.value}
-                                type="button"
-                                role="option"
-                                aria-selected={sel}
-                                className={`archive-multi-select-row archive-task-status-row${sel ? " is-selected" : ""}`}
-                                onClick={(e) => {
-                                    e.preventDefault();
-                                    onChange(opt.value);
-                                    setOpen(false);
-                                }}
-                            >
-                                <span className={opt.statusLabelClass}>{opt.label}</span>
-                            </button>
-                        );
-                    })}
-                </div>,
-                document.body,
-            )}
+            {open &&
+                panelPos &&
+                createPortal(
+                    <div
+                        ref={panelRef}
+                        className="archive-multi-select-list archive-status-panel-portal"
+                        role="listbox"
+                        style={{
+                            top: panelPos.top,
+                            bottom: panelPos.bottom,
+                            left: panelPos.left,
+                            minWidth: panelPos.minWidth,
+                        }}
+                    >
+                        {dropdownOptions.map((opt) => {
+                            const sel = opt.value === value;
+                            return (
+                                <button
+                                    key={opt.value}
+                                    type="button"
+                                    role="option"
+                                    aria-selected={sel}
+                                    className={`archive-multi-select-row archive-task-status-row${sel ? " is-selected" : ""}`}
+                                    onClick={(e) => {
+                                        e.preventDefault();
+                                        onChange(opt.value);
+                                        setOpen(false);
+                                    }}
+                                >
+                                    <span className={opt.statusLabelClass}>
+                                        {opt.label}
+                                    </span>
+                                </button>
+                            );
+                        })}
+                    </div>,
+                    document.body,
+                )}
         </div>
     );
 }

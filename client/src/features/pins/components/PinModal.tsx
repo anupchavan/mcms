@@ -1,8 +1,8 @@
-import { useState } from 'react';
-import Icon from '../../../shared/components/Icon';
-import { Cancel01Icon, PinIcon } from '@hugeicons/core-free-icons';
+import { useState } from "react";
+import Icon from "../../../shared/components/Icon";
+import { Cancel01Icon, PinIcon } from "@hugeicons/core-free-icons";
 
-const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:5001/api';
+const API_BASE = import.meta.env.VITE_API_URL || "http://localhost:5001/api";
 
 interface PinModalProps {
     meetingId: string;
@@ -12,43 +12,56 @@ interface PinModalProps {
     onPinCreated?: () => void;
 }
 
-export default function PinModal({ meetingId, transcriptTimestamp, onClose, fetchWithAuth, onPinCreated }: PinModalProps) {
-    const [type, setType] = useState('url');
-    const [url, setUrl] = useState('');
-    const [content, setContent] = useState('');
-    const [label, setLabel] = useState('');
-    const [pageNumber, setPageNumber] = useState('');
-    const [lineNumber, setLineNumber] = useState('');
-    const [language, setLanguage] = useState('');
+export default function PinModal({
+    meetingId,
+    transcriptTimestamp,
+    onClose,
+    fetchWithAuth,
+    onPinCreated,
+}: PinModalProps) {
+    const [type, setType] = useState("url");
+    const [url, setUrl] = useState("");
+    const [content, setContent] = useState("");
+    const [label, setLabel] = useState("");
+    const [pageNumber, setPageNumber] = useState("");
+    const [lineNumber, setLineNumber] = useState("");
+    const [language, setLanguage] = useState("");
     const [saving, setSaving] = useState(false);
 
     const handleSubmit = async () => {
-        if (type === 'url' && !url.trim()) return;
-        if (type === 'code' && !content.trim()) return;
+        if (type === "url" && !url.trim()) return;
+        if (type === "code" && !content.trim()) return;
         setSaving(true);
         try {
-            const res = await (fetchWithAuth || fetch)(`${API_BASE}/pins/${meetingId}`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    type,
-                    url: type !== 'code' ? url.trim() : null,
-                    content: type === 'code' ? content : null,
-                    label: label.trim(),
-                    transcriptTimestamp,
-                    metadata: {
-                        pageNumber: pageNumber ? parseInt(pageNumber) : null,
-                        lineNumber: lineNumber ? parseInt(lineNumber) : null,
-                        language: language || null,
-                    },
-                }),
-            });
+            const res = await (fetchWithAuth || fetch)(
+                `${API_BASE}/pins/${meetingId}`,
+                {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({
+                        type,
+                        url: type !== "code" ? url.trim() : null,
+                        content: type === "code" ? content : null,
+                        label: label.trim(),
+                        transcriptTimestamp,
+                        metadata: {
+                            pageNumber: pageNumber
+                                ? parseInt(pageNumber)
+                                : null,
+                            lineNumber: lineNumber
+                                ? parseInt(lineNumber)
+                                : null,
+                            language: language || null,
+                        },
+                    }),
+                },
+            );
             if (res.ok) {
                 onPinCreated?.();
                 onClose();
             }
         } catch (err) {
-            console.error('Failed to create pin:', err);
+            console.error("Failed to create pin:", err);
         }
         setSaving(false);
     };
@@ -69,10 +82,10 @@ export default function PinModal({ meetingId, transcriptTimestamp, onClose, fetc
                 </div>
 
                 <div className="pin-modal-tab-row">
-                    {['url', 'pdf', 'code'].map(t => (
+                    {["url", "pdf", "code"].map((t) => (
                         <button
                             key={t}
-                            className={`chip pin-chip-btn ${type === t ? 'chip-blue' : ''}`}
+                            className={`chip pin-chip-btn ${type === t ? "chip-blue" : ""}`}
                             onClick={() => setType(t)}
                         >
                             {t.toUpperCase()}
@@ -81,16 +94,14 @@ export default function PinModal({ meetingId, transcriptTimestamp, onClose, fetc
                 </div>
 
                 <input
-                    className="input-field"
                     placeholder="Label (optional)"
                     value={label}
                     onChange={(e) => setLabel(e.target.value)}
                     className="input-field pin-modal-input"
                 />
 
-                {type !== 'code' && (
+                {type !== "code" && (
                     <input
-                        className="input-field"
                         placeholder="URL..."
                         value={url}
                         onChange={(e) => setUrl(e.target.value)}
@@ -98,7 +109,7 @@ export default function PinModal({ meetingId, transcriptTimestamp, onClose, fetc
                     />
                 )}
 
-                {type === 'code' && (
+                {type === "code" && (
                     <textarea
                         className="input-field pin-modal-textarea"
                         placeholder="Paste code snippet..."
@@ -109,7 +120,7 @@ export default function PinModal({ meetingId, transcriptTimestamp, onClose, fetc
                 )}
 
                 <div className="pin-modal-meta-row">
-                    {type === 'pdf' && (
+                    {type === "pdf" && (
                         <input
                             type="number"
                             placeholder="Page #"
@@ -118,7 +129,7 @@ export default function PinModal({ meetingId, transcriptTimestamp, onClose, fetc
                             className="input-field pin-modal-meta-input"
                         />
                     )}
-                    {type === 'code' && (
+                    {type === "code" && (
                         <>
                             <input
                                 type="number"
@@ -144,9 +155,15 @@ export default function PinModal({ meetingId, transcriptTimestamp, onClose, fetc
                 )}
 
                 <div className="pin-modal-actions">
-                    <button className="btn btn-secondary" onClick={onClose}>Cancel</button>
-                    <button className="btn btn-primary" onClick={handleSubmit} disabled={saving}>
-                        {saving ? 'Saving...' : 'Pin'}
+                    <button className="btn btn-secondary" onClick={onClose}>
+                        Cancel
+                    </button>
+                    <button
+                        className="btn btn-primary"
+                        onClick={handleSubmit}
+                        disabled={saving}
+                    >
+                        {saving ? "Saving..." : "Pin"}
                     </button>
                 </div>
             </div>

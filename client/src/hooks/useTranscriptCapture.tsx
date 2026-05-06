@@ -1,4 +1,4 @@
-import { useEffect, useRef, useCallback } from 'react';
+import { useEffect, useRef, useCallback } from "react";
 
 declare global {
     interface Window {
@@ -11,7 +11,11 @@ const BUFFER_SIZE = 4096;
 const RMS_GATE_THRESHOLD = 0.012;
 const VOICE_HOLD_FRAMES = 8;
 
-function resampleBuffer(inputBuffer: Float32Array, fromRate: number, toRate: number): Float32Array {
+function resampleBuffer(
+    inputBuffer: Float32Array,
+    fromRate: number,
+    toRate: number,
+): Float32Array {
     if (fromRate === toRate) return inputBuffer;
     const ratio = fromRate / toRate;
     const newLength = Math.round(inputBuffer.length / ratio);
@@ -30,15 +34,16 @@ function float32ToInt16(float32Array: Float32Array): Int16Array {
     const int16 = new Int16Array(float32Array.length);
     for (let i = 0; i < float32Array.length; i++) {
         const s = Math.max(-1, Math.min(1, float32Array[i]));
-        int16[i] = s < 0 ? s * 0x8000 : s * 0x7FFF;
+        int16[i] = s < 0 ? s * 0x8000 : s * 0x7fff;
     }
     return int16;
 }
 
 function int16ToBase64(int16Array: Int16Array): string {
     const bytes = new Uint8Array(int16Array.buffer);
-    let binary = '';
-    for (let i = 0; i < bytes.length; i++) binary += String.fromCharCode(bytes[i]);
+    let binary = "";
+    for (let i = 0; i < bytes.length; i++)
+        binary += String.fromCharCode(bytes[i]);
     return btoa(binary);
 }
 
@@ -51,7 +56,7 @@ function computeRMS(buffer: Float32Array): number {
 export default function useTranscriptionCapture(
     socket: any,
     meetingId: string | null,
-    localStream: MediaStream | null
+    localStream: MediaStream | null,
 ) {
     const audioContextRef = useRef<AudioContext | null>(null);
     const processorRef = useRef<ScriptProcessorNode | null>(null);
@@ -67,8 +72,14 @@ export default function useTranscriptionCapture(
             processorRef.current.onaudioprocess = null;
             processorRef.current = null;
         }
-        if (sourceRef.current) { sourceRef.current.disconnect(); sourceRef.current = null; }
-        if (audioContextRef.current) { audioContextRef.current.close().catch(() => {}); audioContextRef.current = null; }
+        if (sourceRef.current) {
+            sourceRef.current.disconnect();
+            sourceRef.current = null;
+        }
+        if (audioContextRef.current) {
+            audioContextRef.current.close().catch(() => {});
+            audioContextRef.current = null;
+        }
     }, []);
 
     const startCapture = useCallback(() => {
@@ -77,7 +88,9 @@ export default function useTranscriptionCapture(
         if (!audioTrack) return;
         activeRef.current = true;
         holdCounterRef.current = 0;
-        const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        const audioCtx = new (
+            window.AudioContext || window.webkitAudioContext
+        )();
         audioContextRef.current = audioCtx;
         const audioOnlyStream = new MediaStream([audioTrack]);
         const source = audioCtx.createMediaStreamSource(audioOnlyStream);
@@ -95,10 +108,14 @@ export default function useTranscriptionCapture(
             } else {
                 return;
             }
-            const resampled = resampleBuffer(inputData, audioCtx.sampleRate, TARGET_SAMPLE_RATE);
+            const resampled = resampleBuffer(
+                inputData,
+                audioCtx.sampleRate,
+                TARGET_SAMPLE_RATE,
+            );
             const int16 = float32ToInt16(resampled);
             const base64 = int16ToBase64(int16);
-            socket.emit('audio_chunk', { meetingId, data: base64 });
+            socket.emit("audio_chunk", { meetingId, data: base64 });
         };
         source.connect(processor);
         processor.connect(audioCtx.destination);
@@ -112,11 +129,11 @@ export default function useTranscriptionCapture(
         const handleStopped = ({ meetingId: mid }: { meetingId: string }) => {
             if (mid === meetingId) stopCapture();
         };
-        socket.on('transcription_started', handleStarted);
-        socket.on('transcription_stopped', handleStopped);
+        socket.on("transcription_started", handleStarted);
+        socket.on("transcription_stopped", handleStopped);
         return () => {
-            socket.off('transcription_started', handleStarted);
-            socket.off('transcription_stopped', handleStopped);
+            socket.off("transcription_started", handleStarted);
+            socket.off("transcription_stopped", handleStopped);
             stopCapture();
         };
     }, [socket, meetingId, startCapture, stopCapture]);

@@ -3,8 +3,8 @@ import { useEffect, useState } from "react";
 export type Theme = "light" | "dark";
 
 function readTheme(): Theme {
-  if (typeof document === "undefined") return "dark";
-  return document.documentElement.getAttribute("data-theme") === "light" ? "light" : "dark";
+	if (typeof document === "undefined") return "dark";
+	return document.documentElement.getAttribute("data-theme") === "light" ? "light" : "dark";
 }
 
 /**
@@ -17,17 +17,17 @@ function readTheme(): Theme {
  * threading the theme through props.
  */
 export function useTheme(): Theme {
-  const [theme, setTheme] = useState<Theme>(readTheme);
+	const [theme, setTheme] = useState<Theme>(readTheme);
 
-  useEffect(() => {
-    if (typeof document === "undefined") return;
-    const root = document.documentElement;
-    const update = () => setTheme(readTheme());
-    update();
-    const obs = new MutationObserver(update);
-    obs.observe(root, { attributes: true, attributeFilter: ["data-theme"] });
-    return () => obs.disconnect();
-  }, []);
+	useEffect(() => {
+		if (typeof document === "undefined") return;
+		const root = document.documentElement;
+		const update = () => setTheme(readTheme());
+		update();
+		const obs = new MutationObserver(update);
+		obs.observe(root, { attributes: true, attributeFilter: ["data-theme"] });
+		return () => obs.disconnect();
+	}, []);
 
-  return theme;
+	return theme;
 }

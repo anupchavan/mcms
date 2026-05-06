@@ -1,6 +1,6 @@
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import { Link } from 'react-router-dom';
-import Icon from '../../../shared/components/Icon';
+import React, { useState, useEffect, useCallback, useMemo } from "react";
+import { Link } from "react-router-dom";
+import Icon from "../../../shared/components/Icon";
 import {
     ChartIncreaseIcon,
     Clock01Icon,
@@ -17,7 +17,7 @@ import {
     Target01Icon,
     BulbIcon,
     RocketIcon,
-} from '@hugeicons/core-free-icons';
+} from "@hugeicons/core-free-icons";
 
 type Badge = {
     name: string;
@@ -56,7 +56,7 @@ interface ProductivityDashboardProps {
     myTasks?: { assignedToMe: TaskMini[]; assignedByMe: TaskMini[] };
 }
 
-const TABS = ['overview', 'attendance', 'engagement'];
+const TABS = ["overview", "attendance", "engagement"];
 
 /** Map server-emitted badge iconKey strings to HugeIcons. Unknown keys fall back to a neutral award icon. */
 const BADGE_ICON_MAP: Record<string, typeof Award01Icon> = {
@@ -70,7 +70,8 @@ const BADGE_ICON_MAP: Record<string, typeof Award01Icon> = {
 };
 
 function badgeIcon(b: Badge): typeof Award01Icon {
-    if (b.iconKey && BADGE_ICON_MAP[b.iconKey]) return BADGE_ICON_MAP[b.iconKey];
+    if (b.iconKey && BADGE_ICON_MAP[b.iconKey])
+        return BADGE_ICON_MAP[b.iconKey];
     return Award01Icon;
 }
 
@@ -80,15 +81,20 @@ type Recommendation = { id: string; icon: typeof BulbIcon; text: string };
 function buildRecommendations(stats: DashboardStats): Recommendation[] {
     const recs: Recommendation[] = [];
 
-    const taskRatio = stats.tasksTotal > 0 ? stats.tasksCompleted / stats.tasksTotal : null;
-    const meetingMinutesTotal = Math.max(1, stats.avgMeetingDuration * Math.max(1, stats.totalMeetings));
-    const speakingShare = stats.speakingTime > 0
-        ? Math.round((stats.speakingTime / meetingMinutesTotal) * 100)
-        : 0;
+    const taskRatio =
+        stats.tasksTotal > 0 ? stats.tasksCompleted / stats.tasksTotal : null;
+    const meetingMinutesTotal = Math.max(
+        1,
+        stats.avgMeetingDuration * Math.max(1, stats.totalMeetings),
+    );
+    const speakingShare =
+        stats.speakingTime > 0
+            ? Math.round((stats.speakingTime / meetingMinutesTotal) * 100)
+            : 0;
 
     if (stats.totalMeetings === 0) {
         recs.push({
-            id: 'no-meetings',
+            id: "no-meetings",
             icon: RocketIcon,
             text: "No meetings yet — schedule or join one to start building your meeting intelligence profile.",
         });
@@ -97,13 +103,13 @@ function buildRecommendations(stats: DashboardStats): Recommendation[] {
 
     if (taskRatio != null && taskRatio >= 0.85) {
         recs.push({
-            id: 'task-strong',
+            id: "task-strong",
             icon: Target01Icon,
             text: `Strong task follow-through: you've completed ${Math.round(taskRatio * 100)}% of tasks assigned to you.`,
         });
     } else if (taskRatio != null && taskRatio < 0.5 && stats.tasksTotal >= 3) {
         recs.push({
-            id: 'task-weak',
+            id: "task-weak",
             icon: Target01Icon,
             text: `Only ${Math.round(taskRatio * 100)}% of your tasks are verified — review the pending ones to keep momentum.`,
         });
@@ -111,13 +117,17 @@ function buildRecommendations(stats: DashboardStats): Recommendation[] {
 
     if (speakingShare >= 50) {
         recs.push({
-            id: 'speaking-high',
+            id: "speaking-high",
             icon: Mic01Icon,
             text: `You're speaking for an estimated ${speakingShare}% of meeting time — consider opening more floor time for other participants.`,
         });
-    } else if (stats.speakingTime > 0 && speakingShare > 0 && speakingShare < 10) {
+    } else if (
+        stats.speakingTime > 0 &&
+        speakingShare > 0 &&
+        speakingShare < 10
+    ) {
         recs.push({
-            id: 'speaking-low',
+            id: "speaking-low",
             icon: Mic01Icon,
             text: `Your share of voice is around ${speakingShare}% — try contributing more in upcoming discussions.`,
         });
@@ -125,13 +135,13 @@ function buildRecommendations(stats: DashboardStats): Recommendation[] {
 
     if (stats.streak >= 5) {
         recs.push({
-            id: 'streak',
+            id: "streak",
             icon: FireIcon,
             text: `You're on a ${stats.streak}-meeting punctuality streak — keep it up to unlock the next badge.`,
         });
     } else if (stats.punctualityRate < 70 && stats.totalMeetings >= 3) {
         recs.push({
-            id: 'punctuality-low',
+            id: "punctuality-low",
             icon: Clock01Icon,
             text: `Your punctuality rate is ${stats.punctualityRate}% — joining a few minutes earlier would push you toward the on-time badge.`,
         });
@@ -139,7 +149,7 @@ function buildRecommendations(stats: DashboardStats): Recommendation[] {
 
     if (recs.length === 0) {
         recs.push({
-            id: 'general',
+            id: "general",
             icon: BulbIcon,
             text: "Keep attending and contributing to meetings — recommendations get more specific as you build history.",
         });
@@ -148,25 +158,34 @@ function buildRecommendations(stats: DashboardStats): Recommendation[] {
     return recs.slice(0, 3);
 }
 
-export default function ProductivityDashboard({ stats, userName, personalRoomId, myTasks }: ProductivityDashboardProps) {
-    const [activeTab, setActiveTab] = useState('overview');
+export default function ProductivityDashboard({
+    stats,
+    userName,
+    personalRoomId,
+    myTasks,
+}: ProductivityDashboardProps) {
+    const [activeTab, setActiveTab] = useState("overview");
 
     const handleTab = useCallback((e: KeyboardEvent) => {
-        if (e.key !== 'Tab' || e.altKey || e.metaKey || e.ctrlKey) return;
+        if (e.key !== "Tab" || e.altKey || e.metaKey || e.ctrlKey) return;
 
         const tag = document.activeElement?.tagName;
-        if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
+        if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") return;
         if ((document.activeElement as HTMLElement)?.isContentEditable) return;
-        if (document.querySelector('.modal-overlay, .meeting-creation-overlay')) return;
+        if (document.querySelector(".modal-overlay, .meeting-creation-overlay"))
+            return;
 
         e.preventDefault();
         const dir = e.shiftKey ? -1 : 1;
-        setActiveTab(prev => TABS[(TABS.indexOf(prev) + dir + TABS.length) % TABS.length]);
+        setActiveTab(
+            (prev) =>
+                TABS[(TABS.indexOf(prev) + dir + TABS.length) % TABS.length],
+        );
     }, []);
 
     useEffect(() => {
-        window.addEventListener('keydown', handleTab);
-        return () => window.removeEventListener('keydown', handleTab);
+        window.addEventListener("keydown", handleTab);
+        return () => window.removeEventListener("keydown", handleTab);
     }, [handleTab]);
 
     const recommendations = useMemo(
@@ -176,29 +195,38 @@ export default function ProductivityDashboard({ stats, userName, personalRoomId,
 
     if (!stats) return null;
 
-    const maxHours = Math.max(1, ...stats.weeklyHeatmap.map(d => d.hours));
-    const meetingMinutesTotal = Math.max(1, stats.avgMeetingDuration * Math.max(1, stats.totalMeetings));
-    const speakingSharePct = stats.speakingTime > 0
-        ? Math.min(100, Math.round((stats.speakingTime / meetingMinutesTotal) * 100))
-        : 0;
-    const taskCompletionPct = stats.tasksTotal > 0
-        ? Math.round((stats.tasksCompleted / stats.tasksTotal) * 100)
-        : 0;
+    const maxHours = Math.max(1, ...stats.weeklyHeatmap.map((d) => d.hours));
+    const meetingMinutesTotal = Math.max(
+        1,
+        stats.avgMeetingDuration * Math.max(1, stats.totalMeetings),
+    );
+    const speakingSharePct =
+        stats.speakingTime > 0
+            ? Math.min(
+                  100,
+                  Math.round((stats.speakingTime / meetingMinutesTotal) * 100),
+              )
+            : 0;
+    const taskCompletionPct =
+        stats.tasksTotal > 0
+            ? Math.round((stats.tasksCompleted / stats.tasksTotal) * 100)
+            : 0;
 
     return (
         <div className="productivity-dashboard">
             <header className="page-header">
                 <h2 className="page-header-title">Dashboard</h2>
                 <p className="page-header-description">
-                    Welcome back, <strong>{userName || stats.user}</strong>. Here&apos;s your meeting intelligence overview.
+                    Welcome back, <strong>{userName || stats.user}</strong>.
+                    Here&apos;s your meeting intelligence overview.
                 </p>
             </header>
 
             <div className="tabs page-tabs">
-                {TABS.map(tab => (
+                {TABS.map((tab) => (
                     <button
                         key={tab}
-                        className={`tab ${activeTab === tab ? 'active' : ''}`}
+                        className={`tab ${activeTab === tab ? "active" : ""}`}
                         onClick={() => setActiveTab(tab)}
                         id={`tab-${tab}`}
                     >
@@ -207,17 +235,26 @@ export default function ProductivityDashboard({ stats, userName, personalRoomId,
                 ))}
             </div>
 
-            {activeTab === 'overview' && (
+            {activeTab === "overview" && (
                 <div className="dashboard-grid">
                     {personalRoomId && (
                         <div className="stat-card glass-card stat-span-2-room">
                             <div className="stat-row-between">
                                 <div>
                                     <div className="stat-icon-row-mb-sm">
-                                        <Icon icon={UserGroupIcon} size={20} className="stat-icon-primary" />
-                                        <h3 className="stat-room-title">Your Personal Room</h3>
+                                        <Icon
+                                            icon={UserGroupIcon}
+                                            size={20}
+                                            className="stat-icon-primary"
+                                        />
+                                        <h3 className="stat-room-title">
+                                            Your Personal Room
+                                        </h3>
                                     </div>
-                                    <p className="stat-room-desc">An always-on meeting space. Share this link for instant meetings.</p>
+                                    <p className="stat-room-desc">
+                                        An always-on meeting space. Share this
+                                        link for instant meetings.
+                                    </p>
                                 </div>
                                 <div className="stat-btn-row">
                                     <button
@@ -225,18 +262,29 @@ export default function ProductivityDashboard({ stats, userName, personalRoomId,
                                         onClick={() => {
                                             const link = `${window.location.origin}/rooms/${personalRoomId}`;
                                             navigator.clipboard.writeText(link);
-                                            const btn = document.getElementById('copy-personal-room');
+                                            const btn =
+                                                document.getElementById(
+                                                    "copy-personal-room",
+                                                );
                                             if (btn) {
                                                 const original = btn.innerText;
-                                                btn.innerText = 'Copied!';
-                                                setTimeout(() => btn.innerText = original, 2000);
+                                                btn.innerText = "Copied!";
+                                                setTimeout(
+                                                    () =>
+                                                        (btn.innerText =
+                                                            original),
+                                                    2000,
+                                                );
                                             }
                                         }}
                                         id="copy-personal-room"
                                     >
                                         Copy Link
                                     </button>
-                                    <Link to={`/rooms/${personalRoomId}`} className="btn btn-primary btn-sm">
+                                    <Link
+                                        to={`/rooms/${personalRoomId}`}
+                                        className="btn btn-primary btn-sm"
+                                    >
                                         Join Now
                                     </Link>
                                 </div>
@@ -246,15 +294,25 @@ export default function ProductivityDashboard({ stats, userName, personalRoomId,
 
                     <div className="stat-card glass-card">
                         <div className="stat-icon-row">
-                            <Icon icon={Calendar02Icon} size={18} className="stat-icon-primary" />
-                            <span className="stat-label">Meetings Attended</span>
+                            <Icon
+                                icon={Calendar02Icon}
+                                size={18}
+                                className="stat-icon-primary"
+                            />
+                            <span className="stat-label">
+                                Meetings Attended
+                            </span>
                         </div>
                         <div className="stat-value">{stats.totalMeetings}</div>
                     </div>
 
                     <div className="stat-card glass-card">
                         <div className="stat-icon-row">
-                            <Icon icon={Clock01Icon} size={18} className="stat-icon-violet" />
+                            <Icon
+                                icon={Clock01Icon}
+                                size={18}
+                                className="stat-icon-violet"
+                            />
                             <span className="stat-label">Total Hours</span>
                         </div>
                         <div className="stat-value">{stats.totalHours}</div>
@@ -262,18 +320,30 @@ export default function ProductivityDashboard({ stats, userName, personalRoomId,
 
                     <div className="stat-card glass-card">
                         <div className="stat-icon-row">
-                            <Icon icon={ChartIncreaseIcon} size={18} className="stat-icon-emerald" />
+                            <Icon
+                                icon={ChartIncreaseIcon}
+                                size={18}
+                                className="stat-icon-emerald"
+                            />
                             <span className="stat-label">Punctuality Rate</span>
                         </div>
-                        <div className="stat-value">{stats.punctualityRate}%</div>
+                        <div className="stat-value">
+                            {stats.punctualityRate}%
+                        </div>
                     </div>
 
                     <div className="stat-card glass-card">
                         <div className="stat-icon-row">
-                            <Icon icon={CheckmarkSquare01Icon} size={18} className="stat-icon-amber" />
+                            <Icon
+                                icon={CheckmarkSquare01Icon}
+                                size={18}
+                                className="stat-icon-amber"
+                            />
                             <span className="stat-label">Tasks Completed</span>
                         </div>
-                        <div className="stat-value">{stats.tasksCompleted}/{stats.tasksTotal}</div>
+                        <div className="stat-value">
+                            {stats.tasksCompleted}/{stats.tasksTotal}
+                        </div>
                         {(() => {
                             const tasks = myTasks?.assignedToMe ?? [];
                             const shown = tasks.slice(0, 3);
@@ -292,13 +362,22 @@ export default function ProductivityDashboard({ stats, userName, personalRoomId,
                                                 {t.title}
                                             </Link>
                                         ) : (
-                                            <span key={t.id} className="dashboard-task-mini-item dashboard-task-mini-item--no-link" title={t.title}>
+                                            <span
+                                                key={t.id}
+                                                className="dashboard-task-mini-item dashboard-task-mini-item--no-link"
+                                                title={t.title}
+                                            >
                                                 {t.title}
                                             </span>
-                                        )
+                                        ),
                                     )}
                                     {rest > 0 && (
-                                        <Link to="/tasks" className="dashboard-task-mini-more">+{rest} more</Link>
+                                        <Link
+                                            to="/tasks"
+                                            className="dashboard-task-mini-more"
+                                        >
+                                            +{rest} more
+                                        </Link>
                                     )}
                                 </div>
                             );
@@ -307,17 +386,27 @@ export default function ProductivityDashboard({ stats, userName, personalRoomId,
 
                     <div className="stat-card glass-card stat-span-2">
                         <div className="stat-icon-row-mb">
-                            <Icon icon={BarChartIcon} size={18} className="stat-icon-cyan" />
-                            <span className="stat-label">Weekly Meeting Load Heatmap</span>
+                            <Icon
+                                icon={BarChartIcon}
+                                size={18}
+                                className="stat-icon-cyan"
+                            />
+                            <span className="stat-label">
+                                Weekly Meeting Load Heatmap
+                            </span>
                         </div>
                         <div className="heatmap-bar">
                             {stats.weeklyHeatmap.map((day) => (
                                 <div key={day.day} className="heatmap-col">
                                     <div
                                         className="heatmap-fill"
-                                        style={{ height: `${(day.hours / maxHours) * 100}%` }}
+                                        style={{
+                                            height: `${(day.hours / maxHours) * 100}%`,
+                                        }}
                                     ></div>
-                                    <span className="heatmap-label">{day.day}</span>
+                                    <span className="heatmap-label">
+                                        {day.day}
+                                    </span>
                                     <span className="stat-heat-val">
                                         {day.hours}h
                                     </span>
@@ -328,18 +417,36 @@ export default function ProductivityDashboard({ stats, userName, personalRoomId,
 
                     <div className="stat-card glass-card stat-span-2">
                         <div className="stat-icon-row-mb">
-                            <Icon icon={Award01Icon} size={18} className="stat-icon-amber" />
-                            <span className="stat-label">Badges & Achievements</span>
+                            <Icon
+                                icon={Award01Icon}
+                                size={18}
+                                className="stat-icon-amber"
+                            />
+                            <span className="stat-label">
+                                Badges & Achievements
+                            </span>
                         </div>
                         <div className="badges-grid">
                             {stats.badges.map((badge, i) => (
-                                <div key={i} className="badge-item animate-in" style={{ animationDelay: `${i * 0.1}s` }}>
+                                <div
+                                    key={i}
+                                    className="badge-item animate-in"
+                                    style={{ animationDelay: `${i * 0.1}s` }}
+                                >
                                     <span className="badge-icon">
-                                        <Icon icon={badgeIcon(badge)} size={20} className="stat-icon-amber" />
+                                        <Icon
+                                            icon={badgeIcon(badge)}
+                                            size={20}
+                                            className="stat-icon-amber"
+                                        />
                                     </span>
                                     <div>
-                                        <div className="badge-name">{badge.name}</div>
-                                        <div className="badge-desc">{badge.description}</div>
+                                        <div className="badge-name">
+                                            {badge.name}
+                                        </div>
+                                        <div className="badge-desc">
+                                            {badge.description}
+                                        </div>
                                     </div>
                                 </div>
                             ))}
@@ -348,23 +455,37 @@ export default function ProductivityDashboard({ stats, userName, personalRoomId,
 
                     <div className="stat-card glass-card">
                         <div className="stat-icon-row-mb">
-                            <Icon icon={FireIcon} size={18} className="stat-icon-amber" />
+                            <Icon
+                                icon={FireIcon}
+                                size={18}
+                                className="stat-icon-amber"
+                            />
                             <span className="stat-label">Meeting Streak</span>
                         </div>
                         <div className="stat-streak-row">
                             <div className="stat-value">{stats.streak}</div>
-                            <span className="stat-muted-note">consecutive on-time</span>
+                            <span className="stat-muted-note">
+                                consecutive on-time
+                            </span>
                         </div>
                     </div>
 
                     <div className="stat-card glass-card">
                         <div className="stat-icon-row-mb">
-                            <Icon icon={Mic01Icon} size={18} className="stat-icon-violet" />
+                            <Icon
+                                icon={Mic01Icon}
+                                size={18}
+                                className="stat-icon-violet"
+                            />
                             <span className="stat-label">Speaking Time</span>
                         </div>
                         <div className="stat-baseline-row">
-                            <div className="stat-value">{stats.speakingTime}</div>
-                            <span className="stat-muted-note">minutes total</span>
+                            <div className="stat-value">
+                                {stats.speakingTime}
+                            </div>
+                            <span className="stat-muted-note">
+                                minutes total
+                            </span>
                         </div>
                         <div className="stat-sub-note">
                             ~{speakingSharePct}% of total meeting time
@@ -373,24 +494,36 @@ export default function ProductivityDashboard({ stats, userName, personalRoomId,
                 </div>
             )}
 
-            {activeTab === 'attendance' && (
+            {activeTab === "attendance" && (
                 <div className="dashboard-grid">
                     <div className="stat-card glass-card stat-span-2">
                         <div className="stat-icon-row-mb-lg">
-                            <Icon icon={Calendar02Icon} size={18} className="stat-icon-primary" />
-                            <span className="stat-label">Monthly Attendance</span>
+                            <Icon
+                                icon={Calendar02Icon}
+                                size={18}
+                                className="stat-icon-primary"
+                            />
+                            <span className="stat-label">
+                                Monthly Attendance
+                            </span>
                         </div>
                         <div className="attendance-chart">
                             {stats.monthlyAttendance.map((week, i) => (
                                 <div key={i} className="attendance-week">
-                                    <span className="attendance-label">{week.week}</span>
+                                    <span className="attendance-label">
+                                        {week.week}
+                                    </span>
                                     <div className="attendance-bar-track">
                                         <div
                                             className="attendance-bar-fill"
-                                            style={{ width: `${week.total > 0 ? (week.attended / week.total) * 100 : 0}%` }}
+                                            style={{
+                                                width: `${week.total > 0 ? (week.attended / week.total) * 100 : 0}%`,
+                                            }}
                                         ></div>
                                     </div>
-                                    <span className="attendance-value">{week.attended}/{week.total}</span>
+                                    <span className="attendance-value">
+                                        {week.attended}/{week.total}
+                                    </span>
                                 </div>
                             ))}
                         </div>
@@ -398,67 +531,123 @@ export default function ProductivityDashboard({ stats, userName, personalRoomId,
 
                     <div className="stat-card glass-card stat-span-2">
                         <div className="stat-icon-row-mb">
-                            <Icon icon={Clock01Icon} size={18} className="stat-icon-violet" />
-                            <span className="stat-label">Speaking Time vs Average Meeting Duration</span>
+                            <Icon
+                                icon={Clock01Icon}
+                                size={18}
+                                className="stat-icon-violet"
+                            />
+                            <span className="stat-label">
+                                Speaking Time vs Average Meeting Duration
+                            </span>
                         </div>
                         <div className="stat-compare-row">
                             <div>
                                 <div className="stat-big-val-primary">
                                     {stats.speakingTime} min
                                 </div>
-                                <div className="stat-val-label">Total Speaking Time</div>
+                                <div className="stat-val-label">
+                                    Total Speaking Time
+                                </div>
                             </div>
                             <div className="stat-divider"></div>
                             <div>
                                 <div className="stat-big-val-violet">
                                     {stats.avgMeetingDuration} min
                                 </div>
-                                <div className="stat-val-label">Avg Meeting Duration</div>
+                                <div className="stat-val-label">
+                                    Avg Meeting Duration
+                                </div>
                             </div>
                         </div>
                     </div>
                 </div>
             )}
 
-            {activeTab === 'engagement' && (
+            {activeTab === "engagement" && (
                 <div className="dashboard-grid">
                     <div className="stat-card glass-card stat-span-2">
                         <div className="stat-icon-row-mb">
-                            <Icon icon={Award01Icon} size={18} className="stat-icon-amber" />
-                            <span className="stat-label">Contribution & Engagement</span>
+                            <Icon
+                                icon={Award01Icon}
+                                size={18}
+                                className="stat-icon-amber"
+                            />
+                            <span className="stat-label">
+                                Contribution & Engagement
+                            </span>
                         </div>
                         <div className="engagement-metrics">
                             <div className="engagement-metric">
-                                <div className="engagement-circle" style={{ '--pct': `${taskCompletionPct}%` } as React.CSSProperties & Record<string, string>}>
+                                <div
+                                    className="engagement-circle"
+                                    style={
+                                        {
+                                            "--pct": `${taskCompletionPct}%`,
+                                        } as React.CSSProperties &
+                                            Record<string, string>
+                                    }
+                                >
                                     <span>{taskCompletionPct}%</span>
                                 </div>
-                                <div className="stat-circle-label">Task Completion</div>
+                                <div className="stat-circle-label">
+                                    Task Completion
+                                </div>
                             </div>
                             <div className="engagement-metric">
-                                <div className="engagement-circle" style={{ '--pct': `${stats.punctualityRate}%` } as React.CSSProperties & Record<string, string>}>
+                                <div
+                                    className="engagement-circle"
+                                    style={
+                                        {
+                                            "--pct": `${stats.punctualityRate}%`,
+                                        } as React.CSSProperties &
+                                            Record<string, string>
+                                    }
+                                >
                                     <span>{stats.punctualityRate}%</span>
                                 </div>
-                                <div className="stat-circle-label">Punctuality</div>
+                                <div className="stat-circle-label">
+                                    Punctuality
+                                </div>
                             </div>
                             <div className="engagement-metric">
-                                <div className="engagement-circle" style={{ '--pct': `${speakingSharePct}%` } as React.CSSProperties & Record<string, string>}>
+                                <div
+                                    className="engagement-circle"
+                                    style={
+                                        {
+                                            "--pct": `${speakingSharePct}%`,
+                                        } as React.CSSProperties &
+                                            Record<string, string>
+                                    }
+                                >
                                     <span>{speakingSharePct}%</span>
                                 </div>
-                                <div className="stat-circle-label">Share of Voice</div>
+                                <div className="stat-circle-label">
+                                    Share of Voice
+                                </div>
                             </div>
                         </div>
                     </div>
 
                     <div className="stat-card glass-card stat-span-2">
                         <div className="stat-icon-row-mb">
-                            <Icon icon={ChartIncreaseIcon} size={18} className="stat-icon-emerald" />
-                            <span className="stat-label">AI-Generated Recommendations</span>
+                            <Icon
+                                icon={ChartIncreaseIcon}
+                                size={18}
+                                className="stat-icon-emerald"
+                            />
+                            <span className="stat-label">
+                                AI-Generated Recommendations
+                            </span>
                         </div>
                         <div className="recommendations">
                             {recommendations.map((r) => (
                                 <div className="recommendation-item" key={r.id}>
                                     <span className="rec-icon">
-                                        <Icon icon={r.icon} size={18} className="stat-icon-primary" />
+                                        <Icon
+                                            icon={r.icon}
+                                            size={18}
+                                            className="stat-icon-primary"
+                                        />
                                     </span>
                                     <p>{r.text}</p>
                                 </div>
@@ -467,98 +656,6 @@ export default function ProductivityDashboard({ stats, userName, personalRoomId,
                     </div>
                 </div>
             )}
-
-            <style>{`
-        .badges-grid {
-          display: grid;
-          grid-template-columns: repeat(2, 1fr);
-          gap: 0.625rem;
-        }
-        .badge-item {
-          display: flex;
-          align-items: center;
-          gap: 0.75rem;
-          padding: 0.625rem 0.875rem;
-          background: rgba(var(--ui-shine-rgb), 0.03);
-          backdrop-filter: blur(8px);
-          -webkit-backdrop-filter: blur(8px);
-          border: 0.0625rem solid rgba(var(--ui-shine-rgb), 0.05);
-          border-radius: var(--radius-sm);
-          transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-        }
-        .badge-item:hover {
-          background: rgba(var(--ui-shine-rgb), 0.08);
-          border-color: rgba(var(--ui-shine-rgb), 0.15);
-          transform: translateY(-2px);
-        }
-        .badge-icon {
-          display: inline-flex;
-          align-items: center;
-          justify-content: center;
-          width: 1.75rem;
-          height: 1.75rem;
-          flex-shrink: 0;
-          border-radius: 50%;
-          background: rgba(var(--ui-shine-rgb), 0.04);
-        }
-        .badge-name { font-size: 0.8125rem; font-weight: 600; }
-        .badge-desc { font-size: 0.6875rem; color: var(--text-muted); }
-        .attendance-chart { display: flex; flex-direction: column; gap: 0.75rem; }
-        .attendance-week { display: flex; align-items: center; gap: 0.75rem; }
-        .attendance-label { font-size: 0.75rem; color: var(--text-muted); width: 1.875rem; }
-        .attendance-bar-track {
-          flex: 1; height: 1rem; background: rgba(var(--ui-shine-rgb), 0.04);
-          border-radius: 0.5rem; overflow: hidden;
-        }
-        .attendance-bar-fill {
-          height: 100%; background: var(--color-tx-normal);
-          border-radius: 0.5rem; transition: width 0.6s ease;
-        }
-        .attendance-value { font-size: 0.75rem; font-weight: 600; width: 2.5rem; }
-        .engagement-metrics {
-          display: flex; gap: 2.5rem; justify-content: center; padding: 1.25rem 0;
-        }
-        .engagement-metric { text-align: center; }
-        .engagement-circle {
-          width: 5rem; height: 5rem; border-radius: 50%;
-          background: conic-gradient(var(--color-tx-normal) var(--pct), rgba(var(--ui-shine-rgb), 0.06) var(--pct));
-          display: flex; align-items: center; justify-content: center;
-          font-size: 1rem; font-weight: 700; position: relative;
-        }
-        .engagement-circle::before {
-          content: ''; position: absolute; inset: 0.375rem;
-          border-radius: 50%; background: var(--bg-secondary);
-        }
-        .engagement-circle span { position: relative; z-index: 1; }
-        .recommendations { display: flex; flex-direction: column; gap: 0.75rem; }
-        .recommendation-item {
-          display: flex;
-          gap: 0.75rem;
-          padding: 0.75rem;
-          background: rgba(var(--ui-shine-rgb), 0.03);
-          backdrop-filter: blur(8px);
-          -webkit-backdrop-filter: blur(8px);
-          border-radius: var(--radius-sm);
-          border: 0.0625rem solid rgba(var(--ui-shine-rgb), 0.05);
-          transition: all 0.3s ease;
-          align-items: flex-start;
-        }
-        .recommendation-item:hover {
-          background: rgba(var(--ui-shine-rgb), 0.06);
-          border-color: rgba(var(--ui-shine-rgb), 0.1);
-        }
-        .rec-icon {
-          display: inline-flex;
-          align-items: center;
-          justify-content: center;
-          flex-shrink: 0;
-          margin-top: 0.0625rem;
-        }
-        .recommendation-item p {
-          font-size: 0.8125rem; color: var(--text-secondary); line-height: 1.5;
-          margin: 0;
-        }
-      `}</style>
         </div>
     );
 }

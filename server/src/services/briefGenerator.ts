@@ -3,63 +3,63 @@ import Task = require('../modules/task/task.schema');
 import { isMeetingInviteSegment } from '../utils/meetingInviteId';
 
 async function generateBrief(meeting: any, callAISummarize: any) {
-    const agenda = await Agenda.findOne({ meetingId: meeting._id });
-    const agendaItems = agenda ? (agenda as any).items : [];
+	const agenda = await Agenda.findOne({ meetingId: meeting._id });
+	const agendaItems = agenda ? (agenda as any).items : [];
 
-    const pendingTasks = await Task.find({
-        status: { $in: ['pending', 'in-progress', 'completed'] },
-    }).sort({ createdAt: -1 }).limit(5).populate('assignee', 'name').populate('assignees', 'name');
+	const pendingTasks = await Task.find({
+		status: { $in: ['pending', 'in-progress', 'completed'] },
+	}).sort({ createdAt: -1 }).limit(5).populate('assignee', 'name').populate('assignees', 'name');
 
-    const context = {
-        meetingTitle: meeting.title,
-        meetingDate: meeting.confirmedDate || meeting.date,
-        meetingTime: meeting.confirmedTime || meeting.time,
-        agendaItems: agendaItems.map((i: any) => ({ title: i.title, duration: i.duration })),
-        pendingTasks: pendingTasks.map((t: any) => ({
-            title: t.title,
-            assignee: (t.assignees?.[0]?.name) || t.assigneeName || t.assignee?.name || 'Unassigned',
-            status: t.status,
-            deadline: t.deadline,
-        })),
-    };
+	const context = {
+		meetingTitle: meeting.title,
+		meetingDate: meeting.confirmedDate || meeting.date,
+		meetingTime: meeting.confirmedTime || meeting.time,
+		agendaItems: agendaItems.map((i: any) => ({ title: i.title, duration: i.duration })),
+		pendingTasks: pendingTasks.map((t: any) => ({
+			title: t.title,
+			assignee: (t.assignees?.[0]?.name) || t.assigneeName || t.assignee?.name || 'Unassigned',
+			status: t.status,
+			deadline: t.deadline,
+		})),
+	};
 
-    let aiSummary: any = null;
-    if (callAISummarize) {
-        try {
-            aiSummary = await callAISummarize(
-                [{ text: JSON.stringify(context), speaker: 'system' }],
-                agendaItems.map((i: any) => ({ id: i.id, title: i.title }))
-            );
-        } catch (e) {
-            // AI service not available, fallback below
-        }
-    }
+	let aiSummary: any = null;
+	if (callAISummarize) {
+		try {
+			aiSummary = await callAISummarize(
+				[{ text: JSON.stringify(context), speaker: 'system' }],
+				agendaItems.map((i: any) => ({ id: i.id, title: i.title }))
+			);
+		} catch (e) {
+			// AI service not available, fallback below
+		}
+	}
 
-    const agendaList = agendaItems.length > 0
-        ? agendaItems.map((item: any, idx: number) => `${idx + 1}. ${item.title} (${item.duration} min)`).join('\n')
-        : 'No agenda items set yet.';
+	const agendaList = agendaItems.length > 0
+		? agendaItems.map((item: any, idx: number) => `${idx + 1}. ${item.title} (${item.duration} min)`).join('\n')
+		: 'No agenda items set yet.';
 
-    const taskList = pendingTasks.length > 0
-        ? pendingTasks.map((t: any) => `- ${t.title} (${(t as any).assignees?.[0]?.name || (t as any).assigneeName || (t as any).assignee?.name || 'Unassigned'}) — ${t.status}`).join('\n')
-        : 'No pending tasks.';
+	const taskList = pendingTasks.length > 0
+		? pendingTasks.map((t: any) => `- ${t.title} (${(t as any).assignees?.[0]?.name || (t as any).assigneeName || (t as any).assignee?.name || 'Unassigned'}) — ${t.status}`).join('\n')
+		: 'No pending tasks.';
 
-    return {
-        meetingTitle: meeting.title,
-        date: context.meetingDate,
-        time: context.meetingTime,
-        agendaSummary: agendaList,
-        pendingTasksSummary: taskList,
-        aiSummary: aiSummary || null,
-    };
+	return {
+		meetingTitle: meeting.title,
+		date: context.meetingDate,
+		time: context.meetingTime,
+		agendaSummary: agendaList,
+		pendingTasksSummary: taskList,
+		aiSummary: aiSummary || null,
+	};
 }
 
 function formatBriefEmail(brief: any, meetingSlugForUrl: string | null | undefined, clientUrl: string) {
-    const seg =
-        typeof meetingSlugForUrl === 'string' && isMeetingInviteSegment(meetingSlugForUrl.trim())
-            ? meetingSlugForUrl.trim()
-            : null;
-    const agendaLink = seg ? `${clientUrl.replace(/\/$/, '')}/meetings/${seg}` : null;
-    return `<!DOCTYPE html>
+	const seg =
+		typeof meetingSlugForUrl === 'string' && isMeetingInviteSegment(meetingSlugForUrl.trim())
+			? meetingSlugForUrl.trim()
+			: null;
+	const agendaLink = seg ? `${clientUrl.replace(/\/$/, '')}/meetings/${seg}` : null;
+	return `<!DOCTYPE html>
 <html><head><meta charset="utf-8"></head>
 <body style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;max-width:600px;margin:0 auto;padding:20px;color:#1a1a2e">
   <div style="background:linear-gradient(135deg,#6366f1,#8b5cf6);padding:24px;border-radius:12px 12px 0 0;text-align:center">

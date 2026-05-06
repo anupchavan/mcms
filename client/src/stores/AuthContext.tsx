@@ -1,7 +1,15 @@
-import { createContext, useContext, useState, useEffect, useCallback, useMemo, ReactNode } from 'react';
+import {
+    createContext,
+    useContext,
+    useState,
+    useEffect,
+    useCallback,
+    useMemo,
+    ReactNode,
+} from "react";
 
 const VITE_API_URL = import.meta.env.VITE_API_URL;
-const API_BASE = VITE_API_URL || 'http://localhost:5001/api';
+const API_BASE = VITE_API_URL || "http://localhost:5001/api";
 
 export interface User {
     token?: string;
@@ -16,17 +24,23 @@ export interface User {
     [key: string]: unknown;
 }
 
-export type AuthResult = {
-    success: true;
-} | {
-    success: false;
-    message: string;
-}
+export type AuthResult =
+    | {
+          success: true;
+      }
+    | {
+          success: false;
+          message: string;
+      };
 
 export interface AuthContextValue {
     user: User | null;
     login: (email: string, password: string) => Promise<AuthResult>;
-    register: (name: string, email: string, password: string) => Promise<AuthResult>;
+    register: (
+        name: string,
+        email: string,
+        password: string,
+    ) => Promise<AuthResult>;
     logout: () => void;
     updateUser: (updates: Partial<User>) => void;
     loading: boolean;
@@ -46,22 +60,27 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
 
     useEffect(() => {
         const loadUser = async () => {
-            const userInfo = localStorage.getItem('mcms_userInfo');
+            const userInfo = localStorage.getItem("mcms_userInfo");
             if (userInfo) {
                 const parsed = JSON.parse(userInfo);
                 setUser(parsed);
                 try {
                     const res = await fetch(`${API_BASE}/auth/me`, {
-                        headers: { 'Authorization': `Bearer ${parsed.token}` }
+                        headers: { Authorization: `Bearer ${parsed.token}` },
                     });
                     if (res.ok) {
                         const freshData = await res.json();
                         const updated = { ...parsed, ...freshData };
-                        localStorage.setItem('mcms_userInfo', JSON.stringify(updated));
+                        localStorage.setItem(
+                            "mcms_userInfo",
+                            JSON.stringify(updated),
+                        );
                         setUser(updated);
                     } else if (res.status === 401) {
-                        console.warn("Token expired or invalid, logging out automatically");
-                        localStorage.removeItem('mcms_userInfo');
+                        console.warn(
+                            "Token expired or invalid, logging out automatically",
+                        );
+                        localStorage.removeItem("mcms_userInfo");
                         setUser(null);
                     }
                 } catch (e) {
@@ -73,54 +92,65 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
         loadUser();
     }, []);
 
-    const login = useCallback(async (email: string, password: string): Promise<AuthResult> => {
-        try {
-            const res = await fetch(`${API_BASE}/auth/login`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ email, password })
-            });
-            const data = await res.json();
+    const login = useCallback(
+        async (email: string, password: string): Promise<AuthResult> => {
+            try {
+                const res = await fetch(`${API_BASE}/auth/login`, {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ email, password }),
+                });
+                const data = await res.json();
 
-            if (!res.ok) throw new Error(data.message || 'Login failed');
+                if (!res.ok) throw new Error(data.message || "Login failed");
 
-            localStorage.setItem('mcms_userInfo', JSON.stringify(data));
-            setUser(data);
-            return { success: true };
-        } catch (error) {
-            return { success: false, message: (error as Error).message };
-        }
-    }, []);
+                localStorage.setItem("mcms_userInfo", JSON.stringify(data));
+                setUser(data);
+                return { success: true };
+            } catch (error) {
+                return { success: false, message: (error as Error).message };
+            }
+        },
+        [],
+    );
 
-    const register = useCallback(async (name: string, email: string, password: string): Promise<AuthResult> => {
-        try {
-            const res = await fetch(`${API_BASE}/auth/register`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ name, email, password })
-            });
-            const data = await res.json();
+    const register = useCallback(
+        async (
+            name: string,
+            email: string,
+            password: string,
+        ): Promise<AuthResult> => {
+            try {
+                const res = await fetch(`${API_BASE}/auth/register`, {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ name, email, password }),
+                });
+                const data = await res.json();
 
-            if (!res.ok) throw new Error(data.message || 'Registration failed');
+                if (!res.ok)
+                    throw new Error(data.message || "Registration failed");
 
-            localStorage.setItem('mcms_userInfo', JSON.stringify(data));
-            setUser(data);
-            return { success: true };
-        } catch (error) {
-            return { success: false, message: (error as Error).message };
-        }
-    }, []);
+                localStorage.setItem("mcms_userInfo", JSON.stringify(data));
+                setUser(data);
+                return { success: true };
+            } catch (error) {
+                return { success: false, message: (error as Error).message };
+            }
+        },
+        [],
+    );
 
     const updateUser = useCallback((updates: Partial<User>): void => {
-        setUser(prev => {
+        setUser((prev) => {
             const updated = { ...prev, ...updates };
-            localStorage.setItem('mcms_userInfo', JSON.stringify(updated));
+            localStorage.setItem("mcms_userInfo", JSON.stringify(updated));
             return updated as User | null;
         });
     }, []);
 
     const logout = useCallback((): void => {
-        localStorage.removeItem('mcms_userInfo');
+        localStorage.removeItem("mcms_userInfo");
         setUser(null);
     }, []);
 

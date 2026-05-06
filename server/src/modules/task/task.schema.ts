@@ -1,37 +1,37 @@
 import mongoose from 'mongoose';
 
 const taskSchema = new mongoose.Schema({
-    meetingId: { type: mongoose.Schema.Types.ObjectId, ref: 'Meeting', required: true },
-    agendaItemId: { type: String, default: null },
-    title: { type: String, required: true },
-    /** Canonical multi-assignee list. Empty = unassigned. */
-    assignees: { type: [{ type: mongoose.Schema.Types.ObjectId, ref: 'User' }], default: [] },
-    /** Legacy single-assignee fields. Reads still expose `assignee` for back-compat;
-     * new writes should populate `assignees`. */
-    assignee: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null },
-    assigneeName: { type: String, default: null },
-    category: {
-        type: String,
-        enum: ['Technical', 'Administrative', 'Decision', 'Follow-up'],
-        default: 'Technical',
-    },
-    status: {
-        type: String,
-        enum: ['draft', 'pending', 'in-progress', 'completed', 'verified', 'missing'],
-        default: 'pending',
-    },
-    completionSubmittedAt: { type: Date, default: null },
-    verifiedAt: { type: Date, default: null },
-    hostFeedback: { type: String, default: null },
-    deadline: { type: String, default: null },
-    source: { type: String, enum: ['manual', 'ai-extracted'], default: 'manual' },
-    aiConfidence: { type: Number, default: null },
-    /** Soft-archive flag — only hosts can set this. Archived tasks are hidden from
-     * the main My Tasks / Delegated Tasks views but accessible in the archived panel. */
-    archived: { type: Boolean, default: false },
-    archivedAt: { type: Date, default: null },
+	meetingId: { type: mongoose.Schema.Types.ObjectId, ref: 'Meeting', required: true },
+	agendaItemId: { type: String, default: null },
+	title: { type: String, required: true },
+	/** Canonical multi-assignee list. Empty = unassigned. */
+	assignees: { type: [{ type: mongoose.Schema.Types.ObjectId, ref: 'User' }], default: [] },
+	/** Legacy single-assignee fields. Reads still expose `assignee` for back-compat;
+	 * new writes should populate `assignees`. */
+	assignee: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null },
+	assigneeName: { type: String, default: null },
+	category: {
+		type: String,
+		enum: ['Technical', 'Administrative', 'Decision', 'Follow-up'],
+		default: 'Technical',
+	},
+	status: {
+		type: String,
+		enum: ['draft', 'pending', 'in-progress', 'completed', 'verified', 'missing'],
+		default: 'pending',
+	},
+	completionSubmittedAt: { type: Date, default: null },
+	verifiedAt: { type: Date, default: null },
+	hostFeedback: { type: String, default: null },
+	deadline: { type: String, default: null },
+	source: { type: String, enum: ['manual', 'ai-extracted'], default: 'manual' },
+	aiConfidence: { type: Number, default: null },
+	/** Soft-archive flag — only hosts can set this. Archived tasks are hidden from
+	 * the main My Tasks / Delegated Tasks views but accessible in the archived panel. */
+	archived: { type: Boolean, default: false },
+	archivedAt: { type: Date, default: null },
 }, {
-    timestamps: true,
+	timestamps: true,
 });
 
 /** Meeting task views read one meeting's items in creation order. */

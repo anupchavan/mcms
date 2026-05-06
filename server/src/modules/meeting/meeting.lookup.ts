@@ -5,13 +5,13 @@ import mongoose from 'mongoose';
  * Older bookmarks may still use ObjectId-shaped URLs.
  */
 export async function findMeetingByAnyId(Meeting: any, idParam: string) {
-    if (!idParam) return null;
-    if (mongoose.isValidObjectId(idParam)) {
-        return Meeting.findById(idParam);
-    }
-    return Meeting.findOne({
-        $or: [{ id: idParam }, { shortId: idParam }],
-    });
+	if (!idParam) return null;
+	if (mongoose.isValidObjectId(idParam)) {
+		return Meeting.findById(idParam);
+	}
+	return Meeting.findOne({
+		$or: [{ id: idParam }, { shortId: idParam }],
+	});
 }
 
 /**
@@ -19,11 +19,11 @@ export async function findMeetingByAnyId(Meeting: any, idParam: string) {
  * when possible.
  */
 export function meetingQueryByAnyId(Meeting: any, idParam: string) {
-    if (!idParam) return null;
-    if (mongoose.isValidObjectId(idParam)) {
-        return Meeting.findById(idParam);
-    }
-    return Meeting.findOne({
-        $or: [{ id: idParam }, { shortId: idParam }],
-    });
+	if (!idParam) return null;
+	if (mongoose.isValidObjectId(idParam)) {
+		return Meeting.findById(idParam);
+	}
+	return Meeting.findOne({
+		$or: [{ id: idParam }, { shortId: idParam }],
+	});
 }

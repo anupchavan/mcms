@@ -143,7 +143,7 @@ export = function ({ User, Meeting, protect, usingMongo, callAISummarize, callAI
 			const meetings = await Meeting.find({ status: 'completed' })
 				.populate('participants', 'name email profileImage')
 				.populate('hostId', 'name email profileImage');
-			
+
 			const tagSet = new Set<string>();
 			const tagColorMap = new Map<string, string>();
 			const peopleMap = new Map<string, any>();
@@ -282,19 +282,19 @@ export = function ({ User, Meeting, protect, usingMongo, callAISummarize, callAI
 				}
 			}
 
-		if (people) {
-			const peopleArray = String(people).split(',').map(p => p.trim()).filter(p => p);
-			// Each selected person must individually be present (as host OR participant).
-			// One $and condition per person enforces ALL-of, not ANY-of.
-			for (const personId of peopleArray) {
-				andConditions.push({
-					$or: [
-						{ hostId: personId },
-						{ participants: personId }
-					]
-				});
+			if (people) {
+				const peopleArray = String(people).split(',').map(p => p.trim()).filter(p => p);
+				// Each selected person must individually be present (as host OR participant).
+				// One $and condition per person enforces ALL-of, not ANY-of.
+				for (const personId of peopleArray) {
+					andConditions.push({
+						$or: [
+							{ hostId: personId },
+							{ participants: personId }
+						]
+					});
+				}
 			}
-		}
 
 			let restrictIds: mongoose.Types.ObjectId[] | null = null;
 
@@ -316,11 +316,11 @@ export = function ({ User, Meeting, protect, usingMongo, callAISummarize, callAI
 				meetingFilter._id = { $in: restrictIds };
 			}
 
-		if (andConditions.length > 0) {
-			meetingFilter.$and = andConditions;
-		}
+			if (andConditions.length > 0) {
+				meetingFilter.$and = andConditions;
+			}
 
-		const total = await Meeting.countDocuments(meetingFilter);
+			const total = await Meeting.countDocuments(meetingFilter);
 
 			const meetings = await Meeting.find(meetingFilter)
 				.sort({ createdAt: -1 })
@@ -328,8 +328,8 @@ export = function ({ User, Meeting, protect, usingMongo, callAISummarize, callAI
 				.limit(limitFinal)
 				.populate('participants', 'name email');
 
-		const results = [];
-		for (const m of meetings) {
+			const results = [];
+			for (const m of meetings) {
 				const matchedTranscripts = q && String(q).trim().length >= 2
 					? await transcriptSnippetsForMeeting(m._id, String(q))
 					: [];
@@ -716,7 +716,7 @@ export = function ({ User, Meeting, protect, usingMongo, callAISummarize, callAI
 							.sort({ createdAt: 1 })
 							.lean();
 					}
-				} catch(e: any) {
+				} catch (e: any) {
 					console.error('Post-meeting AI task extraction failed:', e.message);
 					aiError = e.message;
 				}
@@ -987,10 +987,10 @@ export = function ({ User, Meeting, protect, usingMongo, callAISummarize, callAI
 
 			const resolvedId = await resolveMeetingId(req.params.meetingId);
 			if (!resolvedId) return res.status(404).json({ message: 'Meeting not found' });
-		const meeting = await Meeting.findById(resolvedId)
-			.populate('participants', 'name email profileImage')
-			.populate('hostId', 'name email profileImage');
-		if (!meeting) return res.status(404).json({ message: 'Meeting not found' });
+			const meeting = await Meeting.findById(resolvedId)
+				.populate('participants', 'name email profileImage')
+				.populate('hostId', 'name email profileImage');
+			if (!meeting) return res.status(404).json({ message: 'Meeting not found' });
 
 			const agenda = await Agenda.findOne({ meetingId: resolvedId });
 			const transcripts = await Transcript.find({ meetingId: resolvedId }).sort({ startTime: 1, createdAt: 1 });
@@ -1016,19 +1016,19 @@ export = function ({ User, Meeting, protect, usingMongo, callAISummarize, callAI
 				transcriptFlat.push({ ...seg, agendaKey: key });
 			}
 
-		res.json({
-			meeting: {
-				_id: meeting._id, id: (meeting as any).id ?? (meeting as any).shortId,
-				title: meeting.title, modality: meeting.modality,
-				date: meeting.confirmedDate || meeting.date,
-				time: meeting.confirmedTime || meeting.time,
-				host: meeting.host,
-				hostId: meeting.hostId,
-				description: (meeting as any).description || '',
-				tags: (meeting as any).tags || [],
-				tagColors: Object.fromEntries((meeting as any).tagColors || new Map()),
-				participants: meeting.participants,
-			},
+			res.json({
+				meeting: {
+					_id: meeting._id, id: (meeting as any).id ?? (meeting as any).shortId,
+					title: meeting.title, modality: meeting.modality,
+					date: meeting.confirmedDate || meeting.date,
+					time: meeting.confirmedTime || meeting.time,
+					host: meeting.host,
+					hostId: meeting.hostId,
+					description: (meeting as any).description || '',
+					tags: (meeting as any).tags || [],
+					tagColors: Object.fromEntries((meeting as any).tagColors || new Map()),
+					participants: meeting.participants,
+				},
 				agendaItems: agenda ? (agenda as any).items : [],
 				transcriptsByAgenda,
 				transcriptFlat,

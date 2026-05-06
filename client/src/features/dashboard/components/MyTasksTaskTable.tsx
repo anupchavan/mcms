@@ -1,14 +1,16 @@
-import {
-    useCallback,
-    useEffect,
-    useMemo,
-    useRef,
-    useState,
-} from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { useAuth } from "../../../stores/AuthContext";
-import { TaskFeedbackModal, type TaskFeedbackModalState } from "../../minutes/components/TaskFeedbackModal";
-import { TaskStatusSelect, TaskAssigneePicker, TaskCategorySelect, CATEGORY_TEXT_COLOR } from "./ArchiveTaskTable";
+import {
+    TaskFeedbackModal,
+    type TaskFeedbackModalState,
+} from "../../minutes/components/TaskFeedbackModal";
+import {
+    TaskStatusSelect,
+    TaskAssigneePicker,
+    TaskCategorySelect,
+    CATEGORY_TEXT_COLOR,
+} from "./ArchiveTaskTable";
 import { UserAvatar } from "../../../shared/components/UserAvatar";
 import Icon from "../../../shared/components/Icon";
 import { Archive01Icon, Delete01Icon } from "@hugeicons/core-free-icons";
@@ -16,11 +18,30 @@ import type { ArchiveParticipant } from "./archiveHelpers";
 
 const API_BASE = import.meta.env.VITE_API_URL || "http://localhost:5001/api";
 
-const HOST_STATUSES = ["draft", "pending", "in-progress", "completed", "verified", "missing"];
+const HOST_STATUSES = [
+    "draft",
+    "pending",
+    "in-progress",
+    "completed",
+    "verified",
+    "missing",
+];
 const ASSIGNEE_STATUSES = ["pending", "in-progress", "completed"];
 
-const MONTH_ABBR = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
-
+const MONTH_ABBR = [
+    "Jan",
+    "Feb",
+    "Mar",
+    "Apr",
+    "May",
+    "Jun",
+    "Jul",
+    "Aug",
+    "Sep",
+    "Oct",
+    "Nov",
+    "Dec",
+];
 
 function formatDeadline(v: string): string {
     const d = new Date(v);
@@ -81,8 +102,14 @@ interface MyTasksTaskTableProps {
     onRefresh?: () => void;
 }
 
-export function MyTasksTaskTable({ tasks, emptyMessage, fetchWithAuth, onRefresh }: MyTasksTaskTableProps) {
-    const [feedbackModal, setFeedbackModal] = useState<TaskFeedbackModalState | null>(null);
+export function MyTasksTaskTable({
+    tasks,
+    emptyMessage,
+    fetchWithAuth,
+    onRefresh,
+}: MyTasksTaskTableProps) {
+    const [feedbackModal, setFeedbackModal] =
+        useState<TaskFeedbackModalState | null>(null);
 
     const closeFeedbackModal = useCallback((value: string | null) => {
         setFeedbackModal((prev) => {
@@ -113,34 +140,66 @@ export function MyTasksTaskTable({ tasks, emptyMessage, fetchWithAuth, onRefresh
 
     return (
         <>
-            <div className="my-tasks-task-table" role="table" aria-label="Tasks">
+            <div
+                className="my-tasks-task-table"
+                role="table"
+                aria-label="Tasks"
+            >
                 <div className="my-tasks-task-table-head" role="row">
-                    <div className="my-tasks-task-table-cell my-tasks-task-table-cell--title" role="columnheader">
+                    <div
+                        className="my-tasks-task-table-cell my-tasks-task-table-cell--title"
+                        role="columnheader"
+                    >
                         Task
                     </div>
-                    <div className="my-tasks-task-table-cell my-tasks-task-table-cell--meeting" role="columnheader">
+                    <div
+                        className="my-tasks-task-table-cell my-tasks-task-table-cell--meeting"
+                        role="columnheader"
+                    >
                         Meeting
                     </div>
-                    <div className="my-tasks-task-table-cell my-tasks-task-table-cell--date" role="columnheader">
+                    <div
+                        className="my-tasks-task-table-cell my-tasks-task-table-cell--date"
+                        role="columnheader"
+                    >
                         Assigned on
                     </div>
-                    <div className="my-tasks-task-table-cell my-tasks-task-table-cell--assignees" role="columnheader">
+                    <div
+                        className="my-tasks-task-table-cell my-tasks-task-table-cell--assignees"
+                        role="columnheader"
+                    >
                         Assigned
                     </div>
-                    <div className="my-tasks-task-table-cell my-tasks-task-table-cell--type" role="columnheader">
+                    <div
+                        className="my-tasks-task-table-cell my-tasks-task-table-cell--type"
+                        role="columnheader"
+                    >
                         Type
                     </div>
-                    <div className="my-tasks-task-table-cell my-tasks-task-table-cell--deadline" role="columnheader">
+                    <div
+                        className="my-tasks-task-table-cell my-tasks-task-table-cell--deadline"
+                        role="columnheader"
+                    >
                         Deadline
                     </div>
-                    <div className="my-tasks-task-table-cell my-tasks-task-table-cell--status" role="columnheader">
+                    <div
+                        className="my-tasks-task-table-cell my-tasks-task-table-cell--status"
+                        role="columnheader"
+                    >
                         Status
                     </div>
-                    <div className="my-tasks-task-table-cell my-tasks-task-table-cell--actions" role="columnheader" aria-label="Actions" />
+                    <div
+                        className="my-tasks-task-table-cell my-tasks-task-table-cell--actions"
+                        role="columnheader"
+                        aria-label="Actions"
+                    />
                 </div>
                 <div className="my-tasks-task-table-body">
                     {tasks.length === 0 ? (
-                        <div className="my-tasks-task-table-empty" role="status">
+                        <div
+                            className="my-tasks-task-table-empty"
+                            role="status"
+                        >
                             {emptyMessage}
                         </div>
                     ) : (
@@ -156,7 +215,10 @@ export function MyTasksTaskTable({ tasks, emptyMessage, fetchWithAuth, onRefresh
                     )}
                 </div>
             </div>
-            <TaskFeedbackModal modal={feedbackModal} onComplete={closeFeedbackModal} />
+            <TaskFeedbackModal
+                modal={feedbackModal}
+                onComplete={closeFeedbackModal}
+            />
         </>
     );
 }
@@ -186,7 +248,9 @@ function MyTasksTaskRow({
 
     // Participants for the assignee picker — lazily fetched the first time the row mounts
     // as a host, so the picker is ready without a click-to-load pattern.
-    const [meetingParticipants, setMeetingParticipants] = useState<ArchiveParticipant[]>([]);
+    const [meetingParticipants, setMeetingParticipants] = useState<
+        ArchiveParticipant[]
+    >([]);
     const participantsFetchedRef = useRef(false);
 
     const meetingHostId = String(task.meetingHostId || "");
@@ -195,7 +259,8 @@ function MyTasksTaskRow({
         () => (task.assignees || []).map((a) => String(a.id)).filter(Boolean),
         [task.assignees],
     );
-    const isAssignee = Boolean(currentUserId) && assigneeIds.includes(currentUserId);
+    const isAssignee =
+        Boolean(currentUserId) && assigneeIds.includes(currentUserId);
     const canEditStatus = isHost || (isAssignee && task.status !== "verified");
     const canEditTitle = isHost;
 
@@ -203,11 +268,14 @@ function MyTasksTaskRow({
     // Mirrors the allParticipants logic in ArchiveDetailView: host first (from the
     // populated hostId object), then the rest of the participants array, deduplicated.
     useEffect(() => {
-        if (!isHost || !task.meetingId || participantsFetchedRef.current) return;
+        if (!isHost || !task.meetingId || participantsFetchedRef.current)
+            return;
         participantsFetchedRef.current = true;
         (async () => {
             try {
-                const res = await (fetchWithAuth || fetch)(`${API_BASE}/archive/${task.meetingId}`);
+                const res = await (fetchWithAuth || fetch)(
+                    `${API_BASE}/archive/${task.meetingId}`,
+                );
                 if (!res.ok) return;
                 const data = await res.json();
                 const meeting = data.meeting || {};
@@ -218,9 +286,12 @@ function MyTasksTaskRow({
                         ? { ...meeting.hostId, _id: String(meeting.hostId._id) }
                         : null;
 
-                const rawParticipants: ArchiveParticipant[] = (meeting.participants || []).map(
-                    (p: ArchiveParticipant) => ({ ...p, _id: String(p._id) }),
-                );
+                const rawParticipants: ArchiveParticipant[] = (
+                    meeting.participants || []
+                ).map((p: ArchiveParticipant) => ({
+                    ...p,
+                    _id: String(p._id),
+                }));
 
                 // Deduplicate: remove host from the participants list if already present
                 const others = hostObj
@@ -238,7 +309,9 @@ function MyTasksTaskRow({
         if (!titleEverFocusedRef.current) setTitleDraft(task.title);
     }, [task.title]);
 
-    const getHostFeedback = async (nextStatus: string): Promise<string | null | undefined> => {
+    const getHostFeedback = async (
+        nextStatus: string,
+    ): Promise<string | null | undefined> => {
         if (!isHost) return undefined;
         if (task.status === "completed" && nextStatus === "pending") {
             const response = await openFeedbackPrompt(
@@ -267,11 +340,14 @@ function MyTasksTaskRow({
 
     const persistPatch = useCallback(
         async (patch: Record<string, unknown>) => {
-            const res = await (fetchWithAuth || fetch)(`${API_BASE}/tasks/${task.id}`, {
-                method: "PUT",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify(patch),
-            });
+            const res = await (fetchWithAuth || fetch)(
+                `${API_BASE}/tasks/${task.id}`,
+                {
+                    method: "PUT",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify(patch),
+                },
+            );
             if (!res.ok) {
                 window.alert(await readErrorMessage(res));
                 return false;
@@ -300,7 +376,8 @@ function MyTasksTaskRow({
         const hostFeedback = await getHostFeedback(nextStatus);
         if (hostFeedback === null) return;
         const payload: Record<string, unknown> = { status: nextStatus };
-        if (typeof hostFeedback === "string") payload.hostFeedback = hostFeedback;
+        if (typeof hostFeedback === "string")
+            payload.hostFeedback = hostFeedback;
         await persistPatch(payload);
     };
 
@@ -313,11 +390,18 @@ function MyTasksTaskRow({
 
     const editableStatuses = isHost ? HOST_STATUSES : ASSIGNEE_STATUSES;
 
-    const [deadlineDraft, setDeadlineDraft] = useState(task.deadline ? task.deadline.slice(0, 10) : "");
-    useEffect(() => { setDeadlineDraft(task.deadline ? task.deadline.slice(0, 10) : ""); }, [task.deadline]);
-    const commitDeadline = useCallback(async (val: string) => {
-        await persistPatch({ deadline: val || null });
-    }, [persistPatch]);
+    const [deadlineDraft, setDeadlineDraft] = useState(
+        task.deadline ? task.deadline.slice(0, 10) : "",
+    );
+    useEffect(() => {
+        setDeadlineDraft(task.deadline ? task.deadline.slice(0, 10) : "");
+    }, [task.deadline]);
+    const commitDeadline = useCallback(
+        async (val: string) => {
+            await persistPatch({ deadline: val || null });
+        },
+        [persistPatch],
+    );
 
     // Only use task.assignees (the canonical multi-assignee list).
     // We intentionally ignore the legacy task.assigneeId / task.assignee fields here
@@ -330,12 +414,17 @@ function MyTasksTaskRow({
         }));
     }, [task.assignees]);
 
-    const meetingHref = (task.meetingShortId || task.meetingId)
-        ? `/archives/${encodeURIComponent(task.meetingShortId || task.meetingId!)}` : null;
+    const meetingHref =
+        task.meetingShortId || task.meetingId
+            ? `/archives/${encodeURIComponent(task.meetingShortId || task.meetingId!)}`
+            : null;
 
     return (
         <div className="my-tasks-task-table-row" role="row">
-            <div className="my-tasks-task-table-cell my-tasks-task-table-cell--title" role="cell">
+            <div
+                className="my-tasks-task-table-cell my-tasks-task-table-cell--title"
+                role="cell"
+            >
                 <input
                     type="text"
                     className="archive-task-title-input"
@@ -363,7 +452,10 @@ function MyTasksTaskRow({
                     </span>
                 ) : null}
             </div>
-            <div className="my-tasks-task-table-cell my-tasks-task-table-cell--meeting" role="cell">
+            <div
+                className="my-tasks-task-table-cell my-tasks-task-table-cell--meeting"
+                role="cell"
+            >
                 {meetingHref ? (
                     <Link to={meetingHref} className="my-tasks-meeting-link">
                         {task.meetingTitle || "Open archive"}
@@ -372,10 +464,16 @@ function MyTasksTaskRow({
                     <span className="my-tasks-meeting-fallback">—</span>
                 )}
             </div>
-            <div className="my-tasks-task-table-cell my-tasks-task-table-cell--date" role="cell">
+            <div
+                className="my-tasks-task-table-cell my-tasks-task-table-cell--date"
+                role="cell"
+            >
                 {formatDateAssigned(task.assignedAt)}
             </div>
-            <div className="my-tasks-task-table-cell my-tasks-task-table-cell--assignees" role="cell">
+            <div
+                className="my-tasks-task-table-cell my-tasks-task-table-cell--assignees"
+                role="cell"
+            >
                 {isHost ? (
                     // Hosts get the full assignee picker — same component used in the archive page.
                     <TaskAssigneePicker
@@ -390,56 +488,75 @@ function MyTasksTaskRow({
                         onChange={handleAssigneesChange}
                         disabled={false}
                     />
+                ) : // Non-hosts see a read-only avatar stack (or "Unassigned").
+                renderableAssignees.length === 0 ? (
+                    <span className="archive-task-unassigned">Unassigned</span>
                 ) : (
-                    // Non-hosts see a read-only avatar stack (or "Unassigned").
-                    renderableAssignees.length === 0 ? (
-                        <span className="archive-task-unassigned">Unassigned</span>
-                    ) : (
-                        <div
-                            className="archive-filter-stack archive-filter-stack--task-assignee-trigger"
-                            aria-label={`Assignees: ${renderableAssignees.map((a) => a.name).join(", ")}`}
-                        >
-                            {renderableAssignees.slice(0, 3).map((opt, idx) => (
-                                <div
-                                    key={opt.id}
-                                    className={`archive-filter-stack-slot${idx > 0 ? " archive-filter-stack-slot--overlap" : ""}`}
-                                    style={{ zIndex: idx + 1 }}
+                    <div
+                        className="archive-filter-stack archive-filter-stack--task-assignee-trigger"
+                        aria-label={`Assignees: ${renderableAssignees.map((a) => a.name).join(", ")}`}
+                    >
+                        {renderableAssignees.slice(0, 3).map((opt, idx) => (
+                            <div
+                                key={opt.id}
+                                className={`archive-filter-stack-slot${idx > 0 ? " archive-filter-stack-slot--overlap" : ""}`}
+                                style={{ zIndex: idx + 1 }}
+                            >
+                                <span
+                                    className="archive-filter-stack-disc"
+                                    aria-hidden
                                 >
-                                    <span className="archive-filter-stack-disc" aria-hidden>
-                                        <UserAvatar
-                                            name={opt.name}
-                                            profileImage={opt.profileImage}
-                                            userId={opt.id}
-                                            size={18}
-                                            style={{ border: "none", borderRadius: "50%" }}
-                                        />
-                                    </span>
-                                </div>
-                            ))}
-                            {renderableAssignees.length > 3 ? (
-                                <div
-                                    className="archive-filter-stack-slot archive-filter-stack-slot--overlap my-task-stack-zidx-4"
-                                >
-                                    <span className="archive-filter-stack-more">+{renderableAssignees.length - 3}</span>
-                                </div>
-                            ) : null}
-                        </div>
-                    )
+                                    <UserAvatar
+                                        name={opt.name}
+                                        profileImage={opt.profileImage}
+                                        userId={opt.id}
+                                        size={18}
+                                        style={{
+                                            border: "none",
+                                            borderRadius: "50%",
+                                        }}
+                                    />
+                                </span>
+                            </div>
+                        ))}
+                        {renderableAssignees.length > 3 ? (
+                            <div className="archive-filter-stack-slot archive-filter-stack-slot--overlap my-task-stack-zidx-4">
+                                <span className="archive-filter-stack-more">
+                                    +{renderableAssignees.length - 3}
+                                </span>
+                            </div>
+                        ) : null}
+                    </div>
                 )}
             </div>
-            <div className="my-tasks-task-table-cell my-tasks-task-table-cell--type" role="cell">
+            <div
+                className="my-tasks-task-table-cell my-tasks-task-table-cell--type"
+                role="cell"
+            >
                 {isHost ? (
                     <TaskCategorySelect
                         value={task.category || "Technical"}
                         onChange={(cat) => persistPatch({ category: cat })}
                     />
                 ) : task.category ? (
-                    <span style={{ fontSize: "0.8125rem", color: CATEGORY_TEXT_COLOR[task.category] || "var(--text-secondary)" }}>
+                    <span
+                        style={{
+                            fontSize: "0.8125rem",
+                            color:
+                                CATEGORY_TEXT_COLOR[task.category] ||
+                                "var(--text-secondary)",
+                        }}
+                    >
                         {task.category}
                     </span>
-                ) : <span className="my-task-no-value">—</span>}
+                ) : (
+                    <span className="my-task-no-value">—</span>
+                )}
             </div>
-            <div className="my-tasks-task-table-cell my-tasks-task-table-cell--deadline" role="cell">
+            <div
+                className="my-tasks-task-table-cell my-tasks-task-table-cell--deadline"
+                role="cell"
+            >
                 {isHost ? (
                     <input
                         type="date"
@@ -449,12 +566,22 @@ function MyTasksTaskRow({
                         onBlur={(e) => commitDeadline(e.target.value)}
                     />
                 ) : (
-                    <span style={{ fontSize: "0.8125rem", color: task.deadline ? "var(--text-primary)" : "var(--text-muted)" }}>
+                    <span
+                        style={{
+                            fontSize: "0.8125rem",
+                            color: task.deadline
+                                ? "var(--text-primary)"
+                                : "var(--text-muted)",
+                        }}
+                    >
                         {task.deadline ? formatDeadline(task.deadline) : "—"}
                     </span>
                 )}
             </div>
-            <div className="my-tasks-task-table-cell my-tasks-task-table-cell--status" role="cell">
+            <div
+                className="my-tasks-task-table-cell my-tasks-task-table-cell--status"
+                role="cell"
+            >
                 <TaskStatusSelect
                     value={task.status}
                     onChange={(next) => void handleStatusChange(next)}
@@ -462,7 +589,10 @@ function MyTasksTaskRow({
                     allowedStatuses={editableStatuses}
                 />
             </div>
-            <div className="my-tasks-task-table-cell my-tasks-task-table-cell--actions" role="cell">
+            <div
+                className="my-tasks-task-table-cell my-tasks-task-table-cell--actions"
+                role="cell"
+            >
                 {isHost && (
                     <div className="task-row-actions">
                         <button
@@ -480,8 +610,16 @@ function MyTasksTaskRow({
                             className="task-action-btn task-action-btn--delete"
                             title="Delete task"
                             onClick={async () => {
-                                if (!window.confirm("Permanently delete this task?")) return;
-                                const res = await (fetchWithAuth || fetch)(`${API_BASE}/tasks/${task.id}`, { method: "DELETE" });
+                                if (
+                                    !window.confirm(
+                                        "Permanently delete this task?",
+                                    )
+                                )
+                                    return;
+                                const res = await (fetchWithAuth || fetch)(
+                                    `${API_BASE}/tasks/${task.id}`,
+                                    { method: "DELETE" },
+                                );
                                 if (res.ok) onRefresh?.();
                                 else window.alert(await readErrorMessage(res));
                             }}

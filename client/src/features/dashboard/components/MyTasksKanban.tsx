@@ -1,13 +1,10 @@
-import {
-    useCallback,
-    useEffect,
-    useMemo,
-    useRef,
-    useState,
-} from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { useAuth } from "../../../stores/AuthContext";
-import { TaskFeedbackModal, type TaskFeedbackModalState } from "../../minutes/components/TaskFeedbackModal";
+import {
+    TaskFeedbackModal,
+    type TaskFeedbackModalState,
+} from "../../minutes/components/TaskFeedbackModal";
 import { TaskAssigneePicker } from "./ArchiveTaskTable";
 import { UserAvatar } from "../../../shared/components/UserAvatar";
 import Icon from "../../../shared/components/Icon";
@@ -16,9 +13,29 @@ import type { ArchiveParticipant } from "./archiveHelpers";
 import type { MineOverviewTask } from "./MyTasksTaskTable";
 
 const API_BASE = import.meta.env.VITE_API_URL || "http://localhost:5001/api";
-const HOST_STATUSES = ["draft", "pending", "in-progress", "completed", "verified", "missing"];
+const HOST_STATUSES = [
+    "draft",
+    "pending",
+    "in-progress",
+    "completed",
+    "verified",
+    "missing",
+];
 const ASSIGNEE_STATUSES = ["pending", "in-progress", "completed"];
-const MONTH_ABBR = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+const MONTH_ABBR = [
+    "Jan",
+    "Feb",
+    "Mar",
+    "Apr",
+    "May",
+    "Jun",
+    "Jul",
+    "Aug",
+    "Sep",
+    "Oct",
+    "Nov",
+    "Dec",
+];
 
 interface KanbanColumnDef {
     value: string;
@@ -68,7 +85,12 @@ const COLUMNS: KanbanColumnDef[] = [
     },
 ];
 
-const CORE_COLUMNS = new Set(["pending", "in-progress", "completed", "verified"]);
+const CORE_COLUMNS = new Set([
+    "pending",
+    "in-progress",
+    "completed",
+    "verified",
+]);
 
 function formatDate(dateValue: string | undefined | null): string {
     if (!dateValue) return "—";
@@ -96,11 +118,17 @@ export interface MyTasksKanbanProps {
     onRefresh?: () => void;
 }
 
-export function MyTasksKanban({ tasks, emptyMessage, fetchWithAuth, onRefresh }: MyTasksKanbanProps) {
+export function MyTasksKanban({
+    tasks,
+    emptyMessage,
+    fetchWithAuth,
+    onRefresh,
+}: MyTasksKanbanProps) {
     const { user } = useAuth() || {};
     const currentUserId = String(user?.id || user?._id || "");
 
-    const [feedbackModal, setFeedbackModal] = useState<TaskFeedbackModalState | null>(null);
+    const [feedbackModal, setFeedbackModal] =
+        useState<TaskFeedbackModalState | null>(null);
     const [draggingId, setDraggingId] = useState<string | null>(null);
     const [dropTarget, setDropTarget] = useState<string | null>(null);
 
@@ -135,7 +163,12 @@ export function MyTasksKanban({ tasks, emptyMessage, fetchWithAuth, onRefresh }:
         const groups: Record<string, MineOverviewTask[]> = {};
         for (const col of COLUMNS) groups[col.value] = [];
         for (const task of tasks) {
-            const key = Object.prototype.hasOwnProperty.call(groups, task.status) ? task.status : "pending";
+            const key = Object.prototype.hasOwnProperty.call(
+                groups,
+                task.status,
+            )
+                ? task.status
+                : "pending";
             groups[key].push(task);
         }
         return groups;
@@ -144,7 +177,9 @@ export function MyTasksKanban({ tasks, emptyMessage, fetchWithAuth, onRefresh }:
     const visibleColumns = useMemo(
         () =>
             COLUMNS.filter(
-                (col) => CORE_COLUMNS.has(col.value) || (tasksByStatus[col.value]?.length ?? 0) > 0,
+                (col) =>
+                    CORE_COLUMNS.has(col.value) ||
+                    (tasksByStatus[col.value]?.length ?? 0) > 0,
             ),
         [tasksByStatus],
     );
@@ -155,22 +190,29 @@ export function MyTasksKanban({ tasks, emptyMessage, fetchWithAuth, onRefresh }:
             if (!task || task.status === newStatus) return;
 
             const meetingHostId = String(task.meetingHostId || "");
-            const isHost = Boolean(currentUserId) && meetingHostId === currentUserId;
+            const isHost =
+                Boolean(currentUserId) && meetingHostId === currentUserId;
             const assigneeIds = (task.assignees || []).map((a) => String(a.id));
-            const isAssignee = Boolean(currentUserId) && assigneeIds.includes(currentUserId);
+            const isAssignee =
+                Boolean(currentUserId) && assigneeIds.includes(currentUserId);
 
             // Permission: only host can move to "verified" (Completed)
             if (newStatus === "verified" && !isHost) return;
 
             // Assignee can only move within ASSIGNEE_STATUSES
-            if (!isHost && isAssignee && !ASSIGNEE_STATUSES.includes(newStatus)) return;
+            if (!isHost && isAssignee && !ASSIGNEE_STATUSES.includes(newStatus))
+                return;
 
             // Must be host or assignee to change status
             if (!isHost && !isAssignee) return;
 
             // Host feedback when sending completed → pending (reject)
             let hostFeedback: string | null | undefined = undefined;
-            if (isHost && task.status === "completed" && newStatus === "pending") {
+            if (
+                isHost &&
+                task.status === "completed" &&
+                newStatus === "pending"
+            ) {
                 const response = await openFeedbackPrompt(
                     "Send Back to Pending",
                     `Provide a required note for ${task.assignee || "the assignee"} explaining what needs to be fixed.`,
@@ -184,7 +226,11 @@ export function MyTasksKanban({ tasks, emptyMessage, fetchWithAuth, onRefresh }:
             }
 
             // Host feedback when verifying (completing)
-            if (isHost && task.status === "completed" && newStatus === "verified") {
+            if (
+                isHost &&
+                task.status === "completed" &&
+                newStatus === "verified"
+            ) {
                 const response = await openFeedbackPrompt(
                     "Mark as Completed",
                     `Optionally leave a note for ${task.assignee || "the assignee"} along with your completion. Leave blank to skip.`,
@@ -196,13 +242,17 @@ export function MyTasksKanban({ tasks, emptyMessage, fetchWithAuth, onRefresh }:
             }
 
             const patch: Record<string, unknown> = { status: newStatus };
-            if (typeof hostFeedback === "string") patch.hostFeedback = hostFeedback;
+            if (typeof hostFeedback === "string")
+                patch.hostFeedback = hostFeedback;
 
-            const res = await (fetchWithAuth || fetch)(`${API_BASE}/tasks/${taskId}`, {
-                method: "PUT",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify(patch),
-            });
+            const res = await (fetchWithAuth || fetch)(
+                `${API_BASE}/tasks/${taskId}`,
+                {
+                    method: "PUT",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify(patch),
+                },
+            );
             if (!res.ok) {
                 window.alert(await readErrorMessage(res));
                 return;
@@ -240,7 +290,10 @@ export function MyTasksKanban({ tasks, emptyMessage, fetchWithAuth, onRefresh }:
                     />
                 ))}
             </div>
-            <TaskFeedbackModal modal={feedbackModal} onComplete={closeFeedbackModal} />
+            <TaskFeedbackModal
+                modal={feedbackModal}
+                onComplete={closeFeedbackModal}
+            />
         </>
     );
 }
@@ -304,8 +357,12 @@ function KanbanColumn({
             }}
         >
             <div className="tasks-kanban-column-header">
-                <span className="tasks-kanban-column-title">{column.label}</span>
-                <span className="tasks-kanban-column-count">{tasks.length}</span>
+                <span className="tasks-kanban-column-title">
+                    {column.label}
+                </span>
+                <span className="tasks-kanban-column-count">
+                    {tasks.length}
+                </span>
             </div>
             <div className="tasks-kanban-column-body">
                 {tasks.length === 0 ? (
@@ -359,19 +416,25 @@ function KanbanCard({
         () => (task.assignees || []).map((a) => String(a.id)).filter(Boolean),
         [task.assignees],
     );
-    const isAssignee = Boolean(currentUserId) && assigneeIds.includes(currentUserId);
+    const isAssignee =
+        Boolean(currentUserId) && assigneeIds.includes(currentUserId);
     const canDrag = isHost || (isAssignee && task.status !== "verified");
 
     // Participants — lazy fetch for host's assignee picker
-    const [meetingParticipants, setMeetingParticipants] = useState<ArchiveParticipant[]>([]);
+    const [meetingParticipants, setMeetingParticipants] = useState<
+        ArchiveParticipant[]
+    >([]);
     const participantsFetchedRef = useRef(false);
 
     useEffect(() => {
-        if (!isHost || !task.meetingId || participantsFetchedRef.current) return;
+        if (!isHost || !task.meetingId || participantsFetchedRef.current)
+            return;
         participantsFetchedRef.current = true;
         (async () => {
             try {
-                const res = await (fetchWithAuth || fetch)(`${API_BASE}/archive/${task.meetingId}`);
+                const res = await (fetchWithAuth || fetch)(
+                    `${API_BASE}/archive/${task.meetingId}`,
+                );
                 if (!res.ok) return;
                 const data = await res.json();
                 const meeting = data.meeting || {};
@@ -379,9 +442,12 @@ function KanbanCard({
                     meeting.hostId && typeof meeting.hostId === "object"
                         ? { ...meeting.hostId, _id: String(meeting.hostId._id) }
                         : null;
-                const rawParticipants: ArchiveParticipant[] = (meeting.participants || []).map(
-                    (p: ArchiveParticipant) => ({ ...p, _id: String(p._id) }),
-                );
+                const rawParticipants: ArchiveParticipant[] = (
+                    meeting.participants || []
+                ).map((p: ArchiveParticipant) => ({
+                    ...p,
+                    _id: String(p._id),
+                }));
                 const others = hostObj
                     ? rawParticipants.filter((p) => p._id !== hostObj._id)
                     : rawParticipants;
@@ -394,11 +460,14 @@ function KanbanCard({
 
     const persistPatch = useCallback(
         async (patch: Record<string, unknown>) => {
-            const res = await (fetchWithAuth || fetch)(`${API_BASE}/tasks/${task.id}`, {
-                method: "PUT",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify(patch),
-            });
+            const res = await (fetchWithAuth || fetch)(
+                `${API_BASE}/tasks/${task.id}`,
+                {
+                    method: "PUT",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify(patch),
+                },
+            );
             if (!res.ok) {
                 window.alert(await readErrorMessage(res));
                 return false;
@@ -410,7 +479,9 @@ function KanbanCard({
     );
 
     const handleAssigneesChange = useCallback(
-        (ids: string[]) => { void persistPatch({ assignees: ids }); },
+        (ids: string[]) => {
+            void persistPatch({ assignees: ids });
+        },
         [persistPatch],
     );
 
@@ -424,8 +495,10 @@ function KanbanCard({
         [task.assignees],
     );
 
-    const meetingHref = (task.meetingShortId || task.meetingId)
-        ? `/archives/${encodeURIComponent(task.meetingShortId || task.meetingId!)}` : null;
+    const meetingHref =
+        task.meetingShortId || task.meetingId
+            ? `/archives/${encodeURIComponent(task.meetingShortId || task.meetingId!)}`
+            : null;
 
     return (
         <div
@@ -452,7 +525,9 @@ function KanbanCard({
                     {task.meetingTitle || "Open archive"}
                 </Link>
             ) : (
-                <span className="tasks-kanban-card-meeting tasks-kanban-card-meeting--none">—</span>
+                <span className="tasks-kanban-card-meeting tasks-kanban-card-meeting--none">
+                    —
+                </span>
             )}
 
             {/* Footer: assignees + date */}
@@ -462,17 +537,21 @@ function KanbanCard({
                         <TaskAssigneePicker
                             participants={meetingParticipants}
                             value={assigneeIds}
-                            selectedAssignees={(task.assignees || []).map((a) => ({
-                                id: String(a.id),
-                                name: a.name ?? null,
-                                email: a.email ?? null,
-                                profileImage: a.profileImage ?? null,
-                            }))}
+                            selectedAssignees={(task.assignees || []).map(
+                                (a) => ({
+                                    id: String(a.id),
+                                    name: a.name ?? null,
+                                    email: a.email ?? null,
+                                    profileImage: a.profileImage ?? null,
+                                }),
+                            )}
                             onChange={handleAssigneesChange}
                             disabled={false}
                         />
                     ) : renderableAssignees.length === 0 ? (
-                        <span className="archive-task-unassigned">Unassigned</span>
+                        <span className="archive-task-unassigned">
+                            Unassigned
+                        </span>
                     ) : (
                         <div className="archive-filter-stack archive-filter-stack--task-assignee-trigger">
                             {renderableAssignees.slice(0, 3).map((opt, idx) => (
@@ -481,28 +560,36 @@ function KanbanCard({
                                     className={`archive-filter-stack-slot${idx > 0 ? " archive-filter-stack-slot--overlap" : ""}`}
                                     style={{ zIndex: idx + 1 }}
                                 >
-                                    <span className="archive-filter-stack-disc" aria-hidden>
+                                    <span
+                                        className="archive-filter-stack-disc"
+                                        aria-hidden
+                                    >
                                         <UserAvatar
                                             name={opt.name}
                                             profileImage={opt.profileImage}
                                             userId={opt.id}
                                             size={18}
-                                            style={{ border: "none", borderRadius: "50%" }}
+                                            style={{
+                                                border: "none",
+                                                borderRadius: "50%",
+                                            }}
                                         />
                                     </span>
                                 </div>
                             ))}
                             {renderableAssignees.length > 3 && (
-                                <div
-                                    className="archive-filter-stack-slot archive-filter-stack-slot--overlap my-task-stack-zidx-4"
-                                >
-                                    <span className="archive-filter-stack-more">+{renderableAssignees.length - 3}</span>
+                                <div className="archive-filter-stack-slot archive-filter-stack-slot--overlap my-task-stack-zidx-4">
+                                    <span className="archive-filter-stack-more">
+                                        +{renderableAssignees.length - 3}
+                                    </span>
                                 </div>
                             )}
                         </div>
                     )}
                 </div>
-                <span className="tasks-kanban-card-date">{formatDate(task.assignedAt)}</span>
+                <span className="tasks-kanban-card-date">
+                    {formatDate(task.assignedAt)}
+                </span>
             </div>
 
             {/* Host-only action buttons */}
@@ -527,8 +614,14 @@ function KanbanCard({
                         onPointerDown={(e) => e.stopPropagation()}
                         onClick={async (e) => {
                             e.stopPropagation();
-                            if (!window.confirm("Permanently delete this task?")) return;
-                            const res = await (fetchWithAuth || fetch)(`${API_BASE}/tasks/${task.id}`, { method: "DELETE" });
+                            if (
+                                !window.confirm("Permanently delete this task?")
+                            )
+                                return;
+                            const res = await (fetchWithAuth || fetch)(
+                                `${API_BASE}/tasks/${task.id}`,
+                                { method: "DELETE" },
+                            );
                             if (res.ok) onRefresh?.();
                         }}
                     >

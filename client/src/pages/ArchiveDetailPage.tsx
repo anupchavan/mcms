@@ -13,8 +13,13 @@ export default function ArchiveDetailPage() {
                     <h2 className="page-header-title">Archive</h2>
                 </header>
                 <div className="page-body-gutter-x adp-pad-bottom">
-                    <div role="status" className="adp-status-text">Invalid archive id.</div>
-                    <Link to="/archives" className="archive-detail-crumb-link adp-back-link">
+                    <div role="status" className="adp-status-text">
+                        Invalid archive id.
+                    </div>
+                    <Link
+                        to="/archives"
+                        className="archive-detail-crumb-link adp-back-link"
+                    >
                         Archives
                     </Link>
                 </div>

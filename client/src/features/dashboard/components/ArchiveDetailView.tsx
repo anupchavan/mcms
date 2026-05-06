@@ -12,8 +12,14 @@ import {
     Search01Icon,
 } from "@hugeicons/core-free-icons";
 import {
-    ArchiveDetail, ArchiveParticipant, ArchiveTask, TranscriptSegment, flattenTranscripts,
-    formatArchiveDate, groupTasksByAgenda, TRANSCRIPT_DEBOUNCE_MS,
+    ArchiveDetail,
+    ArchiveParticipant,
+    ArchiveTask,
+    TranscriptSegment,
+    flattenTranscripts,
+    formatArchiveDate,
+    groupTasksByAgenda,
+    TRANSCRIPT_DEBOUNCE_MS,
 } from "./archiveHelpers";
 import { UserAvatar } from "../../../shared/components/UserAvatar";
 import { useAuth } from "../../../stores/AuthContext";
@@ -28,19 +34,19 @@ const SUMMARY_AUTO_CUTOFF_DATE = new Date("2026-05-04");
 
 /** Flexoki colour palette for tag chips. */
 const FLEXOKI_TAG_COLORS: { label: string; value: string }[] = [
-    { label: "Red",     value: "#D14D41" },
-    { label: "Orange",  value: "#DA702C" },
-    { label: "Yellow",  value: "#D0A215" },
-    { label: "Green",   value: "#879A39" },
-    { label: "Cyan",    value: "#3AA99F" },
-    { label: "Blue",    value: "#4385BE" },
-    { label: "Purple",  value: "#8B7EC8" },
+    { label: "Red", value: "#D14D41" },
+    { label: "Orange", value: "#DA702C" },
+    { label: "Yellow", value: "#D0A215" },
+    { label: "Green", value: "#879A39" },
+    { label: "Cyan", value: "#3AA99F" },
+    { label: "Blue", value: "#4385BE" },
+    { label: "Purple", value: "#8B7EC8" },
     { label: "Magenta", value: "#CE5D97" },
 ];
 
 /** Colour menu options (Flexoki + default / no custom colour). */
 const TAG_COLOUR_MENU: { label: string; value: string | null }[] = [
-    ...FLEXOKI_TAG_COLORS.map(c => ({ label: c.label, value: c.value })),
+    ...FLEXOKI_TAG_COLORS.map((c) => ({ label: c.label, value: c.value })),
     { label: "Default", value: null },
 ];
 
@@ -51,9 +57,17 @@ function hueFromTagLabel(s: string) {
 }
 
 /** Tag ring in add-tag dropdown (matches archive search tag rows). */
-function TagPickRing({ name, catalogColor }: { name: string; catalogColor?: string }) {
+function TagPickRing({
+    name,
+    catalogColor,
+}: {
+    name: string;
+    catalogColor?: string;
+}) {
     const hue = hueFromTagLabel(name || "?");
-    const ringColor = catalogColor ? `${catalogColor}cc` : `hsla(${hue}, 48%, 50%, 0.78)`;
+    const ringColor = catalogColor
+        ? `${catalogColor}cc`
+        : `hsla(${hue}, 48%, 50%, 0.78)`;
     const bgColor = catalogColor ? `${catalogColor}22` : undefined;
     return (
         <span
@@ -65,7 +79,11 @@ function TagPickRing({ name, catalogColor }: { name: string; catalogColor?: stri
 }
 
 /** CSS `color` for tag accent (stored hex or deterministic hue). */
-function accentCssForTag(tag: string, meetingColors: Record<string, string>, catalogColors: Record<string, string>): string {
+function accentCssForTag(
+    tag: string,
+    meetingColors: Record<string, string>,
+    catalogColors: Record<string, string>,
+): string {
     const hex = meetingColors[tag] || catalogColors[tag];
     if (hex && /^#[0-9A-Fa-f]{3}([0-9A-Fa-f]{3})?$/.test(hex)) return hex;
     const h = hueFromTagLabel(tag);
@@ -77,13 +95,17 @@ interface ArchiveDetailViewProps {
     fetchWithAuth?: (url: string, options?: RequestInit) => Promise<Response>;
 }
 
-export default function ArchiveDetailView({ meetingId, fetchWithAuth }: ArchiveDetailViewProps) {
+export default function ArchiveDetailView({
+    meetingId,
+    fetchWithAuth,
+}: ArchiveDetailViewProps) {
     const navigate = useNavigate();
     const { user } = useAuth();
     const [detail, setDetail] = useState<ArchiveDetail | null>(null);
     const [summaries, setSummaries] = useState<Record<string, string>>({});
     const [loadingSummary, setLoadingSummary] = useState(false);
-    const [finalSummary, setFinalSummary] = useState<ArchiveDetail["meetingSummary"]>(null);
+    const [finalSummary, setFinalSummary] =
+        useState<ArchiveDetail["meetingSummary"]>(null);
     const [loadingFinalSummary, setLoadingFinalSummary] = useState(false);
     const [generatingTasks, setGeneratingTasks] = useState(false);
     const [notFound, setNotFound] = useState(false);
@@ -93,11 +115,15 @@ export default function ArchiveDetailView({ meetingId, fetchWithAuth }: ArchiveD
     const [participantSearch, setParticipantSearch] = useState("");
     const [savingTags, setSavingTags] = useState(false);
     const [catalogTags, setCatalogTags] = useState<string[]>([]);
-    const [catalogTagColors, setCatalogTagColors] = useState<Record<string, string>>({});
+    const [catalogTagColors, setCatalogTagColors] = useState<
+        Record<string, string>
+    >({});
     const [tagAddOpen, setTagAddOpen] = useState(false);
     const [tagAddSearch, setTagAddSearch] = useState("");
     const [tagAddHlIdx, setTagAddHlIdx] = useState(0);
-    const [newTagAwaitingColor, setNewTagAwaitingColor] = useState<string | null>(null);
+    const [newTagAwaitingColor, setNewTagAwaitingColor] = useState<
+        string | null
+    >(null);
     const [tagColorSearch, setTagColorSearch] = useState("");
     const [tagColorHlIdx, setTagColorHlIdx] = useState(0);
     const tagAddRootRef = useRef<HTMLDivElement>(null);
@@ -110,12 +136,20 @@ export default function ArchiveDetailView({ meetingId, fetchWithAuth }: ArchiveD
             setNotFound(false);
             setDetail(null);
             try {
-                const res = await (fetchWithAuth || fetch)(`${API_BASE}/archive/${meetingId}`);
+                const res = await (fetchWithAuth || fetch)(
+                    `${API_BASE}/archive/${meetingId}`,
+                );
                 if (cancelled) return;
-                if (!res.ok) { setNotFound(true); return; }
+                if (!res.ok) {
+                    setNotFound(true);
+                    return;
+                }
                 const data = await res.json();
                 // Server returns either `tasks` (canonical) or `actionItems` (legacy alias). Normalize so the rest of the view can rely on `tasks`.
-                if (!Array.isArray(data.tasks)) data.tasks = Array.isArray(data.actionItems) ? data.actionItems : [];
+                if (!Array.isArray(data.tasks))
+                    data.tasks = Array.isArray(data.actionItems)
+                        ? data.actionItems
+                        : [];
                 setDetail(data);
                 setFinalSummary(data.meetingSummary || null);
             } catch (err) {
@@ -123,39 +157,57 @@ export default function ArchiveDetailView({ meetingId, fetchWithAuth }: ArchiveD
                 if (!cancelled) setNotFound(true);
             }
         })();
-        return () => { cancelled = true; };
+        return () => {
+            cancelled = true;
+        };
     }, [meetingId, fetchWithAuth]);
 
     const loadFinalSummary = useCallback(async () => {
         setLoadingFinalSummary(true);
         try {
-            const res = await (fetchWithAuth || fetch)(`${API_BASE}/archive/${meetingId}/final-summary`);
+            const res = await (fetchWithAuth || fetch)(
+                `${API_BASE}/archive/${meetingId}/final-summary`,
+            );
             if (res.ok) {
                 const data = await res.json();
-                const normalized = data.summary ? {
-                    overview: data.summary.overview || "",
-                    discussionPoints: data.summary.discussion_points || [],
-                    completedItems: data.summary.completed_items || [],
-                    pendingItems: data.summary.pending_items || [],
-                    decisions: data.summary.decisions || [],
-                    nextSteps: data.summary.next_steps || [],
-                    model: data.summary.model,
-                    generatedAt: data.summary.generated_at,
-                } : null;
+                const normalized = data.summary
+                    ? {
+                          overview: data.summary.overview || "",
+                          discussionPoints:
+                              data.summary.discussion_points || [],
+                          completedItems: data.summary.completed_items || [],
+                          pendingItems: data.summary.pending_items || [],
+                          decisions: data.summary.decisions || [],
+                          nextSteps: data.summary.next_steps || [],
+                          model: data.summary.model,
+                          generatedAt: data.summary.generated_at,
+                      }
+                    : null;
                 setFinalSummary(normalized);
-                setDetail(prev => prev ? ({ ...prev, meetingSummary: normalized }) : prev);
+                setDetail((prev) =>
+                    prev ? { ...prev, meetingSummary: normalized } : prev,
+                );
             }
-        } catch (err) { console.error("Failed to load final summary:", err); }
+        } catch (err) {
+            console.error("Failed to load final summary:", err);
+        }
         setLoadingFinalSummary(false);
     }, [meetingId, fetchWithAuth]);
 
     const generateTasks = useCallback(async () => {
         setGeneratingTasks(true);
         try {
-            const res = await (fetchWithAuth || fetch)(`${API_BASE}/archive/${meetingId}/extract-tasks`, { method: "POST" });
+            const res = await (fetchWithAuth || fetch)(
+                `${API_BASE}/archive/${meetingId}/extract-tasks`,
+                { method: "POST" },
+            );
             if (res.ok) {
                 const data = await res.json();
-                const tasks: ArchiveTask[] = (data.tasks || data.actions || []).map((t: any) => ({
+                const tasks: ArchiveTask[] = (
+                    data.tasks ||
+                    data.actions ||
+                    []
+                ).map((t: any) => ({
                     id: String(t.id),
                     title: t.title,
                     status: t.status,
@@ -164,21 +216,29 @@ export default function ArchiveDetailView({ meetingId, fetchWithAuth }: ArchiveD
                     source: t.source,
                     agendaItemId: t.agendaItemId ?? null,
                 }));
-                setDetail(prev => prev ? ({ ...prev, tasks, actionItems: tasks }) : prev);
+                setDetail((prev) =>
+                    prev ? { ...prev, tasks, actionItems: tasks } : prev,
+                );
             }
-        } catch (err) { console.error("Failed to generate tasks:", err); }
+        } catch (err) {
+            console.error("Failed to generate tasks:", err);
+        }
         setGeneratingTasks(false);
     }, [meetingId, fetchWithAuth]);
 
     const loadSummary = useCallback(async () => {
         setLoadingSummary(true);
         try {
-            const res = await (fetchWithAuth || fetch)(`${API_BASE}/archive/${meetingId}/summary`);
+            const res = await (fetchWithAuth || fetch)(
+                `${API_BASE}/archive/${meetingId}/summary`,
+            );
             if (res.ok) {
                 const data = await res.json();
                 setSummaries(data.summaries || {});
             }
-        } catch (err) { console.error("Failed to load summary:", err); }
+        } catch (err) {
+            console.error("Failed to load summary:", err);
+        }
         setLoadingSummary(false);
     }, [meetingId, fetchWithAuth]);
 
@@ -191,38 +251,60 @@ export default function ArchiveDetailView({ meetingId, fetchWithAuth }: ArchiveD
         return String(hid) === String(uid);
     }, [detail, user]);
 
-    const patchMeetingTags = useCallback(async (tags: string[], tagColors: Record<string, string>) => {
-        if (!detail) return;
-        setSavingTags(true);
-        try {
-            const res = await (fetchWithAuth || fetch)(`${API_BASE}/archive/${meetingId}/tags`, {
-                method: "PATCH",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ tags, tagColors }),
-            });
-            if (res.ok) {
-                const data = await res.json();
-                setDetail(prev => prev ? ({
-                    ...prev,
-                    meeting: { ...prev.meeting, tags: data.tags, tagColors: data.tagColors },
-                }) : prev);
+    const patchMeetingTags = useCallback(
+        async (tags: string[], tagColors: Record<string, string>) => {
+            if (!detail) return;
+            setSavingTags(true);
+            try {
+                const res = await (fetchWithAuth || fetch)(
+                    `${API_BASE}/archive/${meetingId}/tags`,
+                    {
+                        method: "PATCH",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({ tags, tagColors }),
+                    },
+                );
+                if (res.ok) {
+                    const data = await res.json();
+                    setDetail((prev) =>
+                        prev
+                            ? {
+                                  ...prev,
+                                  meeting: {
+                                      ...prev.meeting,
+                                      tags: data.tags,
+                                      tagColors: data.tagColors,
+                                  },
+                              }
+                            : prev,
+                    );
+                }
+            } catch (err) {
+                console.error("Failed to save tags:", err);
             }
-        } catch (err) { console.error("Failed to save tags:", err); }
-        setSavingTags(false);
-    }, [detail, meetingId, fetchWithAuth]);
+            setSavingTags(false);
+        },
+        [detail, meetingId, fetchWithAuth],
+    );
 
     useEffect(() => {
         let cancelled = false;
         (async () => {
             try {
-                const res = await (fetchWithAuth || fetch)(`${API_BASE}/archive/filters`);
+                const res = await (fetchWithAuth || fetch)(
+                    `${API_BASE}/archive/filters`,
+                );
                 if (!res.ok || cancelled) return;
                 const data = await res.json();
                 setCatalogTags(data.tags || []);
                 setCatalogTagColors(data.tagColors || {});
-            } catch (e) { console.error("Failed to load tag catalog:", e); }
+            } catch (e) {
+                console.error("Failed to load tag catalog:", e);
+            }
         })();
-        return () => { cancelled = true; };
+        return () => {
+            cancelled = true;
+        };
     }, [fetchWithAuth]);
 
     useEffect(() => {
@@ -241,28 +323,34 @@ export default function ArchiveDetailView({ meetingId, fetchWithAuth }: ArchiveD
         return () => document.removeEventListener("mousedown", onDoc);
     }, [tagAddOpen]);
 
-    const removeMeetingTag = useCallback((tag: string) => {
-        if (!detail || !isHost) return;
-        const curTags = detail.meeting.tags || [];
-        const nextTags = curTags.filter(t => t !== tag);
-        const nextColors = { ...(detail.meeting.tagColors || {}) };
-        delete nextColors[tag];
-        void patchMeetingTags(nextTags, nextColors);
-    }, [detail, isHost, patchMeetingTags]);
+    const removeMeetingTag = useCallback(
+        (tag: string) => {
+            if (!detail || !isHost) return;
+            const curTags = detail.meeting.tags || [];
+            const nextTags = curTags.filter((t) => t !== tag);
+            const nextColors = { ...(detail.meeting.tagColors || {}) };
+            delete nextColors[tag];
+            void patchMeetingTags(nextTags, nextColors);
+        },
+        [detail, isHost, patchMeetingTags],
+    );
 
-    const addMeetingTag = useCallback((tag: string, color?: string | null) => {
-        if (!detail || !isHost) return;
-        const trimmed = tag.trim().replace(/,/g, "");
-        if (!trimmed) return;
-        const curTags = detail.meeting.tags || [];
-        if (curTags.includes(trimmed)) return;
-        const nextTags = [...curTags, trimmed];
-        const nextColors = { ...(detail.meeting.tagColors || {}) };
-        const fromCatalog = catalogTagColors[trimmed];
-        if (color) nextColors[trimmed] = color;
-        else if (fromCatalog) nextColors[trimmed] = fromCatalog;
-        void patchMeetingTags(nextTags, nextColors);
-    }, [detail, isHost, patchMeetingTags, catalogTagColors]);
+    const addMeetingTag = useCallback(
+        (tag: string, color?: string | null) => {
+            if (!detail || !isHost) return;
+            const trimmed = tag.trim().replace(/,/g, "");
+            if (!trimmed) return;
+            const curTags = detail.meeting.tags || [];
+            if (curTags.includes(trimmed)) return;
+            const nextTags = [...curTags, trimmed];
+            const nextColors = { ...(detail.meeting.tagColors || {}) };
+            const fromCatalog = catalogTagColors[trimmed];
+            if (color) nextColors[trimmed] = color;
+            else if (fromCatalog) nextColors[trimmed] = fromCatalog;
+            void patchMeetingTags(nextTags, nextColors);
+        },
+        [detail, isHost, patchMeetingTags, catalogTagColors],
+    );
 
     const openTagAddDropdown = useCallback(() => {
         setTagAddOpen(true);
@@ -278,36 +366,43 @@ export default function ArchiveDetailView({ meetingId, fetchWithAuth }: ArchiveD
         const current = new Set(detail.meeting.tags || []);
         const q = tagAddSearch.trim().toLowerCase();
         return catalogTags
-            .filter((t) => !current.has(t) && (!q || t.toLowerCase().includes(q)))
+            .filter(
+                (t) => !current.has(t) && (!q || t.toLowerCase().includes(q)),
+            )
             .sort((a, b) => a.localeCompare(b));
     }, [detail, catalogTags, tagAddSearch]);
 
     const tagAddShowCreateRow = useMemo(() => {
         const q = tagAddSearch.trim();
         if (!q || !detail) return false;
-        const onMeeting = (detail.meeting.tags || []).some(t => t.toLowerCase() === q.toLowerCase());
+        const onMeeting = (detail.meeting.tags || []).some(
+            (t) => t.toLowerCase() === q.toLowerCase(),
+        );
         if (onMeeting) return false;
         return tagAddFiltered.length === 0;
     }, [tagAddSearch, detail, tagAddFiltered]);
 
     const tagAddRowsLen = tagAddFiltered.length + (tagAddShowCreateRow ? 1 : 0);
 
-    const applyNewTagColor = useCallback((hex: string | null) => {
-        if (!newTagAwaitingColor || !detail || !isHost) return;
-        const t = newTagAwaitingColor.trim().replace(/,/g, "");
-        if (!t) return;
-        const curTags = detail.meeting.tags || [];
-        const nextTags = curTags.includes(t) ? curTags : [...curTags, t];
-        const nextColors = { ...(detail.meeting.tagColors || {}) };
-        if (hex) nextColors[t] = hex;
-        else delete nextColors[t];
-        void patchMeetingTags(nextTags, nextColors);
-        setTagAddOpen(false);
-        setTagAddSearch("");
-        setNewTagAwaitingColor(null);
-        setTagColorSearch("");
-        setTagColorHlIdx(0);
-    }, [newTagAwaitingColor, detail, isHost, patchMeetingTags]);
+    const applyNewTagColor = useCallback(
+        (hex: string | null) => {
+            if (!newTagAwaitingColor || !detail || !isHost) return;
+            const t = newTagAwaitingColor.trim().replace(/,/g, "");
+            if (!t) return;
+            const curTags = detail.meeting.tags || [];
+            const nextTags = curTags.includes(t) ? curTags : [...curTags, t];
+            const nextColors = { ...(detail.meeting.tagColors || {}) };
+            if (hex) nextColors[t] = hex;
+            else delete nextColors[t];
+            void patchMeetingTags(nextTags, nextColors);
+            setTagAddOpen(false);
+            setTagAddSearch("");
+            setNewTagAwaitingColor(null);
+            setTagColorSearch("");
+            setTagColorHlIdx(0);
+        },
+        [newTagAwaitingColor, detail, isHost, patchMeetingTags],
+    );
 
     const exitColorPickerToTags = useCallback(() => {
         setNewTagAwaitingColor(null);
@@ -324,7 +419,9 @@ export default function ArchiveDetailView({ meetingId, fetchWithAuth }: ArchiveD
     const tagColorFiltered = useMemo(() => {
         const q = tagColorSearch.trim().toLowerCase();
         if (!q) return TAG_COLOUR_MENU;
-        return TAG_COLOUR_MENU.filter(({ label }) => label.toLowerCase().includes(q));
+        return TAG_COLOUR_MENU.filter(({ label }) =>
+            label.toLowerCase().includes(q),
+        );
     }, [tagColorSearch]);
 
     useEffect(() => {
@@ -333,7 +430,7 @@ export default function ArchiveDetailView({ meetingId, fetchWithAuth }: ArchiveD
 
     useEffect(() => {
         if (!tagAddOpen || newTagAwaitingColor) return;
-        setTagAddHlIdx(i => {
+        setTagAddHlIdx((i) => {
             if (tagAddRowsLen <= 0) return 0;
             return Math.min(Math.max(i, 0), tagAddRowsLen - 1);
         });
@@ -341,7 +438,7 @@ export default function ArchiveDetailView({ meetingId, fetchWithAuth }: ArchiveD
 
     useEffect(() => {
         if (!newTagAwaitingColor) return;
-        setTagColorHlIdx(h => {
+        setTagColorHlIdx((h) => {
             if (tagColorFiltered.length === 0) return 0;
             return Math.min(Math.max(h, 0), tagColorFiltered.length - 1);
         });
@@ -349,7 +446,9 @@ export default function ArchiveDetailView({ meetingId, fetchWithAuth }: ArchiveD
 
     useEffect(() => {
         if (!newTagAwaitingColor) return;
-        const id = window.requestAnimationFrame(() => tagColorSearchInputRef.current?.focus());
+        const id = window.requestAnimationFrame(() =>
+            tagColorSearchInputRef.current?.focus(),
+        );
         return () => window.cancelAnimationFrame(id);
     }, [newTagAwaitingColor]);
 
@@ -379,7 +478,12 @@ export default function ArchiveDetailView({ meetingId, fetchWithAuth }: ArchiveD
     // Auto-fetch meeting summary for new meetings (server generates on end_meeting)
     const summaryFetchedRef = useRef(false);
     useEffect(() => {
-        if (!isAutoGenMeeting || finalSummary !== null || summaryFetchedRef.current) return;
+        if (
+            !isAutoGenMeeting ||
+            finalSummary !== null ||
+            summaryFetchedRef.current
+        )
+            return;
         summaryFetchedRef.current = true;
         loadFinalSummary();
     }, [isAutoGenMeeting, finalSummary, loadFinalSummary]);
@@ -387,7 +491,13 @@ export default function ArchiveDetailView({ meetingId, fetchWithAuth }: ArchiveD
     // Auto-fetch per-agenda summaries for new meetings that have agenda items
     const agendaSummaryFetchedRef = useRef(false);
     useEffect(() => {
-        if (!detail || !isAutoGenMeeting || Object.keys(summaries).length > 0 || agendaSummaryFetchedRef.current) return;
+        if (
+            !detail ||
+            !isAutoGenMeeting ||
+            Object.keys(summaries).length > 0 ||
+            agendaSummaryFetchedRef.current
+        )
+            return;
         if (detail.agendaItems.length === 0) return;
         agendaSummaryFetchedRef.current = true;
         loadSummary();
@@ -400,8 +510,11 @@ export default function ArchiveDetailView({ meetingId, fetchWithAuth }: ArchiveD
         if (!detail || !isAutoGenMeeting || tasksGeneratedRef.current) return;
         const tasks = detail.tasks || [];
         if (tasks.length > 0) return;
-        const hasTranscripts = (detail.transcriptFlat?.length || 0) > 0
-            || Object.values(detail.transcriptsByAgenda || {}).some((s) => (s || []).length > 0);
+        const hasTranscripts =
+            (detail.transcriptFlat?.length || 0) > 0 ||
+            Object.values(detail.transcriptsByAgenda || {}).some(
+                (s) => (s || []).length > 0,
+            );
         if (!hasTranscripts) return;
         tasksGeneratedRef.current = true;
         generateTasks();
@@ -411,21 +524,27 @@ export default function ArchiveDetailView({ meetingId, fetchWithAuth }: ArchiveD
     // Must be before early returns (rules of hooks)
     const allParticipants = useMemo<ArchiveParticipant[]>(() => {
         if (!detail) return [];
-        const rawParticipants = (detail.meeting.participants || []) as ArchiveParticipant[];
+        const rawParticipants = (detail.meeting.participants ||
+            []) as ArchiveParticipant[];
         const hostId = detail.meeting.hostId;
         const hostParticipant: ArchiveParticipant | null =
             hostId && typeof hostId === "object"
-                ? hostId as ArchiveParticipant
+                ? (hostId as ArchiveParticipant)
                 : null;
-        const others = rawParticipants.filter(p =>
-            !hostParticipant || p._id !== hostParticipant._id
+        const others = rawParticipants.filter(
+            (p) => !hostParticipant || p._id !== hostParticipant._id,
         );
         return hostParticipant ? [hostParticipant, ...others] : rawParticipants;
     }, [detail]);
 
     // Speaking time per speaker (from flat transcripts)
     const speakingData = useMemo(() => {
-        if (!detail) return { counts: {} as Record<string, number>, total: 0, totalSecs: 0 };
+        if (!detail)
+            return {
+                counts: {} as Record<string, number>,
+                total: 0,
+                totalSecs: 0,
+            };
         const flat = flattenTranscripts(detail);
         const counts: Record<string, number> = {};
         for (const seg of flat) {
@@ -437,33 +556,51 @@ export default function ArchiveDetailView({ meetingId, fetchWithAuth }: ArchiveD
         if (flat.length > 0) {
             const lastTs = flat[flat.length - 1].timestamp || "";
             const parts = lastTs.split(":").map(Number);
-            if (parts.length === 3) totalSecs = parts[0] * 3600 + parts[1] * 60 + parts[2];
+            if (parts.length === 3)
+                totalSecs = parts[0] * 3600 + parts[1] * 60 + parts[2];
             else if (parts.length === 2) totalSecs = parts[0] * 60 + parts[1];
         }
         return { counts, total: flat.length, totalSecs };
     }, [detail]);
 
     // Map participant name → speaking % (fuzzy match speaker field to participant name)
-    const getSpeakingPct = useCallback((participant: ArchiveParticipant) => {
-        if (speakingData.total === 0) return null;
-        const name = (participant.name || "").trim().toLowerCase();
-        if (!name) return null;
-        let count = 0;
-        for (const [sp, c] of Object.entries(speakingData.counts)) {
-            if (sp.toLowerCase().includes(name) || name.includes(sp.toLowerCase())) count += c;
-        }
-        if (count === 0) return null;
-        return Math.round((count / speakingData.total) * 100);
-    }, [speakingData]);
+    const getSpeakingPct = useCallback(
+        (participant: ArchiveParticipant) => {
+            if (speakingData.total === 0) return null;
+            const name = (participant.name || "").trim().toLowerCase();
+            if (!name) return null;
+            let count = 0;
+            for (const [sp, c] of Object.entries(speakingData.counts)) {
+                if (
+                    sp.toLowerCase().includes(name) ||
+                    name.includes(sp.toLowerCase())
+                )
+                    count += c;
+            }
+            if (count === 0) return null;
+            return Math.round((count / speakingData.total) * 100);
+        },
+        [speakingData],
+    );
 
     const CrumbHeader = ({ title }: { title: string }) => (
         <header className="page-header">
             <nav aria-label="Archive navigation">
                 <h2 className="page-header-title archive-detail-page-title">
                     <span className="archive-detail-title-row">
-                        <Link to="/archives" className="archive-detail-crumb-link">Archives</Link>
-                        <span className="archive-detail-crumb-sep" aria-hidden> / </span>
-                        <span className="archive-detail-title-meeting">{title}</span>
+                        <Link
+                            to="/archives"
+                            className="archive-detail-crumb-link"
+                        >
+                            Archives
+                        </Link>
+                        <span className="archive-detail-crumb-sep" aria-hidden>
+                            {" "}
+                            /{" "}
+                        </span>
+                        <span className="archive-detail-title-meeting">
+                            {title}
+                        </span>
                     </span>
                 </h2>
             </nav>
@@ -475,7 +612,9 @@ export default function ArchiveDetailView({ meetingId, fetchWithAuth }: ArchiveD
             <div className="page-shell">
                 <CrumbHeader title="Not found" />
                 <div className="page-body-gutter-x adv-pad-bottom">
-                    <div role="status" className="adv-muted-text">Archive not found or not available yet.</div>
+                    <div role="status" className="adv-muted-text">
+                        Archive not found or not available yet.
+                    </div>
                 </div>
             </div>
         );
@@ -486,16 +625,23 @@ export default function ArchiveDetailView({ meetingId, fetchWithAuth }: ArchiveD
             <div className="page-shell">
                 <CrumbHeader title="…" />
                 <div className="page-body-gutter-x adv-pad-bottom">
-                    <div role="status" className="adv-muted-text">Loading archive…</div>
+                    <div role="status" className="adv-muted-text">
+                        Loading archive…
+                    </div>
                 </div>
             </div>
         );
     }
 
     const tags: string[] = detail.meeting.tags || [];
-    const meetingTagColors: Record<string, string> = detail.meeting.tagColors || {};
+    const meetingTagColors: Record<string, string> =
+        detail.meeting.tagColors || {};
     const filteredParticipants = participantSearch.trim()
-        ? allParticipants.filter(p => (p.name || p.email || "").toLowerCase().includes(participantSearch.toLowerCase()))
+        ? allParticipants.filter((p) =>
+              (p.name || p.email || "")
+                  .toLowerCase()
+                  .includes(participantSearch.toLowerCase()),
+          )
         : allParticipants;
 
     return (
@@ -509,27 +655,57 @@ export default function ArchiveDetailView({ meetingId, fetchWithAuth }: ArchiveD
                         {finalSummary ? (
                             <div>
                                 <p>
-                                    {finalSummary.overview || "No overview available."}
+                                    {finalSummary.overview ||
+                                        "No overview available."}
                                 </p>
-                                <SummaryList title="Discussion Points" items={finalSummary.discussionPoints} />
-                                <SummaryList title="Completed" items={finalSummary.completedItems} />
-                                <SummaryList title="Pending" items={finalSummary.pendingItems} />
-                                <SummaryList title="Decisions" items={finalSummary.decisions} />
-                                <SummaryList title="Next Steps" items={finalSummary.nextSteps} />
+                                <SummaryList
+                                    title="Discussion Points"
+                                    items={finalSummary.discussionPoints}
+                                />
+                                <SummaryList
+                                    title="Completed"
+                                    items={finalSummary.completedItems}
+                                />
+                                <SummaryList
+                                    title="Pending"
+                                    items={finalSummary.pendingItems}
+                                />
+                                <SummaryList
+                                    title="Decisions"
+                                    items={finalSummary.decisions}
+                                />
+                                <SummaryList
+                                    title="Next Steps"
+                                    items={finalSummary.nextSteps}
+                                />
                                 <p className="adv-summary-model">
                                     Model: {finalSummary.model || "unknown"}
-                                    {finalSummary.generatedAt ? ` · Generated ${new Date(finalSummary.generatedAt).toLocaleString()}` : ""}
+                                    {finalSummary.generatedAt
+                                        ? ` · Generated ${new Date(finalSummary.generatedAt).toLocaleString()}`
+                                        : ""}
                                 </p>
                             </div>
                         ) : loadingFinalSummary ? (
-                            <div className="archive-detail-summary-loading" role="status">
-                                <span className="archive-searching-loading-spinner" aria-hidden />
-                                <span className="archive-searching-loading-text">Generating summary</span>
+                            <div
+                                className="archive-detail-summary-loading"
+                                role="status"
+                            >
+                                <span
+                                    className="archive-searching-loading-spinner"
+                                    aria-hidden
+                                />
+                                <span className="archive-searching-loading-text">
+                                    Generating summary
+                                </span>
                             </div>
                         ) : null}
                     </ArchiveSection>
 
-                    <ArchiveTranscriptExplorer meetingId={meetingId} detail={detail} fetchWithAuth={fetchWithAuth} />
+                    <ArchiveTranscriptExplorer
+                        meetingId={meetingId}
+                        detail={detail}
+                        fetchWithAuth={fetchWithAuth}
+                    />
 
                     {/* {detail.agendaItems.length > 0 && (
                         <ArchiveSection title="Agenda & Transcript">
@@ -552,30 +728,60 @@ export default function ArchiveDetailView({ meetingId, fetchWithAuth }: ArchiveD
 
                     {(() => {
                         const tasks = detail.tasks || [];
-                        const hasTranscripts = Object.keys(detail.transcriptsByAgenda || {}).length > 0;
-                        if (tasks.length === 0 && !generatingTasks && !hasTranscripts) return null;
+                        const hasTranscripts =
+                            Object.keys(detail.transcriptsByAgenda || {})
+                                .length > 0;
+                        if (
+                            tasks.length === 0 &&
+                            !generatingTasks &&
+                            !hasTranscripts
+                        )
+                            return null;
                         const groups = groupTasksByAgenda(detail);
                         return (
                             <ArchiveSection title="Tasks">
                                 {tasks.length > 0 ? (
                                     groups.length > 1 ? (
                                         groups.map((group) => (
-                                            <div key={group.key} className="adv-group-gap">
+                                            <div
+                                                key={group.key}
+                                                className="adv-group-gap"
+                                            >
                                                 <div className="adv-group-header">
-                                                    <span className="adv-group-title">{group.title}</span>
-                                                    <span className="chip chip-blue chip-2xs">{group.items.length}</span>
+                                                    <span className="adv-group-title">
+                                                        {group.title}
+                                                    </span>
+                                                    <span className="chip chip-blue chip-2xs">
+                                                        {group.items.length}
+                                                    </span>
                                                 </div>
                                                 <ArchiveTaskTable
                                                     tasks={group.items}
-                                                    participants={allParticipants}
+                                                    participants={
+                                                        allParticipants
+                                                    }
                                                     canEdit={isHost}
-                                                    fetchWithAuth={fetchWithAuth}
+                                                    fetchWithAuth={
+                                                        fetchWithAuth
+                                                    }
                                                     apiBase={API_BASE}
                                                     onTaskUpdated={(next) => {
-                                                        setDetail(prev => {
-                                                            if (!prev) return prev;
-                                                            const merged = (prev.tasks || []).map(t => t.id === next.id ? next : t);
-                                                            return { ...prev, tasks: merged, actionItems: merged };
+                                                        setDetail((prev) => {
+                                                            if (!prev)
+                                                                return prev;
+                                                            const merged = (
+                                                                prev.tasks || []
+                                                            ).map((t) =>
+                                                                t.id === next.id
+                                                                    ? next
+                                                                    : t,
+                                                            );
+                                                            return {
+                                                                ...prev,
+                                                                tasks: merged,
+                                                                actionItems:
+                                                                    merged,
+                                                            };
                                                         });
                                                     }}
                                                 />
@@ -589,18 +795,36 @@ export default function ArchiveDetailView({ meetingId, fetchWithAuth }: ArchiveD
                                             fetchWithAuth={fetchWithAuth}
                                             apiBase={API_BASE}
                                             onTaskUpdated={(next) => {
-                                                setDetail(prev => {
+                                                setDetail((prev) => {
                                                     if (!prev) return prev;
-                                                    const merged = (prev.tasks || []).map(t => t.id === next.id ? next : t);
-                                                    return { ...prev, tasks: merged, actionItems: merged };
+                                                    const merged = (
+                                                        prev.tasks || []
+                                                    ).map((t) =>
+                                                        t.id === next.id
+                                                            ? next
+                                                            : t,
+                                                    );
+                                                    return {
+                                                        ...prev,
+                                                        tasks: merged,
+                                                        actionItems: merged,
+                                                    };
                                                 });
                                             }}
                                         />
                                     )
                                 ) : generatingTasks ? (
-                                    <div className="archive-detail-summary-loading" role="status">
-                                        <span className="archive-searching-loading-spinner" aria-hidden />
-                                        <span className="archive-searching-loading-text">Generating tasks</span>
+                                    <div
+                                        className="archive-detail-summary-loading"
+                                        role="status"
+                                    >
+                                        <span
+                                            className="archive-searching-loading-spinner"
+                                            aria-hidden
+                                        />
+                                        <span className="archive-searching-loading-text">
+                                            Generating tasks
+                                        </span>
                                     </div>
                                 ) : (
                                     <div className="adv-empty-text">
@@ -613,12 +837,24 @@ export default function ArchiveDetailView({ meetingId, fetchWithAuth }: ArchiveD
 
                     {detail.pins.length > 0 && (
                         <ArchiveSection title="Resource Pins">
-                            {detail.pins.map(pin => (
-                                <div key={pin.id} className="glass-card adv-pin-card">
+                            {detail.pins.map((pin) => (
+                                <div
+                                    key={pin.id}
+                                    className="glass-card adv-pin-card"
+                                >
                                     <div className="adv-pin-row">
-                                        <span className="chip chip-cyan chip-2xs">{pin.type}</span>
-                                        <a href={pin.url || "#"} target="_blank" rel="noopener noreferrer" className="adv-pin-link">
-                                            {pin.label || pin.url || "Code snippet"}
+                                        <span className="chip chip-cyan chip-2xs">
+                                            {pin.type}
+                                        </span>
+                                        <a
+                                            href={pin.url || "#"}
+                                            target="_blank"
+                                            rel="noopener noreferrer"
+                                            className="adv-pin-link"
+                                        >
+                                            {pin.label ||
+                                                pin.url ||
+                                                "Code snippet"}
                                         </a>
                                         <span className="adv-pin-meta">
                                             at {pin.transcriptTimestamp || "—"}
@@ -634,26 +870,45 @@ export default function ArchiveDetailView({ meetingId, fetchWithAuth }: ArchiveD
                 <aside className="archive-detail-sidebar">
                     {/* Description */}
                     <div className="archive-detail-sidebar-section">
-                        <span className="archive-detail-sidebar-label">About</span>
-                        {detail.meeting.description
-                            ? <p className="archive-detail-sidebar-desc">{detail.meeting.description}</p>
-                            : <p className="archive-detail-sidebar-desc archive-detail-sidebar-desc--empty">No description</p>
-                        }
+                        <span className="archive-detail-sidebar-label">
+                            About
+                        </span>
+                        {detail.meeting.description ? (
+                            <p className="archive-detail-sidebar-desc">
+                                {detail.meeting.description}
+                            </p>
+                        ) : (
+                            <p className="archive-detail-sidebar-desc archive-detail-sidebar-desc--empty">
+                                No description
+                            </p>
+                        )}
                     </div>
 
                     {/* Date & Time */}
                     <div className="archive-detail-sidebar-section">
-                        <span className="archive-detail-sidebar-label">When</span>
+                        <span className="archive-detail-sidebar-label">
+                            When
+                        </span>
                         <div className="archive-detail-sidebar-row">
-                            <Icon icon={Calendar02Icon} size={13} className="archive-detail-sidebar-icon" />
+                            <Icon
+                                icon={Calendar02Icon}
+                                size={13}
+                                className="archive-detail-sidebar-icon"
+                            />
                             <span className="archive-detail-sidebar-value">
                                 {formatArchiveDate(detail.meeting.date) || "—"}
                             </span>
                         </div>
                         {detail.meeting.time && (
                             <div className="archive-detail-sidebar-row">
-                                <Icon icon={Clock01Icon} size={13} className="archive-detail-sidebar-icon" />
-                                <span className="archive-detail-sidebar-value">{detail.meeting.time}</span>
+                                <Icon
+                                    icon={Clock01Icon}
+                                    size={13}
+                                    className="archive-detail-sidebar-icon"
+                                />
+                                <span className="archive-detail-sidebar-value">
+                                    {detail.meeting.time}
+                                </span>
                             </div>
                         )}
                     </div>
@@ -662,38 +917,70 @@ export default function ArchiveDetailView({ meetingId, fetchWithAuth }: ArchiveD
                     {allParticipants.length > 0 && (
                         <div className="archive-detail-sidebar-section">
                             <span className="archive-detail-sidebar-label">
-                                Participants <span className="archive-detail-sidebar-count">{allParticipants.length}</span>
+                                Participants{" "}
+                                <span className="archive-detail-sidebar-count">
+                                    {allParticipants.length}
+                                </span>
                             </span>
                             <div className="archive-detail-participants-list">
-                                {allParticipants.slice(0, PARTICIPANTS_VISIBLE).map(p => {
-                                    const hostId = detail.meeting.hostId;
-                                    const hid = hostId && typeof hostId === "object" ? (hostId as ArchiveParticipant)._id : hostId;
-                                    const isParticipantHost = hid && String(hid) === String(p._id);
-                                    return (
-                                        <div key={p._id} className="archive-detail-participant-list-row">
-                                            <ParticipantAvatar participant={p} size={26} />
-                                            <span className="archive-detail-participant-list-name">
-                                                {p.name || p.email || "Participant"}
-                                                {isParticipantHost && <span className="archive-detail-modal-host-chip">host</span>}
-                                            </span>
-                                        </div>
-                                    );
-                                })}
+                                {allParticipants
+                                    .slice(0, PARTICIPANTS_VISIBLE)
+                                    .map((p) => {
+                                        const hostId = detail.meeting.hostId;
+                                        const hid =
+                                            hostId && typeof hostId === "object"
+                                                ? (hostId as ArchiveParticipant)
+                                                      ._id
+                                                : hostId;
+                                        const isParticipantHost =
+                                            hid &&
+                                            String(hid) === String(p._id);
+                                        return (
+                                            <div
+                                                key={p._id}
+                                                className="archive-detail-participant-list-row"
+                                            >
+                                                <ParticipantAvatar
+                                                    participant={p}
+                                                    size={26}
+                                                />
+                                                <span className="archive-detail-participant-list-name">
+                                                    {p.name ||
+                                                        p.email ||
+                                                        "Participant"}
+                                                    {isParticipantHost && (
+                                                        <span className="archive-detail-modal-host-chip">
+                                                            host
+                                                        </span>
+                                                    )}
+                                                </span>
+                                            </div>
+                                        );
+                                    })}
                             </div>
                             {allParticipants.length > PARTICIPANTS_VISIBLE && (
                                 <button
                                     type="button"
                                     className="archive-detail-sidebar-text-btn"
-                                    onClick={() => { setParticipantSearch(""); setParticipantsModalOpen(true); }}
+                                    onClick={() => {
+                                        setParticipantSearch("");
+                                        setParticipantsModalOpen(true);
+                                    }}
                                 >
-                                    +{allParticipants.length - PARTICIPANTS_VISIBLE} more
+                                    +
+                                    {allParticipants.length -
+                                        PARTICIPANTS_VISIBLE}{" "}
+                                    more
                                 </button>
                             )}
                             {allParticipants.length <= PARTICIPANTS_VISIBLE && (
                                 <button
                                     type="button"
                                     className="archive-detail-sidebar-text-btn"
-                                    onClick={() => { setParticipantSearch(""); setParticipantsModalOpen(true); }}
+                                    onClick={() => {
+                                        setParticipantSearch("");
+                                        setParticipantsModalOpen(true);
+                                    }}
                                 >
                                     View details
                                 </button>
@@ -704,24 +991,39 @@ export default function ArchiveDetailView({ meetingId, fetchWithAuth }: ArchiveD
                     {/* Tags */}
                     <div className="archive-detail-sidebar-section">
                         <div className="archive-detail-sidebar-label-row">
-                            <span className="archive-detail-sidebar-label">Tags</span>
+                            <span className="archive-detail-sidebar-label">
+                                Tags
+                            </span>
                         </div>
                         {!isHost && tags.length === 0 && (
-                            <p className="archive-detail-sidebar-desc archive-detail-sidebar-desc--empty">No tags</p>
+                            <p className="archive-detail-sidebar-desc archive-detail-sidebar-desc--empty">
+                                No tags
+                            </p>
                         )}
                         {(isHost || tags.length > 0) && (
                             <div className="archive-detail-sidebar-tags">
-                                {tags.map(tag => (
+                                {tags.map((tag) => (
                                     <span
                                         key={tag}
                                         className="archive-detail-sidebar-tag-pill"
                                         data-tag-accent=""
-                                        style={{ ["--tag-accent" as string]: accentCssForTag(tag, meetingTagColors, catalogTagColors) }}
+                                        style={{
+                                            ["--tag-accent" as string]:
+                                                accentCssForTag(
+                                                    tag,
+                                                    meetingTagColors,
+                                                    catalogTagColors,
+                                                ),
+                                        }}
                                     >
                                         <button
                                             type="button"
                                             className="archive-detail-sidebar-tag-pill-label"
-                                            onClick={() => navigate("/archives", { state: { tags: [tag] } })}
+                                            onClick={() =>
+                                                navigate("/archives", {
+                                                    state: { tags: [tag] },
+                                                })
+                                            }
                                             title={`View all meetings tagged "${tag}"`}
                                         >
                                             {tag}
@@ -730,11 +1032,19 @@ export default function ArchiveDetailView({ meetingId, fetchWithAuth }: ArchiveD
                                             <button
                                                 type="button"
                                                 className="archive-detail-sidebar-tag-pill-remove"
-                                                onClick={(e) => { e.stopPropagation(); void removeMeetingTag(tag); }}
+                                                onClick={(e) => {
+                                                    e.stopPropagation();
+                                                    void removeMeetingTag(tag);
+                                                }}
                                                 disabled={savingTags}
                                                 aria-label={`Remove tag ${tag}`}
                                             >
-                                                <span aria-hidden className="archive-detail-sidebar-tag-x">×</span>
+                                                <span
+                                                    aria-hidden
+                                                    className="archive-detail-sidebar-tag-x"
+                                                >
+                                                    ×
+                                                </span>
                                             </button>
                                         )}
                                     </span>
@@ -742,7 +1052,10 @@ export default function ArchiveDetailView({ meetingId, fetchWithAuth }: ArchiveD
                             </div>
                         )}
                         {isHost && (
-                            <div className="archive-detail-tag-add-wrap" ref={tagAddRootRef}>
+                            <div
+                                className="archive-detail-tag-add-wrap"
+                                ref={tagAddRootRef}
+                            >
                                 <div className="archive-multi-select archive-detail-tag-add-multi">
                                     <div className="archive-multi-select-pill">
                                         <button
@@ -752,7 +1065,9 @@ export default function ArchiveDetailView({ meetingId, fetchWithAuth }: ArchiveD
                                                 if (tagAddOpen) {
                                                     setTagAddOpen(false);
                                                     setTagAddSearch("");
-                                                    setNewTagAwaitingColor(null);
+                                                    setNewTagAwaitingColor(
+                                                        null,
+                                                    );
                                                     setTagColorSearch("");
                                                     setTagColorHlIdx(0);
                                                 } else {
@@ -764,174 +1079,423 @@ export default function ArchiveDetailView({ meetingId, fetchWithAuth }: ArchiveD
                                             disabled={savingTags}
                                         >
                                             <span className="archive-multi-select-trigger-title">
-                                                <Icon icon={Add01Icon} size={14} aria-hidden className="archive-detail-tag-add-trigger-icon" />
+                                                <Icon
+                                                    icon={Add01Icon}
+                                                    size={14}
+                                                    aria-hidden
+                                                    className="archive-detail-tag-add-trigger-icon"
+                                                />
                                                 Add tag
                                             </span>
-                                            <span className="archive-multi-select-trigger-spacer" aria-hidden />
+                                            <span
+                                                className="archive-multi-select-trigger-spacer"
+                                                aria-hidden
+                                            />
                                             <span className="archive-multi-select-trigger-chevron">
-                                                <Icon icon={tagAddOpen ? ArrowUp01Icon : ArrowDown01Icon} size={14} />
+                                                <Icon
+                                                    icon={
+                                                        tagAddOpen
+                                                            ? ArrowUp01Icon
+                                                            : ArrowDown01Icon
+                                                    }
+                                                    size={14}
+                                                />
                                             </span>
                                         </button>
                                     </div>
                                     {tagAddOpen && (
-                                        <div className="archive-multi-select-panel archive-detail-tag-add-panel" role="listbox">
+                                        <div
+                                            className="archive-multi-select-panel archive-detail-tag-add-panel"
+                                            role="listbox"
+                                        >
                                             {newTagAwaitingColor ? (
                                                 <div className="archive-detail-tag-add-color-step">
                                                     <div className="archive-multi-select-search-wrap archive-detail-tag-colour-search-strip">
                                                         <button
                                                             type="button"
                                                             className="archive-detail-tag-colour-back"
-                                                            onClick={exitColorPickerToTags}
+                                                            onClick={
+                                                                exitColorPickerToTags
+                                                            }
                                                             aria-label="Back to tag search"
                                                         >
-                                                            <Icon icon={ArrowLeft01Icon} size={16} />
+                                                            <Icon
+                                                                icon={
+                                                                    ArrowLeft01Icon
+                                                                }
+                                                                size={16}
+                                                            />
                                                         </button>
                                                         <input
-                                                            ref={tagColorSearchInputRef}
+                                                            ref={
+                                                                tagColorSearchInputRef
+                                                            }
                                                             className="archive-multi-select-search archive-detail-tag-colour-search-input"
                                                             placeholder="Search colours…"
-                                                            value={tagColorSearch}
-                                                            onChange={e => setTagColorSearch(e.target.value)}
+                                                            value={
+                                                                tagColorSearch
+                                                            }
+                                                            onChange={(e) =>
+                                                                setTagColorSearch(
+                                                                    e.target
+                                                                        .value,
+                                                                )
+                                                            }
                                                             aria-label="Search colours"
                                                             onKeyDown={(e) => {
-                                                                if (e.key === "Backspace" && tagColorSearch === "") {
+                                                                if (
+                                                                    e.key ===
+                                                                        "Backspace" &&
+                                                                    tagColorSearch ===
+                                                                        ""
+                                                                ) {
                                                                     e.preventDefault();
                                                                     exitColorPickerToTags();
                                                                     return;
                                                                 }
-                                                                if (e.key === "ArrowDown") {
+                                                                if (
+                                                                    e.key ===
+                                                                    "ArrowDown"
+                                                                ) {
                                                                     e.preventDefault();
-                                                                    if (tagColorFiltered.length === 0) return;
-                                                                    setTagColorHlIdx(i => Math.min(tagColorFiltered.length - 1, i + 1));
+                                                                    if (
+                                                                        tagColorFiltered.length ===
+                                                                        0
+                                                                    )
+                                                                        return;
+                                                                    setTagColorHlIdx(
+                                                                        (i) =>
+                                                                            Math.min(
+                                                                                tagColorFiltered.length -
+                                                                                    1,
+                                                                                i +
+                                                                                    1,
+                                                                            ),
+                                                                    );
                                                                     return;
                                                                 }
-                                                                if (e.key === "ArrowUp") {
+                                                                if (
+                                                                    e.key ===
+                                                                    "ArrowUp"
+                                                                ) {
                                                                     e.preventDefault();
-                                                                    setTagColorHlIdx(i => Math.max(0, i - 1));
+                                                                    setTagColorHlIdx(
+                                                                        (i) =>
+                                                                            Math.max(
+                                                                                0,
+                                                                                i -
+                                                                                    1,
+                                                                            ),
+                                                                    );
                                                                     return;
                                                                 }
-                                                                if (e.key === "Enter") {
+                                                                if (
+                                                                    e.key ===
+                                                                    "Enter"
+                                                                ) {
                                                                     e.preventDefault();
-                                                                    if (tagColorFiltered.length === 0) return;
-                                                                    const ri = Math.min(tagColorHlIdx, tagColorFiltered.length - 1);
-                                                                    const row = tagColorFiltered[ri];
-                                                                    if (row) applyNewTagColor(row.value);
+                                                                    if (
+                                                                        tagColorFiltered.length ===
+                                                                        0
+                                                                    )
+                                                                        return;
+                                                                    const ri =
+                                                                        Math.min(
+                                                                            tagColorHlIdx,
+                                                                            tagColorFiltered.length -
+                                                                                1,
+                                                                        );
+                                                                    const row =
+                                                                        tagColorFiltered[
+                                                                            ri
+                                                                        ];
+                                                                    if (row)
+                                                                        applyNewTagColor(
+                                                                            row.value,
+                                                                        );
                                                                 }
                                                             }}
                                                         />
                                                     </div>
                                                     <div className="archive-multi-select-list archive-detail-tag-colour-menu-list">
-                                                        {tagColorFiltered.length === 0 ? (
-                                                            <div className="archive-multi-select-empty">No colours match</div>
+                                                        {tagColorFiltered.length ===
+                                                        0 ? (
+                                                            <div className="archive-multi-select-empty">
+                                                                No colours match
+                                                            </div>
                                                         ) : (
-                                                            tagColorFiltered.map((row, idx) => {
-                                                                const kbd = tagColorHlIdx === idx;
-                                                                return (
-                                                                    <button
-                                                                        key={row.label + (row.value ?? "default")}
-                                                                        type="button"
-                                                                        role="option"
-                                                                        className={`archive-detail-tag-colour-menu-row${kbd ? " is-keyboard-highlight" : ""}`}
-                                                                        onMouseEnter={() => setTagColorHlIdx(idx)}
-                                                                        onClick={() => applyNewTagColor(row.value)}
-                                                                    >
-                                                                        <span
-                                                                            className={`archive-detail-tag-colour-swatch-dot${row.value == null ? " archive-detail-tag-colour-swatch-dot--default" : ""}`}
-                                                                            style={row.value ? { background: row.value } : undefined}
-                                                                            aria-hidden
-                                                                        />
-                                                                        <span className="archive-detail-tag-colour-menu-label">{row.label}</span>
-                                                                    </button>
-                                                                );
-                                                            })
+                                                            tagColorFiltered.map(
+                                                                (row, idx) => {
+                                                                    const kbd =
+                                                                        tagColorHlIdx ===
+                                                                        idx;
+                                                                    return (
+                                                                        <button
+                                                                            key={
+                                                                                row.label +
+                                                                                (row.value ??
+                                                                                    "default")
+                                                                            }
+                                                                            type="button"
+                                                                            role="option"
+                                                                            className={`archive-detail-tag-colour-menu-row${kbd ? " is-keyboard-highlight" : ""}`}
+                                                                            onMouseEnter={() =>
+                                                                                setTagColorHlIdx(
+                                                                                    idx,
+                                                                                )
+                                                                            }
+                                                                            onClick={() =>
+                                                                                applyNewTagColor(
+                                                                                    row.value,
+                                                                                )
+                                                                            }
+                                                                        >
+                                                                            <span
+                                                                                className={`archive-detail-tag-colour-swatch-dot${row.value == null ? " archive-detail-tag-colour-swatch-dot--default" : ""}`}
+                                                                                style={
+                                                                                    row.value
+                                                                                        ? {
+                                                                                              background:
+                                                                                                  row.value,
+                                                                                          }
+                                                                                        : undefined
+                                                                                }
+                                                                                aria-hidden
+                                                                            />
+                                                                            <span className="archive-detail-tag-colour-menu-label">
+                                                                                {
+                                                                                    row.label
+                                                                                }
+                                                                            </span>
+                                                                        </button>
+                                                                    );
+                                                                },
+                                                            )
                                                         )}
                                                     </div>
                                                 </div>
                                             ) : (
                                                 <>
                                                     <div className="archive-multi-select-search-wrap">
-                                                        <Icon icon={Search01Icon} size={14} className="archive-multi-select-search-icon" />
+                                                        <Icon
+                                                            icon={Search01Icon}
+                                                            size={14}
+                                                            className="archive-multi-select-search-icon"
+                                                        />
                                                         <input
-                                                            ref={tagAddSearchInputRef}
+                                                            ref={
+                                                                tagAddSearchInputRef
+                                                            }
                                                             className="archive-multi-select-search"
                                                             placeholder="Search tags…"
                                                             value={tagAddSearch}
-                                                            onChange={e => setTagAddSearch(e.target.value)}
+                                                            onChange={(e) =>
+                                                                setTagAddSearch(
+                                                                    e.target
+                                                                        .value,
+                                                                )
+                                                            }
                                                             autoFocus
                                                             aria-label="Search tags to add"
                                                             onKeyDown={(e) => {
-                                                                if (newTagAwaitingColor) return;
-                                                                if (e.key === "ArrowDown") {
+                                                                if (
+                                                                    newTagAwaitingColor
+                                                                )
+                                                                    return;
+                                                                if (
+                                                                    e.key ===
+                                                                    "ArrowDown"
+                                                                ) {
                                                                     e.preventDefault();
-                                                                    if (tagAddRowsLen === 0) return;
-                                                                    setTagAddHlIdx(i => Math.min(tagAddRowsLen - 1, i < 0 ? 0 : i + 1));
-                                                                } else if (e.key === "ArrowUp") {
+                                                                    if (
+                                                                        tagAddRowsLen ===
+                                                                        0
+                                                                    )
+                                                                        return;
+                                                                    setTagAddHlIdx(
+                                                                        (i) =>
+                                                                            Math.min(
+                                                                                tagAddRowsLen -
+                                                                                    1,
+                                                                                i <
+                                                                                    0
+                                                                                    ? 0
+                                                                                    : i +
+                                                                                          1,
+                                                                            ),
+                                                                    );
+                                                                } else if (
+                                                                    e.key ===
+                                                                    "ArrowUp"
+                                                                ) {
                                                                     e.preventDefault();
-                                                                    setTagAddHlIdx(i => Math.max(0, i - 1));
-                                                                } else if (e.key === "Enter") {
+                                                                    setTagAddHlIdx(
+                                                                        (i) =>
+                                                                            Math.max(
+                                                                                0,
+                                                                                i -
+                                                                                    1,
+                                                                            ),
+                                                                    );
+                                                                } else if (
+                                                                    e.key ===
+                                                                    "Enter"
+                                                                ) {
                                                                     e.preventDefault();
-                                                                    if (tagAddRowsLen === 0) return;
-                                                                    const hi = Math.min(tagAddHlIdx, tagAddRowsLen - 1);
-                                                                    if (tagAddShowCreateRow && hi === tagAddFiltered.length) {
-                                                                        setNewTagAwaitingColor(tagAddSearch.trim());
-                                                                    } else if (hi >= 0 && hi < tagAddFiltered.length) {
-                                                                        addMeetingTag(tagAddFiltered[hi]);
-                                                                        setTagAddOpen(false);
-                                                                        setTagAddSearch("");
+                                                                    if (
+                                                                        tagAddRowsLen ===
+                                                                        0
+                                                                    )
+                                                                        return;
+                                                                    const hi =
+                                                                        Math.min(
+                                                                            tagAddHlIdx,
+                                                                            tagAddRowsLen -
+                                                                                1,
+                                                                        );
+                                                                    if (
+                                                                        tagAddShowCreateRow &&
+                                                                        hi ===
+                                                                            tagAddFiltered.length
+                                                                    ) {
+                                                                        setNewTagAwaitingColor(
+                                                                            tagAddSearch.trim(),
+                                                                        );
+                                                                    } else if (
+                                                                        hi >=
+                                                                            0 &&
+                                                                        hi <
+                                                                            tagAddFiltered.length
+                                                                    ) {
+                                                                        addMeetingTag(
+                                                                            tagAddFiltered[
+                                                                                hi
+                                                                            ],
+                                                                        );
+                                                                        setTagAddOpen(
+                                                                            false,
+                                                                        );
+                                                                        setTagAddSearch(
+                                                                            "",
+                                                                        );
                                                                     }
                                                                 }
                                                             }}
                                                         />
                                                     </div>
                                                     <div className="archive-multi-select-list">
-                                                        {tagAddFiltered.map((t, idx) => {
-                                                            const cc = catalogTagColors[t];
-                                                            const kbd = tagAddHlIdx === idx;
-                                                            return (
-                                                                <button
-                                                                    key={t}
-                                                                    type="button"
-                                                                    role="option"
-                                                                    className={`archive-multi-select-row archive-multi-select-row--tags archive-multi-select-row--tags-no-check${kbd ? " is-keyboard-highlight" : ""}`}
-                                                                    onMouseEnter={() => setTagAddHlIdx(idx)}
-                                                                    onClick={() => {
-                                                                        addMeetingTag(t);
-                                                                        setTagAddOpen(false);
-                                                                        setTagAddSearch("");
-                                                                    }}
-                                                                >
-                                                                    <TagPickRing name={t} catalogColor={cc} />
-                                                                    <span className="archive-multi-select-name">{t}</span>
-                                                                </button>
-                                                            );
-                                                        })}
+                                                        {tagAddFiltered.map(
+                                                            (t, idx) => {
+                                                                const cc =
+                                                                    catalogTagColors[
+                                                                        t
+                                                                    ];
+                                                                const kbd =
+                                                                    tagAddHlIdx ===
+                                                                    idx;
+                                                                return (
+                                                                    <button
+                                                                        key={t}
+                                                                        type="button"
+                                                                        role="option"
+                                                                        className={`archive-multi-select-row archive-multi-select-row--tags archive-multi-select-row--tags-no-check${kbd ? " is-keyboard-highlight" : ""}`}
+                                                                        onMouseEnter={() =>
+                                                                            setTagAddHlIdx(
+                                                                                idx,
+                                                                            )
+                                                                        }
+                                                                        onClick={() => {
+                                                                            addMeetingTag(
+                                                                                t,
+                                                                            );
+                                                                            setTagAddOpen(
+                                                                                false,
+                                                                            );
+                                                                            setTagAddSearch(
+                                                                                "",
+                                                                            );
+                                                                        }}
+                                                                    >
+                                                                        <TagPickRing
+                                                                            name={
+                                                                                t
+                                                                            }
+                                                                            catalogColor={
+                                                                                cc
+                                                                            }
+                                                                        />
+                                                                        <span className="archive-multi-select-name">
+                                                                            {t}
+                                                                        </span>
+                                                                    </button>
+                                                                );
+                                                            },
+                                                        )}
                                                         {tagAddShowCreateRow && (
                                                             <button
                                                                 type="button"
                                                                 role="option"
                                                                 className={`archive-detail-tag-add-create-row${tagAddHlIdx === tagAddFiltered.length ? " is-keyboard-highlight" : ""}`}
-                                                                onMouseEnter={() => setTagAddHlIdx(tagAddFiltered.length)}
-                                                                onClick={() => setNewTagAwaitingColor(tagAddSearch.trim())}
+                                                                onMouseEnter={() =>
+                                                                    setTagAddHlIdx(
+                                                                        tagAddFiltered.length,
+                                                                    )
+                                                                }
+                                                                onClick={() =>
+                                                                    setNewTagAwaitingColor(
+                                                                        tagAddSearch.trim(),
+                                                                    )
+                                                                }
                                                             >
-                                                                + Create tag &quot;{tagAddSearch.trim()}&quot;
+                                                                + Create tag
+                                                                &quot;
+                                                                {tagAddSearch.trim()}
+                                                                &quot;
                                                             </button>
                                                         )}
-                                                        {tagAddFiltered.length === 0 && !tagAddShowCreateRow && (
+                                                        {tagAddFiltered.length ===
+                                                            0 &&
+                                                            !tagAddShowCreateRow &&
                                                             (() => {
-                                                                const trimmed = tagAddSearch.trim();
-                                                                const dup = trimmed && (detail!.meeting.tags || []).some(
-                                                                    tg => tg.toLowerCase() === trimmed.toLowerCase(),
-                                                                );
-                                                                const exhausted = !trimmed
-                                                                    && catalogTags.filter((t) => !(detail!.meeting.tags || []).includes(t)).length === 0;
+                                                                const trimmed =
+                                                                    tagAddSearch.trim();
+                                                                const dup =
+                                                                    trimmed &&
+                                                                    (
+                                                                        detail!
+                                                                            .meeting
+                                                                            .tags ||
+                                                                        []
+                                                                    ).some(
+                                                                        (tg) =>
+                                                                            tg.toLowerCase() ===
+                                                                            trimmed.toLowerCase(),
+                                                                    );
+                                                                const exhausted =
+                                                                    !trimmed &&
+                                                                    catalogTags.filter(
+                                                                        (t) =>
+                                                                            !(
+                                                                                detail!
+                                                                                    .meeting
+                                                                                    .tags ||
+                                                                                []
+                                                                            ).includes(
+                                                                                t,
+                                                                            ),
+                                                                    ).length ===
+                                                                        0;
                                                                 const msg = dup
                                                                     ? "That tag is already on this meeting"
                                                                     : exhausted
-                                                                        ? "Every workspace tag is already on this meeting"
-                                                                        : null;
-                                                                return msg ? <div className="archive-multi-select-empty">{msg}</div> : null;
-                                                            })()
-                                                        )}
+                                                                      ? "Every workspace tag is already on this meeting"
+                                                                      : null;
+                                                                return msg ? (
+                                                                    <div className="archive-multi-select-empty">
+                                                                        {msg}
+                                                                    </div>
+                                                                ) : null;
+                                                            })()}
                                                     </div>
                                                 </>
                                             )}
@@ -946,53 +1510,93 @@ export default function ArchiveDetailView({ meetingId, fetchWithAuth }: ArchiveD
 
             {/* Participants modal */}
             {participantsModalOpen && (
-                <ArchiveModal title="Participants" onClose={() => setParticipantsModalOpen(false)}>
+                <ArchiveModal
+                    title="Participants"
+                    onClose={() => setParticipantsModalOpen(false)}
+                >
                     <div className="archive-detail-modal-search">
-                        <Icon icon={Search01Icon} size={14} className="archive-detail-modal-search-icon" />
+                        <Icon
+                            icon={Search01Icon}
+                            size={14}
+                            className="archive-detail-modal-search-icon"
+                        />
                         <input
                             autoFocus
                             className="archive-detail-modal-search-input"
                             placeholder="Search participants…"
                             value={participantSearch}
-                            onChange={e => setParticipantSearch(e.target.value)}
+                            onChange={(e) =>
+                                setParticipantSearch(e.target.value)
+                            }
                         />
                     </div>
                     <div className="archive-detail-modal-list">
-                        {filteredParticipants.length === 0
-                            ? <div className="archive-detail-modal-empty">No participants found</div>
-                            : filteredParticipants.map(p => {
+                        {filteredParticipants.length === 0 ? (
+                            <div className="archive-detail-modal-empty">
+                                No participants found
+                            </div>
+                        ) : (
+                            filteredParticipants.map((p) => {
                                 const pct = getSpeakingPct(p);
                                 const hostId = detail.meeting.hostId;
-                                const hid = hostId && typeof hostId === "object" ? (hostId as ArchiveParticipant)._id : hostId;
-                                const isParticipantHost = hid && String(hid) === String(p._id);
+                                const hid =
+                                    hostId && typeof hostId === "object"
+                                        ? (hostId as ArchiveParticipant)._id
+                                        : hostId;
+                                const isParticipantHost =
+                                    hid && String(hid) === String(p._id);
                                 return (
-                                    <div key={p._id} className="archive-detail-modal-participant-row">
-                                        <ParticipantAvatar participant={p} size={28} />
+                                    <div
+                                        key={p._id}
+                                        className="archive-detail-modal-participant-row"
+                                    >
+                                        <ParticipantAvatar
+                                            participant={p}
+                                            size={28}
+                                        />
                                         <div className="archive-detail-modal-participant-info">
                                             <span className="archive-detail-modal-participant-name">
                                                 {p.name || "Unknown"}
-                                                {isParticipantHost && <span className="archive-detail-modal-host-chip">host</span>}
+                                                {isParticipantHost && (
+                                                    <span className="archive-detail-modal-host-chip">
+                                                        host
+                                                    </span>
+                                                )}
                                             </span>
-                                            {p.email && <span className="archive-detail-modal-participant-email">{p.email}</span>}
+                                            {p.email && (
+                                                <span className="archive-detail-modal-participant-email">
+                                                    {p.email}
+                                                </span>
+                                            )}
                                         </div>
                                         {pct !== null && (
-                                            <SpeakingBar pct={pct} estimatedSecs={speakingData.totalSecs} />
+                                            <SpeakingBar
+                                                pct={pct}
+                                                estimatedSecs={
+                                                    speakingData.totalSecs
+                                                }
+                                            />
                                         )}
                                     </div>
                                 );
                             })
-                        }
+                        )}
                     </div>
                 </ArchiveModal>
             )}
-
         </div>
     );
 }
 
 // ── helpers ──────────────────────────────────────────────────────────────────
 
-function ParticipantAvatar({ participant, size = 24 }: { participant: ArchiveParticipant; size?: number }) {
+function ParticipantAvatar({
+    participant,
+    size = 24,
+}: {
+    participant: ArchiveParticipant;
+    size?: number;
+}) {
     return (
         <UserAvatar
             name={participant.name || participant.email || "?"}
@@ -1004,31 +1608,52 @@ function ParticipantAvatar({ participant, size = 24 }: { participant: ArchivePar
     );
 }
 
-function SpeakingBar({ pct, estimatedSecs }: { pct: number; estimatedSecs?: number }) {
-    const tooltip = estimatedSecs != null && estimatedSecs > 0
-        ? (() => {
-            const secs = Math.round(estimatedSecs * pct / 100);
-            const h = Math.floor(secs / 3600);
-            const m = Math.floor((secs % 3600) / 60);
-            const s = secs % 60;
-            const dur = h > 0 ? `${h}h ${m}m` : m > 0 ? `${m}m ${s}s` : `${s}s`;
-            return `${pct}% speaking time (~${dur})`;
-        })()
-        : `${pct}% of transcript segments`;
+function SpeakingBar({
+    pct,
+    estimatedSecs,
+}: {
+    pct: number;
+    estimatedSecs?: number;
+}) {
+    const tooltip =
+        estimatedSecs != null && estimatedSecs > 0
+            ? (() => {
+                  const secs = Math.round((estimatedSecs * pct) / 100);
+                  const h = Math.floor(secs / 3600);
+                  const m = Math.floor((secs % 3600) / 60);
+                  const s = secs % 60;
+                  const dur =
+                      h > 0 ? `${h}h ${m}m` : m > 0 ? `${m}m ${s}s` : `${s}s`;
+                  return `${pct}% speaking time (~${dur})`;
+              })()
+            : `${pct}% of transcript segments`;
     return (
         <div className="archive-detail-speaking-bar-wrap" title={tooltip}>
             <div className="archive-detail-speaking-bar-track">
-                <div className="archive-detail-speaking-bar-fill" style={{ width: `${Math.min(pct, 100)}%` }} />
+                <div
+                    className="archive-detail-speaking-bar-fill"
+                    style={{ width: `${Math.min(pct, 100)}%` }}
+                />
             </div>
             <span className="archive-detail-speaking-pct">{pct}%</span>
         </div>
     );
 }
 
-function ArchiveModal({ title, onClose, children }: { title: string; onClose: () => void; children: React.ReactNode }) {
+function ArchiveModal({
+    title,
+    onClose,
+    children,
+}: {
+    title: string;
+    onClose: () => void;
+    children: React.ReactNode;
+}) {
     const overlayRef = useRef<HTMLDivElement>(null);
     useEffect(() => {
-        const handler = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
+        const handler = (e: KeyboardEvent) => {
+            if (e.key === "Escape") onClose();
+        };
         window.addEventListener("keydown", handler);
         return () => window.removeEventListener("keydown", handler);
     }, [onClose]);
@@ -1036,22 +1661,38 @@ function ArchiveModal({ title, onClose, children }: { title: string; onClose: ()
         <div
             className="archive-detail-modal-overlay"
             ref={overlayRef}
-            onClick={e => { if (e.target === overlayRef.current) onClose(); }}
+            onClick={(e) => {
+                if (e.target === overlayRef.current) onClose();
+            }}
         >
-            <div className="archive-detail-modal" role="dialog" aria-modal aria-label={title}>
+            <div
+                className="archive-detail-modal"
+                role="dialog"
+                aria-modal
+                aria-label={title}
+            >
                 <div className="archive-detail-modal-header">
                     <span className="archive-detail-modal-title">{title}</span>
-                    <button type="button" className="archive-detail-modal-close" onClick={onClose} aria-label="Close">×</button>
+                    <button
+                        type="button"
+                        className="archive-detail-modal-close"
+                        onClick={onClose}
+                        aria-label="Close"
+                    >
+                        ×
+                    </button>
                 </div>
-                <div className="archive-detail-modal-body">
-                    {children}
-                </div>
+                <div className="archive-detail-modal-body">{children}</div>
             </div>
         </div>
     );
 }
 
-function ArchiveSection({ title, defaultOpen = true, children }: {
+function ArchiveSection({
+    title,
+    defaultOpen = true,
+    children,
+}: {
     title: string;
     defaultOpen?: boolean;
     children: React.ReactNode;
@@ -1062,11 +1703,14 @@ function ArchiveSection({ title, defaultOpen = true, children }: {
             <button
                 type="button"
                 className={`archive-detail-section-title archive-detail-section-toggle${open ? "" : " is-closed"}`}
-                onClick={() => setOpen(o => !o)}
+                onClick={() => setOpen((o) => !o)}
                 aria-expanded={open}
             >
                 <span className="archive-detail-section-chevron" aria-hidden>
-                    <Icon icon={open ? ArrowDown01Icon : ArrowRight01Icon} size={16} />
+                    <Icon
+                        icon={open ? ArrowDown01Icon : ArrowRight01Icon}
+                        size={16}
+                    />
                 </span>
                 {title}
             </button>
@@ -1078,7 +1722,12 @@ function ArchiveSection({ title, defaultOpen = true, children }: {
 interface AgendaSectionProps {
     item: { id: string; title: string; duration: number };
     index: number;
-    segments: Array<{ id: string; speaker: string; timestamp: string; text: string }>;
+    segments: Array<{
+        id: string;
+        speaker: string;
+        timestamp: string;
+        text: string;
+    }>;
     summary?: string;
 }
 
@@ -1086,25 +1735,41 @@ function AgendaSection({ item, index, segments, summary }: AgendaSectionProps) {
     const [expanded, setExpanded] = useState(false);
     return (
         <div className="glass-card adv-agenda-item-card">
-            <div className="adv-agenda-item-row" onClick={() => setExpanded(e => !e)}>
-                {index >= 0 && <span className="adv-agenda-item-num">{index + 1}.</span>}
+            <div
+                className="adv-agenda-item-row"
+                onClick={() => setExpanded((e) => !e)}
+            >
+                {index >= 0 && (
+                    <span className="adv-agenda-item-num">{index + 1}.</span>
+                )}
                 <span className="adv-agenda-item-ttl">{item.title}</span>
-                {item.duration > 0 && <span className="adv-agenda-item-dur">{item.duration}m</span>}
-                <span className="adv-agenda-item-segs">{segments.length} segment{segments.length !== 1 ? "s" : ""}</span>
-                <Icon icon={expanded ? ArrowUp01Icon : ArrowDown01Icon} size={16} />
+                {item.duration > 0 && (
+                    <span className="adv-agenda-item-dur">
+                        {item.duration}m
+                    </span>
+                )}
+                <span className="adv-agenda-item-segs">
+                    {segments.length} segment{segments.length !== 1 ? "s" : ""}
+                </span>
+                <Icon
+                    icon={expanded ? ArrowUp01Icon : ArrowDown01Icon}
+                    size={16}
+                />
             </div>
 
-            {summary && (
-                <p className="adv-agenda-alt-note">{summary}</p>
-            )}
+            {summary && <p className="adv-agenda-alt-note">{summary}</p>}
 
             {expanded && segments.length > 0 && (
                 <div className="adv-agenda-segs-wrap">
-                    {segments.map(seg => (
+                    {segments.map((seg) => (
                         <p key={seg.id} className="adv-agenda-seg-p">
-                            <span className="adv-seg-timestamp">{seg.timestamp || "—"}</span>
+                            <span className="adv-seg-timestamp">
+                                {seg.timestamp || "—"}
+                            </span>
                             <span className="adv-seg-sep"> · </span>
-                            <span className="adv-seg-speaker">{seg.speaker}</span>
+                            <span className="adv-seg-speaker">
+                                {seg.speaker}
+                            </span>
                             <span className="adv-seg-sep"> · </span>
                             {seg.text}
                         </p>
@@ -1115,7 +1780,10 @@ function AgendaSection({ item, index, segments, summary }: AgendaSectionProps) {
     );
 }
 
-function profileImageForTranscriptSpeaker(detail: ArchiveDetail, speakerName: string): string | null {
+function profileImageForTranscriptSpeaker(
+    detail: ArchiveDetail,
+    speakerName: string,
+): string | null {
     const want = speakerName.trim().toLowerCase();
     if (!want) return null;
     const pool: ArchiveParticipant[] = [];
@@ -1133,9 +1801,7 @@ function SummaryList({ title, items }: { title: string; items?: string[] }) {
     if (!items || items.length === 0) return null;
     return (
         <div className="adv-agenda-extra">
-            <h4 className="archive-detail-summary-list-title">
-                {title}
-            </h4>
+            <h4 className="archive-detail-summary-list-title">{title}</h4>
             <ul className="archive-detail-summary-list-items">
                 {items.map((item, idx) => (
                     <li key={`${title}-${idx}`}>{item}</li>
@@ -1146,7 +1812,9 @@ function SummaryList({ title, items }: { title: string; items?: string[] }) {
 }
 
 function ArchiveTranscriptExplorer({
-    meetingId, detail, fetchWithAuth,
+    meetingId,
+    detail,
+    fetchWithAuth,
 }: {
     meetingId: string;
     detail: ArchiveDetail;
@@ -1156,8 +1824,13 @@ function ArchiveTranscriptExplorer({
 
     const [contentQ, setContentQ] = useState("");
     const [selectedSpeakers, setSelectedSpeakers] = useState<string[]>([]);
-    const [debounced, setDebounced] = useState<{ c: string; s: string[] }>({ c: "", s: [] });
-    const [serverSegments, setServerSegments] = useState<TranscriptSegment[]>([]);
+    const [debounced, setDebounced] = useState<{ c: string; s: string[] }>({
+        c: "",
+        s: [],
+    });
+    const [serverSegments, setServerSegments] = useState<TranscriptSegment[]>(
+        [],
+    );
     const [serverTotal, setServerTotal] = useState(0);
     const [serverSkip, setServerSkip] = useState(0);
     const [loading, setLoading] = useState(false);
@@ -1168,10 +1841,11 @@ function ArchiveTranscriptExplorer({
 
     useEffect(() => {
         const t = setTimeout(
-            () => setDebounced({
-                c: contentQ.trim(),
-                s: selectedSpeakers.map((x) => x.trim()).filter(Boolean),
-            }),
+            () =>
+                setDebounced({
+                    c: contentQ.trim(),
+                    s: selectedSpeakers.map((x) => x.trim()).filter(Boolean),
+                }),
             TRANSCRIPT_DEBOUNCE_MS,
         );
         return () => clearTimeout(t);
@@ -1194,24 +1868,31 @@ function ArchiveTranscriptExplorer({
             }));
     }, [flat, detail]);
 
-    const needIndexedSearch = debounced.c.length >= 2 || debounced.s.length >= 1;
+    const needIndexedSearch =
+        debounced.c.length >= 2 || debounced.s.length >= 1;
     const speakersKey = debounced.s.join("\u0001");
     const preferServer = (flat.length > 200 || useServer) && serverAvailable;
 
     useEffect(() => {
         if (!needIndexedSearch || !preferServer) {
-            setServerSegments([]); setServerTotal(0); setServerSkip(0);
+            setServerSegments([]);
+            setServerTotal(0);
+            setServerSkip(0);
             return;
         }
         let cancelled = false;
         setLoading(true);
-        setServerSegments([]); setServerTotal(0); setServerSkip(0);
+        setServerSegments([]);
+        setServerTotal(0);
+        setServerSkip(0);
         const params = new URLSearchParams();
         if (debounced.c) params.set("q", debounced.c);
         for (const sp of debounced.s) params.append("speaker", sp);
         params.set("limit", "100");
         params.set("skip", "0");
-        (fetchWithAuth || fetch)(`${API_BASE}/archive/${meetingId}/transcript-query?${params}`)
+        (fetchWithAuth || fetch)(
+            `${API_BASE}/archive/${meetingId}/transcript-query?${params}`,
+        )
             .then((r) => {
                 if (!r.ok) {
                     if (!cancelled) setServerAvailable(false);
@@ -1226,14 +1907,31 @@ function ArchiveTranscriptExplorer({
                 setServerTotal(typeof data.total === "number" ? data.total : 0);
                 setServerSkip((data.segments || []).length);
             })
-            .finally(() => { if (!cancelled) setLoading(false); });
-        return () => { cancelled = true; };
+            .finally(() => {
+                if (!cancelled) setLoading(false);
+            });
+        return () => {
+            cancelled = true;
+        };
         // speakersKey collapses the array dependency into a stable string so the effect doesn't refetch on identity changes.
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [debounced.c, speakersKey, meetingId, fetchWithAuth, needIndexedSearch, preferServer]);
+    }, [
+        debounced.c,
+        speakersKey,
+        meetingId,
+        fetchWithAuth,
+        needIndexedSearch,
+        preferServer,
+    ]);
 
     const loadMoreServer = useCallback(async () => {
-        if (!needIndexedSearch || !preferServer || loading || serverSegments.length >= serverTotal) return;
+        if (
+            !needIndexedSearch ||
+            !preferServer ||
+            loading ||
+            serverSegments.length >= serverTotal
+        )
+            return;
         setLoading(true);
         try {
             const params = new URLSearchParams();
@@ -1241,7 +1939,9 @@ function ArchiveTranscriptExplorer({
             for (const sp of debounced.s) params.append("speaker", sp);
             params.set("limit", "100");
             params.set("skip", String(serverSkip));
-            const res = await (fetchWithAuth || fetch)(`${API_BASE}/archive/${meetingId}/transcript-query?${params}`);
+            const res = await (fetchWithAuth || fetch)(
+                `${API_BASE}/archive/${meetingId}/transcript-query?${params}`,
+            );
             if (!res.ok) return;
             const data = await res.json();
             const next = data.segments || [];
@@ -1250,7 +1950,17 @@ function ArchiveTranscriptExplorer({
         } finally {
             setLoading(false);
         }
-    }, [needIndexedSearch, preferServer, loading, serverSegments.length, serverTotal, serverSkip, debounced, meetingId, fetchWithAuth]);
+    }, [
+        needIndexedSearch,
+        preferServer,
+        loading,
+        serverSegments.length,
+        serverTotal,
+        serverSkip,
+        debounced,
+        meetingId,
+        fetchWithAuth,
+    ]);
 
     const displayed = useMemo(() => {
         if (needIndexedSearch && preferServer) return serverSegments;
@@ -1258,79 +1968,120 @@ function ArchiveTranscriptExplorer({
         const speakerSet = new Set(debounced.s.map((x) => x.toLowerCase()));
         const speakerFilterActive = speakerSet.size > 0;
         return flat.filter((seg) => {
-            const okC = !c
-                || seg.text.toLowerCase().includes(c)
-                || String(seg.timestamp || "").toLowerCase().includes(c);
-            const segSp = String(seg.speaker || "").trim().toLowerCase();
+            const okC =
+                !c ||
+                seg.text.toLowerCase().includes(c) ||
+                String(seg.timestamp || "")
+                    .toLowerCase()
+                    .includes(c);
+            const segSp = String(seg.speaker || "")
+                .trim()
+                .toLowerCase();
             const okS = !speakerFilterActive || speakerSet.has(segSp);
             return okC && okS;
         });
-    }, [flat, debounced.c, debounced.s, needIndexedSearch, preferServer, serverSegments]);
+    }, [
+        flat,
+        debounced.c,
+        debounced.s,
+        needIndexedSearch,
+        preferServer,
+        serverSegments,
+    ]);
 
     if (flat.length === 0) return null;
 
-    const showLoadMore = needIndexedSearch && preferServer && serverSegments.length > 0 && serverSegments.length < serverTotal;
+    const showLoadMore =
+        needIndexedSearch &&
+        preferServer &&
+        serverSegments.length > 0 &&
+        serverSegments.length < serverTotal;
 
     return (
         <div className="archive-detail-section adv-section-mb">
             <button
                 type="button"
                 className={`archive-detail-section-title archive-detail-section-toggle${sectionOpen ? "" : " is-closed"}`}
-                onClick={() => setSectionOpen(o => !o)}
+                onClick={() => setSectionOpen((o) => !o)}
                 aria-expanded={sectionOpen}
             >
                 <span className="archive-detail-section-chevron" aria-hidden>
-                    <Icon icon={sectionOpen ? ArrowDown01Icon : ArrowRight01Icon} size={16} />
+                    <Icon
+                        icon={sectionOpen ? ArrowDown01Icon : ArrowRight01Icon}
+                        size={16}
+                    />
                 </span>
                 Transcript
             </button>
-            {sectionOpen && <><p className="adv-transcript-note">
-                Filter by text, meeting time (e.g. 5:30 = 5 min 30 sec from start of recording), or speaker. Large meetings use indexed search automatically; you can force it below.
-            </p>
-            <div className="archive-detail-transcript-filters">
-                <input
-                    className="input-field archive-detail-transcript-search-input"
-                    placeholder="Search content or time…"
-                    value={contentQ}
-                    onChange={(e) => setContentQ(e.target.value)}
-                    aria-label="Search transcript content"
-                />
-                <TranscriptSpeakerSelect
-                    options={transcriptSpeakerOptions}
-                    value={selectedSpeakers}
-                    onChange={setSelectedSpeakers}
-                />
-            </div>
-            {/* {flat.length > 200 && (
+            {sectionOpen && (
+                <>
+                    <p className="adv-transcript-note">
+                        Filter by text, meeting time (e.g. 5:30 = 5 min 30 sec
+                        from start of recording), or speaker. Large meetings use
+                        indexed search automatically; you can force it below.
+                    </p>
+                    <div className="archive-detail-transcript-filters">
+                        <input
+                            className="input-field archive-detail-transcript-search-input"
+                            placeholder="Search content or time…"
+                            value={contentQ}
+                            onChange={(e) => setContentQ(e.target.value)}
+                            aria-label="Search transcript content"
+                        />
+                        <TranscriptSpeakerSelect
+                            options={transcriptSpeakerOptions}
+                            value={selectedSpeakers}
+                            onChange={setSelectedSpeakers}
+                        />
+                    </div>
+                    {/* {flat.length > 200 && (
                 <label style={{ display: "flex", alignItems: "center", gap: "0.35rem", fontSize: "0.75rem", marginBottom: "0.5rem", cursor: "pointer" }}>
                     <input type="checkbox" checked={useServer} onChange={(e) => setUseServer(e.target.checked)} />
                     Always use indexed (MongoDB) search for this meeting
                 </label>
             )} */}
-            <div className="adv-transcript-hint">
-                {loading && "Searching… "}
-                Showing {displayed.length}
-                {needIndexedSearch && preferServer && serverTotal > 0 ? ` of ${serverTotal} matches` : ` segment${displayed.length !== 1 ? "s" : ""}`}
-            </div>
-            <div className="glass-card archive-detail-transcript-list" >
-                {displayed.map((seg) => (
-                    <div key={String(seg.id)} className="adv-transcript-seg">
-                        <span className="adv-seg-timestamp">{seg.timestamp || "—"}</span>
-                        <span className="adv-seg-sep"> · </span>
-                        <span className="adv-seg-speaker">{seg.speaker || "Unknown"}</span>
-                        <span className="adv-seg-sep"> · </span>
-                        <span>{seg.text}</span>
-                        {seg.agendaKey && seg.agendaKey !== "_unlinked" && (
-                            <span className="chip adv-agenda-chip">agenda</span>
-                        )}
+                    <div className="adv-transcript-hint">
+                        {loading && "Searching… "}
+                        Showing {displayed.length}
+                        {needIndexedSearch && preferServer && serverTotal > 0
+                            ? ` of ${serverTotal} matches`
+                            : ` segment${displayed.length !== 1 ? "s" : ""}`}
                     </div>
-                ))}
-            </div>
-            {showLoadMore && (
-                <button type="button" className="btn btn-secondary btn-sm adv-transcript-more-btn" onClick={loadMoreServer}>
-                    Load more results
-                </button>
-            )}</>}
+                    <div className="glass-card archive-detail-transcript-list">
+                        {displayed.map((seg) => (
+                            <div
+                                key={String(seg.id)}
+                                className="adv-transcript-seg"
+                            >
+                                <span className="adv-seg-timestamp">
+                                    {seg.timestamp || "—"}
+                                </span>
+                                <span className="adv-seg-sep"> · </span>
+                                <span className="adv-seg-speaker">
+                                    {seg.speaker || "Unknown"}
+                                </span>
+                                <span className="adv-seg-sep"> · </span>
+                                <span>{seg.text}</span>
+                                {seg.agendaKey &&
+                                    seg.agendaKey !== "_unlinked" && (
+                                        <span className="chip adv-agenda-chip">
+                                            agenda
+                                        </span>
+                                    )}
+                            </div>
+                        ))}
+                    </div>
+                    {showLoadMore && (
+                        <button
+                            type="button"
+                            className="btn btn-secondary btn-sm adv-transcript-more-btn"
+                            onClick={loadMoreServer}
+                        >
+                            Load more results
+                        </button>
+                    )}
+                </>
+            )}
         </div>
     );
 }

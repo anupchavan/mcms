@@ -1,21 +1,12 @@
 /**
  * Layout math for the live-meeting video grid.
- *
- * Two modes:
- *  - `gallery`: only camera tiles. Tiles fill the cell so cropping is OK
- *    (the user signed off on this trade-off). Maximize per-tile area; break
- *    ties by aspect ratio close to 16:9 so portraits don't dominate.
- *  - `stage`: one (or more) screen-share tiles plus a filmstrip of cameras.
- *    Screen share must keep its aspect ratio (no crop). Pick whether the
- *    filmstrip sits to the right or below to maximize the screen-share's
- *    rendered area.
  */
 
 export interface GridLayout {
-    rows: number;
-    cols: number;
-    tileWidth: number;
-    tileHeight: number;
+	rows: number;
+	cols: number;
+	tileWidth: number;
+	tileHeight: number;
 }
 
 const MIN_TILE_DIMENSION = 24;
@@ -35,21 +26,21 @@ const TARGET_TILE_ASPECT = 16 / 9;
  * so we never pick a layout that hides the user's face just to fill space.
  */
 function scoreGrid(tileW: number, tileH: number): number {
-    if (tileW <= MIN_TILE_DIMENSION || tileH <= MIN_TILE_DIMENSION) return -1;
-    const aspect = tileW / tileH;
-    const area = tileW * tileH;
-    const infoPreserved =
-        Math.min(aspect, TARGET_TILE_ASPECT) /
-        Math.max(aspect, TARGET_TILE_ASPECT);
+	if (tileW <= MIN_TILE_DIMENSION || tileH <= MIN_TILE_DIMENSION) return -1;
+	const aspect = tileW / tileH;
+	const area = tileW * tileH;
+	const infoPreserved =
+		Math.min(aspect, TARGET_TILE_ASPECT) /
+		Math.max(aspect, TARGET_TILE_ASPECT);
 
-    // Cliff penalty for tile shapes that crop the camera severely.
-    // Numbers chosen so anything beyond ~25 % source loss gets dwarfed by
-    // saner alternatives during the search.
-    let cliff = 1;
-    if (aspect > 2.4) cliff = 0.15;       // very wide — chops top + bottom (eats faces)
-    else if (aspect < 0.5) cliff = 0.4;   // very tall — chops sides (still uglier than letterbox)
+	// Cliff penalty for tile shapes that crop the camera severely.
+	// Numbers chosen so anything beyond ~25 % source loss gets dwarfed by
+	// saner alternatives during the search.
+	let cliff = 1;
+	if (aspect > 2.4) cliff = 0.15;       // very wide — chops top + bottom (eats faces)
+	else if (aspect < 0.5) cliff = 0.4;   // very tall — chops sides (still uglier than letterbox)
 
-    return area * infoPreserved * cliff;
+	return area * infoPreserved * cliff;
 }
 
 /**
@@ -58,46 +49,46 @@ function scoreGrid(tileW: number, tileH: number): number {
  * is acceptable. Returns `null` if either dimension is 0 (pre-mount).
  */
 export function computeGalleryLayout(
-    width: number,
-    height: number,
-    n: number,
-    gap = 8,
+	width: number,
+	height: number,
+	n: number,
+	gap = 8,
 ): GridLayout | null {
-    if (n <= 0 || width <= 0 || height <= 0) return null;
+	if (n <= 0 || width <= 0 || height <= 0) return null;
 
-    let best: { rows: number; cols: number; tileW: number; tileH: number; score: number } | null =
-        null;
+	let best: { rows: number; cols: number; tileW: number; tileH: number; score: number } | null =
+		null;
 
-    for (let cols = 1; cols <= n; cols++) {
-        const rows = Math.ceil(n / cols);
-        const tileW = (width - (cols - 1) * gap) / cols;
-        const tileH = (height - (rows - 1) * gap) / rows;
-        const score = scoreGrid(tileW, tileH);
-        if (score < 0) continue;
-        if (!best || score > best.score) {
-            best = { rows, cols, tileW, tileH, score };
-        }
-    }
+	for (let cols = 1; cols <= n; cols++) {
+		const rows = Math.ceil(n / cols);
+		const tileW = (width - (cols - 1) * gap) / cols;
+		const tileH = (height - (rows - 1) * gap) / rows;
+		const score = scoreGrid(tileW, tileH);
+		if (score < 0) continue;
+		if (!best || score > best.score) {
+			best = { rows, cols, tileW, tileH, score };
+		}
+	}
 
-    if (!best) {
-        // Fallback when container is degenerate: degenerate grid with at least 1 col.
-        return { rows: n, cols: 1, tileWidth: width, tileHeight: height / n };
-    }
-    return {
-        rows: best.rows,
-        cols: best.cols,
-        tileWidth: best.tileW,
-        tileHeight: best.tileH,
-    };
+	if (!best) {
+		// Fallback when container is degenerate: degenerate grid with at least 1 col.
+		return { rows: n, cols: 1, tileWidth: width, tileHeight: height / n };
+	}
+	return {
+		rows: best.rows,
+		cols: best.cols,
+		tileWidth: best.tileW,
+		tileHeight: best.tileH,
+	};
 }
 
 export type FilmstripPlacement = 'right' | 'bottom' | 'none';
 
 export interface StageLayout {
-    /** Where the camera filmstrip sits relative to the screen-share stage. */
-    filmstripPlacement: FilmstripPlacement;
-    /** Filmstrip cross-axis size in px (width when placement=right, height when bottom). */
-    filmstripSize: number;
+	/** Where the camera filmstrip sits relative to the screen-share stage. */
+	filmstripPlacement: FilmstripPlacement;
+	/** Filmstrip cross-axis size in px (width when placement=right, height when bottom). */
+	filmstripSize: number;
 }
 
 /**
@@ -111,51 +102,51 @@ export interface StageLayout {
  * there's just one of them.
  */
 export function computeStageLayout(
-    width: number,
-    height: number,
-    cameraCount: number,
-    screenShareAspect = 16 / 9,
-    gap = 8,
+	width: number,
+	height: number,
+	cameraCount: number,
+	screenShareAspect = 16 / 9,
+	gap = 8,
 ): StageLayout {
-    if (cameraCount <= 0) {
-        return { filmstripPlacement: 'none', filmstripSize: 0 };
-    }
-    // First frame after switching to stage layout often runs before ResizeObserver
-    // reports a non-zero size; still reserve a filmstrip so camera tiles render.
-    if (width <= 0 || height <= 0) {
-        return { filmstripPlacement: 'right', filmstripSize: 224 };
-    }
+	if (cameraCount <= 0) {
+		return { filmstripPlacement: 'none', filmstripSize: 0 };
+	}
+	// First frame after switching to stage layout often runs before ResizeObserver
+	// reports a non-zero size; still reserve a filmstrip so camera tiles render.
+	if (width <= 0 || height <= 0) {
+		return { filmstripPlacement: 'right', filmstripSize: 224 };
+	}
 
-    // Reasonable tile dimensions: roughly a quarter of the container's long axis,
-    // capped so the filmstrip never eats more than 30 % of the available space.
-    const MIN_TILE = 96;
-    const MAX_FRACTION = 0.30;
-    const PREFERRED_RIGHT_TILE_W = 224;     // ~16:9 at 224×126 — readable face
-    const PREFERRED_BOTTOM_TILE_H = 156;
+	// Reasonable tile dimensions: roughly a quarter of the container's long axis,
+	// capped so the filmstrip never eats more than 30 % of the available space.
+	const MIN_TILE = 96;
+	const MAX_FRACTION = 0.30;
+	const PREFERRED_RIGHT_TILE_W = 224;     // ~16:9 at 224×126 — readable face
+	const PREFERRED_BOTTOM_TILE_H = 156;
 
-    const rightSize = Math.max(
-        MIN_TILE,
-        Math.min(PREFERRED_RIGHT_TILE_W, width * MAX_FRACTION),
-    );
-    const bottomSize = Math.max(
-        MIN_TILE,
-        Math.min(PREFERRED_BOTTOM_TILE_H, height * MAX_FRACTION),
-    );
+	const rightSize = Math.max(
+		MIN_TILE,
+		Math.min(PREFERRED_RIGHT_TILE_W, width * MAX_FRACTION),
+	);
+	const bottomSize = Math.max(
+		MIN_TILE,
+		Math.min(PREFERRED_BOTTOM_TILE_H, height * MAX_FRACTION),
+	);
 
-    const score = (placement: 'right' | 'bottom', size: number) => {
-        const stageW = placement === 'right' ? width - size - gap : width;
-        const stageH = placement === 'right' ? height : height - size - gap;
-        if (stageW <= 0 || stageH <= 0) return 0;
-        const containedW = Math.min(stageW, stageH * screenShareAspect);
-        const containedH = containedW / screenShareAspect;
-        return containedW * containedH;
-    };
+	const score = (placement: 'right' | 'bottom', size: number) => {
+		const stageW = placement === 'right' ? width - size - gap : width;
+		const stageH = placement === 'right' ? height : height - size - gap;
+		if (stageW <= 0 || stageH <= 0) return 0;
+		const containedW = Math.min(stageW, stageH * screenShareAspect);
+		const containedH = containedW / screenShareAspect;
+		return containedW * containedH;
+	};
 
-    const rightScore = score('right', rightSize);
-    const bottomScore = score('bottom', bottomSize);
+	const rightScore = score('right', rightSize);
+	const bottomScore = score('bottom', bottomSize);
 
-    if (rightScore >= bottomScore) {
-        return { filmstripPlacement: 'right', filmstripSize: rightSize };
-    }
-    return { filmstripPlacement: 'bottom', filmstripSize: bottomSize };
+	if (rightScore >= bottomScore) {
+		return { filmstripPlacement: 'right', filmstripSize: rightSize };
+	}
+	return { filmstripPlacement: 'bottom', filmstripSize: bottomSize };
 }
