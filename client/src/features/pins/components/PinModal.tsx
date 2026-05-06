@@ -56,18 +56,11 @@ export default function PinModal({ meetingId, transcriptTimestamp, onClose, fetc
     return (
         <div className="qr-overlay" onClick={onClose}>
             <div
+                className="pin-modal-card"
                 onClick={(e) => e.stopPropagation()}
-                style={{
-                    background: 'var(--bg-secondary)',
-                    borderRadius: '12px',
-                    padding: '24px',
-                    maxWidth: '420px',
-                    width: '90%',
-                    border: '1px solid var(--border)',
-                }}
             >
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
-                    <h3 style={{ margin: 0, fontSize: '16px', fontWeight: 700 }}>
+                <div className="pin-modal-header">
+                    <h3 className="pin-modal-title">
                         <Icon icon={PinIcon} size={16} /> Pin Resource
                     </h3>
                     <button className="btn-icon" onClick={onClose}>
@@ -75,12 +68,11 @@ export default function PinModal({ meetingId, transcriptTimestamp, onClose, fetc
                     </button>
                 </div>
 
-                <div style={{ display: 'flex', gap: '8px', marginBottom: '12px' }}>
+                <div className="pin-modal-tab-row">
                     {['url', 'pdf', 'code'].map(t => (
                         <button
                             key={t}
-                            className={`chip ${type === t ? 'chip-blue' : ''}`}
-                            style={{ cursor: 'pointer', padding: '4px 12px', fontSize: '0.75rem' }}
+                            className={`chip pin-chip-btn ${type === t ? 'chip-blue' : ''}`}
                             onClick={() => setType(t)}
                         >
                             {t.toUpperCase()}
@@ -93,7 +85,7 @@ export default function PinModal({ meetingId, transcriptTimestamp, onClose, fetc
                     placeholder="Label (optional)"
                     value={label}
                     onChange={(e) => setLabel(e.target.value)}
-                    style={{ width: '100%', marginBottom: '8px', fontSize: '0.8125rem', padding: '8px 10px' }}
+                    className="input-field pin-modal-input"
                 />
 
                 {type !== 'code' && (
@@ -102,60 +94,56 @@ export default function PinModal({ meetingId, transcriptTimestamp, onClose, fetc
                         placeholder="URL..."
                         value={url}
                         onChange={(e) => setUrl(e.target.value)}
-                        style={{ width: '100%', marginBottom: '8px', fontSize: '0.8125rem', padding: '8px 10px' }}
+                        className="input-field pin-modal-input"
                     />
                 )}
 
                 {type === 'code' && (
                     <textarea
-                        className="input-field"
+                        className="input-field pin-modal-textarea"
                         placeholder="Paste code snippet..."
                         value={content}
                         onChange={(e) => setContent(e.target.value)}
                         rows={5}
-                        style={{ width: '100%', marginBottom: '8px', fontSize: '0.75rem', fontFamily: 'monospace', padding: '8px 10px', resize: 'vertical' }}
                     />
                 )}
 
-                <div style={{ display: 'flex', gap: '8px', marginBottom: '12px' }}>
+                <div className="pin-modal-meta-row">
                     {type === 'pdf' && (
                         <input
-                            className="input-field"
                             type="number"
                             placeholder="Page #"
                             value={pageNumber}
                             onChange={(e) => setPageNumber(e.target.value)}
-                            style={{ flex: 1, fontSize: '0.75rem', padding: '6px 8px' }}
+                            className="input-field pin-modal-meta-input"
                         />
                     )}
                     {type === 'code' && (
                         <>
                             <input
-                                className="input-field"
                                 type="number"
                                 placeholder="Line #"
                                 value={lineNumber}
                                 onChange={(e) => setLineNumber(e.target.value)}
-                                style={{ flex: 1, fontSize: '0.75rem', padding: '6px 8px' }}
+                                className="input-field pin-modal-meta-input"
                             />
                             <input
-                                className="input-field"
                                 placeholder="Language"
                                 value={language}
                                 onChange={(e) => setLanguage(e.target.value)}
-                                style={{ flex: 1, fontSize: '0.75rem', padding: '6px 8px' }}
+                                className="input-field pin-modal-meta-input"
                             />
                         </>
                     )}
                 </div>
 
                 {transcriptTimestamp && (
-                    <p style={{ fontSize: '0.6875rem', color: 'var(--text-muted)', marginBottom: '12px' }}>
+                    <p className="pin-modal-hint">
                         Anchored to transcript at {transcriptTimestamp}
                     </p>
                 )}
 
-                <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end' }}>
+                <div className="pin-modal-actions">
                     <button className="btn btn-secondary" onClick={onClose}>Cancel</button>
                     <button className="btn btn-primary" onClick={handleSubmit} disabled={saving}>
                         {saving ? 'Saving...' : 'Pin'}

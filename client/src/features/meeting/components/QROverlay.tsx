@@ -79,11 +79,11 @@ export default function QROverlay({ onClose, meetingTitle, meetingId }: QROverla
     };
 
     return (
-        <div className="qr-overlay" onClick={onClose} style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', position: 'fixed', inset: 0, background: 'rgba(var(--flexoki-black-rgb), 0.6)', zIndex: 10000 }}>
-            <div onClick={(e) => e.stopPropagation()} style={{ position: 'relative', display: 'flex', gap: '32px', background: 'var(--bg-primary)', padding: 'var(--lk-size-lg)', paddingTop: 'var(--lk-size-lg)', borderRadius: '16px', maxWidth: '800px', width: '90%', border: '1px solid var(--border)', boxShadow: '0 20px 25px -5px rgba(var(--flexoki-black-rgb), 0.1), 0 10px 10px -5px rgba(var(--flexoki-black-rgb), 0.04)' }}>
+        <div className="qr-overlay qr-overlay-backdrop" onClick={onClose}>
+            <div onClick={(e) => e.stopPropagation()} className="qr-overlay-modal">
                 {/* Left Side: QR */}
-                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '16px', flex: 1 }}>
-                    <div className="qr-box" style={{ background: 'var(--flexoki-paper)', padding: '16px', borderRadius: '12px', boxShadow: '0 4px 6px -1px rgba(var(--flexoki-black-rgb), 0.1)' }}>
+                <div className="qr-left-col">
+                    <div className="qr-box-wrap">
                         {qrUrl ? (
                             <QRCodeSVG
                                 value={qrUrl}
@@ -94,45 +94,45 @@ export default function QROverlay({ onClose, meetingTitle, meetingId }: QROverla
                                 fgColor="#282726"
                             />
                         ) : error ? (
-                            <div style={{ width: 200, height: 200, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--danger)', fontSize: '14px', textAlign: 'center', padding: '20px' }}>
+                            <div className="qr-placeholder qr-placeholder--error">
                                 {error}
                             </div>
                         ) : (
-                            <div style={{ width: 200, height: 200, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-muted)' }}>
+                            <div className="qr-placeholder qr-placeholder--loading">
                                 Generating...
                             </div>
                         )}
                     </div>
 
-                    <div style={{ textAlign: 'center', color: 'var(--text-primary)' }}>
-                        <h3 style={{ fontSize: '18px', fontWeight: 700, marginBottom: '8px' }}>Scan for Attendance</h3>
-                        <p style={{ fontSize: '14px', color: 'var(--text-secondary)', marginBottom: '4px' }}>{meetingTitle}</p>
-                        <p style={{ fontSize: '12px', color: 'var(--text-muted)' }}>
-                            Auto-refreshes in <span style={{ color: 'var(--accent-amber)', fontWeight: 600 }}>{formatCountdown(countdown)}</span>
+                    <div className="qr-caption">
+                        <h3 className="qr-title">Scan for Attendance</h3>
+                        <p className="qr-meeting-name">{meetingTitle}</p>
+                        <p className="qr-countdown">
+                            Auto-refreshes in <span className="qr-countdown-value">{formatCountdown(countdown)}</span>
                         </p>
                     </div>
                 </div>
 
                 {/* Right Side: Report */}
-                <div style={{ flex: 1, borderLeft: '1px solid var(--border)', paddingLeft: '32px', display: 'flex', flexDirection: 'column' }}>
-					<div style={{ display: 'flex', alignItems: 'center', gap: '6px', justifyContent: 'space-between', marginBottom: 'var(--lk-size-md)' }}>
-						<h3 style={{ fontSize: '16px', fontWeight: 600, color: 'var(--text-primary)' }}>Live Attendance</h3>
-						<div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                <div className="qr-right-col">
+					<div className="qr-right-header">
+						<h3 className="qr-right-title">Live Attendance</h3>
+						<div className="qr-right-header-actions">
 							<div className="chip chip-emerald">{report?.presentCount || 0} / {report?.total || 0} Present</div>
-							<button onClick={onClose} className="btn btn-secondary" style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '6px 8px', fontSize: '12px', background: 'var(--bg-card)' }}><Icon icon={Cancel01Icon} size={14} /></button>
+							<button onClick={onClose} className="btn btn-secondary qr-close-btn"><Icon icon={Cancel01Icon} size={14} /></button>
 						</div>
                     </div>
 
 
 
-                    <div style={{ flex: 1, overflowY: 'auto', maxHeight: '300px', display: 'flex', flexDirection: 'column', gap: '8px', paddingRight: '8px' }}>
+                    <div className="qr-attendee-list">
                         {report?.attended?.length > 0 ? report.attended.map((a: any, i: number) => (
-                            <div key={i} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: 'var(--font-size-label)', marginBottom: 'var(--lk-size-sm)' }}>
-                                <span style={{ color: 'var(--text-primary)', fontWeight: 500 }}>{a.user?.name || a.user?.email || 'Unknown User'}</span>
-                                <span style={{ color: 'var(--text-muted)' }}>{new Date(a.joinTimestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+                            <div key={i} className="qr-attendee-row">
+                                <span className="qr-attendee-name">{a.user?.name || a.user?.email || 'Unknown User'}</span>
+                                <span className="qr-attendee-time">{new Date(a.joinTimestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
                             </div>
                         )) : (
-                            <div style={{ color: 'var(--text-muted)', fontSize: '13px', textAlign: 'center', marginTop: '40px' }}>No attendees scanned yet.</div>
+                            <div className="qr-no-attendees">No attendees scanned yet.</div>
                         )}
                     </div>
                 </div>

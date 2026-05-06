@@ -391,7 +391,7 @@ export default function TopBar({ userName, onNewMeeting, theme = 'dark', onToggl
                 </div>
             </div>
 
-            <div className="topbar-center" ref={searchBoxRef} style={{ position: 'relative' }}>
+            <div className="topbar-center topbar-search-col" ref={searchBoxRef}>
                 <div className="search-box">
                     <Icon icon={Search01Icon} size={16} />
                     <input
@@ -426,7 +426,7 @@ export default function TopBar({ userName, onNewMeeting, theme = 'dark', onToggl
                                             {m.date && <span><Icon icon={Calendar02Icon} size={12} /> {formatDate(m.date)}</span>}
                                             {m.time && <span><Icon icon={Clock01Icon} size={12} /> {m.time}</span>}
                                             <span><Icon icon={UserIcon} size={12} /> {m.host}</span>
-                                            {m.status && <span className={`chip ${m.status === 'completed' ? 'chip-emerald' : 'chip-amber'}`} style={{ fontSize: '0.5625rem' }}>{m.status}</span>}
+                                            {m.status && <span className={`chip chip-2xs ${m.status === 'completed' ? 'chip-emerald' : 'chip-amber'}`}>{m.status}</span>}
                                         </div>
                                         {m.matchedTranscripts?.length > 0 && (
                                             <div className="search-dropdown-item-snippets">
@@ -455,7 +455,7 @@ export default function TopBar({ userName, onNewMeeting, theme = 'dark', onToggl
                     </button>
                 </ShortcutTooltip>
 
-                <div ref={notifRef} style={{ position: 'relative' }}>
+                <div ref={notifRef} className="topbar-notif-col">
                     <ShortcutTooltip keys={['N']}>
                         <button
                             className={`btn-icon tooltip ${showNotif ? 'active' : ''}`}
@@ -474,7 +474,7 @@ export default function TopBar({ userName, onNewMeeting, theme = 'dark', onToggl
                                 <span className="notification-dropdown-title">Notifications</span>
                                 {unreadCount > 0 && (
                                     <button type="button" className="notification-mark-read" onClick={markAllRead}>
-                                        <Icon icon={Tick01Icon} size={12} />
+                                        <span className="notification-mark-read-icon"></span>
                                         Mark all read
                                     </button>
                                 )}
@@ -620,11 +620,10 @@ export default function TopBar({ userName, onNewMeeting, theme = 'dark', onToggl
                     )}
                 </div>
 
-                <div ref={userMenuRef} className="user-profile" style={{ position: 'relative' }}>
+                <div ref={userMenuRef} className="user-profile topbar-user-col">
                     <div
-                        className="user-menu"
+                        className="user-menu topbar-user-trigger"
                         onClick={() => setShowUserMenu(!showUserMenu)}
-                        style={{ cursor: 'pointer' }}
                     >
                         <UserAvatar
                             name={user?.name || ''}
@@ -636,23 +635,19 @@ export default function TopBar({ userName, onNewMeeting, theme = 'dark', onToggl
                     </div>
 
                     {showUserMenu && (
-                        <div className="glass-card" style={{
-                            position: 'absolute', right: 0, top: '3rem', width: '12.5rem',
-                            padding: '0.5rem', zIndex: 1000, display: 'flex', flexDirection: 'column', gap: '0.25rem'
-                        }}>
-                            <div style={{ padding: '0.5rem 0.75rem', borderBottom: '0.0625rem solid var(--border)', marginBottom: '0.25rem' }}>
-                                <div style={{ fontSize: '0.8125rem', fontWeight: 600 }}>{userName}</div>
-                                <div style={{ fontSize: '0.6875rem', color: 'var(--text-muted)' }}>Host Account</div>
+                        <div className="glass-card topbar-menu-dropdown">
+                            <div className="topbar-user-info">
+                                <div className="topbar-user-name">{userName}</div>
+                                <div className="topbar-user-role">Host Account</div>
                             </div>
-                            <button className="btn btn-secondary" style={{ width: '100%', justifyContent: 'flex-start', border: 'none' }} onClick={() => { navigate('/settings'); setShowUserMenu(false); }}>Profile Settings</button>
+                            <button className="btn btn-secondary topbar-menu-btn" onClick={() => { navigate('/settings'); setShowUserMenu(false); }}>Profile Settings</button>
                             {onLogout && (
                                 <button
-                                    className="btn btn-secondary"
-                                    style={{ width: '100%', justifyContent: 'flex-start', color: 'var(--accent-rose)', border: 'none' }}
+                                    className="btn btn-secondary topbar-menu-logout"
                                     onClick={onLogout}
                                 >
                                     <Icon icon={Logout01Icon} size={16} />
-                                    <span style={{ marginLeft: '0.5rem' }}>Logout</span>
+                                    <span className="topbar-logout-label">Logout</span>
                                 </button>
                             )}
                         </div>

@@ -79,8 +79,8 @@ export default function TranscriptFeed({ transcripts, isLive, onClosePanel, onPi
                 <div className="section-title-container">
                     <span className="section-title">Live Transcript</span>
                 </div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '0.375rem' }}>
-                    {isLive && <span className="chip chip-emerald" style={{ fontSize: '10px' }}>LIVE</span>}
+                <div className="tf-header-row">
+                    {isLive && <span className="chip chip-emerald chip-xs">LIVE</span>}
                     {onClosePanel && (
                         <ShortcutTooltip keys={['mod', ']']} position="bottom">
                             <button
@@ -124,13 +124,13 @@ export default function TranscriptFeed({ transcripts, isLive, onClosePanel, onPi
                                                         speakerInitials(speaker)
                                                     )}
                                                 </div>
-                                                <div style={{ minWidth: 0 }}>
+                                                <div className="tf-speaker-meta-col">
                                                     <span className="transcript-speaker">{speaker}</span>
                                                     <span className="transcript-time">{entry.timestamp || '—'}</span>
                                                 </div>
                                             </div>
                                             {entry.languageCode && (
-                                                <span className="chip" style={{ padding: '1px 6px', fontSize: '9px', flexShrink: 0 }}>
+                                                <span className="chip tf-lang-chip">
                                                     {entry.languageCode}
                                                 </span>
                                             )}
@@ -142,15 +142,14 @@ export default function TranscriptFeed({ transcripts, isLive, onClosePanel, onPi
                                             )}
                                         </p>
                                         {rowPins.length > 0 && (
-                                            <div className="transcript-actions" style={{ flexWrap: 'wrap' }}>
+                                            <div className="transcript-actions tf-actions-wrap">
                                                 {rowPins.map(pin => (
                                                     <a
                                                         key={pin.id}
                                                         href={pin.url || '#'}
                                                         target="_blank"
                                                         rel="noopener noreferrer"
-                                                        className="chip chip-cyan"
-                                                        style={{ fontSize: '0.5625rem', textDecoration: 'none' }}
+                                                        className="chip chip-cyan tf-pin-chip"
                                                     >
                                                         <Icon icon={PinIcon} size={8} /> {pin.label || pin.type}
                                                     </a>
@@ -176,8 +175,8 @@ export default function TranscriptFeed({ transcripts, isLive, onClosePanel, onPi
 
                         {transcripts.length === 0 && (
                             <div className="empty-state">
-                                <p style={{ fontSize: '14px' }}>No transcript yet</p>
-                                <p style={{ fontSize: '12px' }}>Start recording to see live transcription here</p>
+                                <p className="tf-empty-title">No transcript yet</p>
+                                <p className="tf-empty-sub">Start recording to see live transcription here</p>
                             </div>
                         )}
                     </div>

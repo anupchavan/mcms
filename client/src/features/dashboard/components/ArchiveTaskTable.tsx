@@ -256,11 +256,10 @@ function ArchiveTaskRow({ task, participants, canEdit, fetchWithAuth, apiBase, o
                 {canEdit ? (
                     <input
                         type="date"
-                        className="input-field"
+                        className="input-field archive-task-date-input"
                         value={deadlineDraft}
                         onChange={(e) => setDeadlineDraft(e.target.value)}
                         onBlur={(e) => commitDeadline(e.target.value)}
-                        style={{ fontSize: "var(--font-size-caption)", padding: "0", minWidth: 0, width: "100%", background: "transparent", border: "none", outline: "none" }}
                     />
                 ) : (
                     <span className="archive-task-deadline-text">
@@ -528,22 +527,13 @@ export function TaskCategorySelect({
             {open && panelPos && createPortal(
                 <div
                     ref={panelRef}
-                    className="archive-multi-select-list"
+                    className="archive-multi-select-list archive-cat-panel-portal"
                     role="listbox"
                     style={{
-                        position: "fixed",
                         top: panelPos.top,
                         bottom: panelPos.bottom,
                         left: panelPos.left,
                         minWidth: panelPos.minWidth,
-                        maxHeight: PANEL_MAX_H,
-                        overflowY: "auto",
-                        background: "var(--bg-card)",
-                        border: "1px solid var(--border)",
-                        borderRadius: "var(--radius-md)",
-                        boxShadow: "var(--shadow-lg)",
-                        zIndex: 9999,
-                        padding: "0.25rem",
                     }}
                 >
                     {CATEGORIES.map((cat) => {
@@ -658,22 +648,13 @@ export function TaskStatusSelect({
             {open && panelPos && createPortal(
                 <div
                     ref={panelRef}
-                    className="archive-multi-select-list"
+                    className="archive-multi-select-list archive-status-panel-portal"
                     role="listbox"
                     style={{
-                        position: "fixed",
                         top: panelPos.top,
                         bottom: panelPos.bottom,
                         left: panelPos.left,
                         minWidth: panelPos.minWidth,
-                        maxHeight: STATUS_PANEL_MAX_H,
-                        overflowY: "auto",
-                        background: "var(--bg-card)",
-                        border: "1px solid var(--border)",
-                        borderRadius: "1rem",
-                        boxShadow: "var(--shadow-lg)",
-                        zIndex: 9999,
-                        padding: "0.35rem",
                     }}
                 >
                     {dropdownOptions.map((opt) => {

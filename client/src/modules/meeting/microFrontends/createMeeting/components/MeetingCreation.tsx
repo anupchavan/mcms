@@ -467,15 +467,9 @@ export default function MeetingCreation({
             <div className="modal-header">
               <h2 className="modal-title">Create New Meeting</h2>
             </div>
-            <div
-              style={{
-                display: "flex",
-                justifyContent: "space-between",
-                alignItems: "center",
-              }}
-            >
+            <div className="mc-form-between-row">
               <label className="form-label">Meeting Title</label>
-              <span style={{ fontSize: "11px", color: "var(--text-tertiary)" }}>
+              <span className="mc-small-hint">
                 {title.length}/100
               </span>
             </div>
@@ -492,83 +486,53 @@ export default function MeetingCreation({
           </div>
 
           <div className="form-group">
-            <div
-              style={{
-                display: "flex",
-                justifyContent: "space-between",
-                alignItems: "center",
-              }}
-            >
+            <div className="mc-form-between-row">
               <label className="form-label">Description (Optional)</label>
-              <span style={{ fontSize: "11px", color: "var(--text-tertiary)" }}>
+              <span className="mc-small-hint">
                 {description.length}/500
               </span>
             </div>
             <textarea
-              className="input"
+              className="input mc-textarea"
               placeholder="What is this meeting about?"
               value={description}
               onChange={(e) => setDescription(e.target.value)}
               rows={3}
-              style={{ resize: "vertical", fontFamily: "inherit" }}
               id="input-meeting-description"
               maxLength={500}
             />
           </div>
 
           <div className="form-group">
-            <div
-              style={{
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "space-between",
-                marginBottom: "8px",
-              }}
-            >
+            <div className="mc-form-agenda-header">
               <label className="form-label">Agenda Items (Optional)</label>
             </div>
 
-            <div
-              style={{ display: "flex", flexDirection: "column", gap: "8px" }}
-            >
+            <div className="mc-tag-gap">
               {agenda.map((item, index) => (
                 <div
                   key={index}
-                  style={{ display: "flex", gap: "8px", alignItems: "center" }}
+                  className="mc-tag-row"
                 >
-                  <div style={{ flex: 1, position: "relative" }}>
+                  <div className="mc-col-flex">
                     <input
                       type="text"
-                      className="input"
+                      className="input mc-agenda-title-input"
                       placeholder={`e.g., Review Q3 OKRs`}
                       value={item.title}
                       onChange={(e) =>
                         handleAgendaChange(index, "title", e.target.value)
                       }
-                      style={{
-                        marginTop: 0,
-                        width: "100%",
-                        paddingRight: "45px",
-                      }}
                       maxLength={200}
                     />
-                    <span
-                      style={{
-                        position: "absolute",
-                        right: "8px",
-                        bottom: "8px",
-                        fontSize: "10px",
-                        color: "var(--text-tertiary)",
-                        pointerEvents: "none",
-                      }}
-                    >
+                    <span className="mc-agenda-char-hint">
                       {item.title.length}/200
                     </span>
                   </div>
-                  <div style={{ position: "relative", width: "90px" }}>
+                  <div className="mc-time-col">
                     <input
                       type="number"
-                      className="input"
+                      className="input mc-agenda-dur-input"
                       placeholder="Mins"
                       value={item.duration}
                       onChange={(e) =>
@@ -578,27 +542,15 @@ export default function MeetingCreation({
                           Number(e.target.value),
                         )
                       }
-                      style={{ marginTop: 0, paddingRight: "28px" }}
                     />
-                    <span
-                      style={{
-                        position: "absolute",
-                        right: "10px",
-                        top: "50%",
-                        transform: "translateY(-50%)",
-                        fontSize: "12px",
-                        color: "var(--text-tertiary)",
-                        pointerEvents: "none",
-                      }}
-                    >
+                    <span className="mc-agenda-dur-hint">
                       min
                     </span>
                   </div>
                   <button
                     type="button"
-                    className="btn-icon"
+                    className="btn-icon mc-agenda-rm-btn"
                     onClick={() => removeAgendaItem(index)}
-                    style={{ width: "32px", height: "32px", flexShrink: 0 }}
                   >
                     <Icon icon={Delete02Icon} size={16} />
                   </button>
@@ -606,21 +558,15 @@ export default function MeetingCreation({
               ))}
               <button
                 type="button"
-                className="btn btn-secondary"
+                className="btn btn-secondary mc-add-agenda-btn"
                 onClick={addAgendaItem}
-                style={{
-                  width: "fit-content",
-                  fontSize: "12px",
-                  padding: "4px 12px",
-                  marginTop: "4px",
-                }}
               >
                 <Icon icon={Add01Icon} size={14} /> Add agenda item
               </button>
             </div>
           </div>
 
-          <div className="form-group" style={{ marginBottom: "var(--lk-size-md)" }}>
+          <div className="form-group mc-form-group-md">
             <label className="form-label">Meeting Modality</label>
             <div className="modality-options">
               {(["Online", "Offline", "Hybrid"] as const).map((m) => (
@@ -647,23 +593,9 @@ export default function MeetingCreation({
 
           {modality === "Online" && (
             <div
-              className="form-group"
-              style={{
-                padding: "0",
-                background: "none",
-                borderRadius: "var(--radius-sm)",
-                border: "none",
-              }}
+              className="form-group mc-online-info"
             >
-              <div
-                style={{
-                  display: "flex",
-                  alignItems: "center",
-                  gap: "0.5rem",
-                  fontSize: "0.8125rem",
-                  color: "var(--color-tx-normal)",
-                }}
-              >
+              <div className="mc-online-info-row">
                 A video call room will be
                 auto-created
               </div>
@@ -672,23 +604,9 @@ export default function MeetingCreation({
 
           {modality === "Hybrid" && (
             <div
-              className="form-group"
-              style={{
-                padding: "0",
-                background: "none",
-                borderRadius: "var(--radius-sm)",
-                border: "none",
-              }}
+              className="form-group mc-online-info"
             >
-              <div
-                style={{
-                  display: "flex",
-                  alignItems: "center",
-                  gap: "0.5rem",
-                  fontSize: "0.8125rem",
-                  color: "var(--color-tx-normal)",
-                }}
-              >
+              <div className="mc-online-info-row">
                 A video call room will be
                 auto-created
               </div>
@@ -698,50 +616,40 @@ export default function MeetingCreation({
           {(modality === "Offline" || modality === "Hybrid") && (
             <div className="form-group">
               <label className="form-label form-subheading">Physical Location</label>
-              <div style={{ display: "flex", gap: "1rem", marginBottom: "var(--lk-size-md)" }}>
-                <label className="custom-radio-label" style={{ display: "flex", alignItems: "center", gap: "0.5rem", fontSize: "0.92rem", color: "var(--text-secondary)", cursor: "pointer", padding: "var(--lk-size-xs) 0", borderRadius: "var(--radius-xs)", transition: "background 0.2s" }}>
+              <div className="mc-radio-row">
+                <label className="custom-radio-label mc-radio-label">
                   <input
                     type="radio"
                     name="locationType"
                     value="Inside"
                     checked={locationType === "Inside"}
                     onChange={(e) => setLocationType(e.target.value as "Inside" | "Outside")}
-                    style={{
-                      accentColor: "var(--color-tx-normal)",
-                      width: "1.1em",
-                      height: "1.1em",
-                      marginRight: "0.5em",
-                    }}
+                    className="mc-radio-input"
                   />
                   <span>
                     Inside IITH Campus
                   </span>
                 </label>
 
-                <label className="custom-radio-label" style={{ display: "flex", alignItems: "center", gap: "0.5rem", fontSize: "0.92rem", color: "var(--text-secondary)", cursor: "pointer", padding: "var(--lk-size-xs) 0", borderRadius: "var(--radius-xs)", transition: "background 0.2s" }}>
+                <label className="custom-radio-label mc-radio-label">
                   <input
                     type="radio"
                     name="locationType"
                     value="Outside"
                     checked={locationType === "Outside"}
                     onChange={(e) => setLocationType(e.target.value as "Inside" | "Outside")}
-                    style={{
-                      accentColor: "var(--color-tx-normal)",
-                      width: "1.1em",
-                      height: "1.1em",
-                      marginRight: "0.5em",
-                    }}
+                    className="mc-radio-input"
                   />
                   Outside Campus
                 </label>
               </div>
 
               {locationType === "Inside" ? (
-                <div style={{ display: "flex", gap: "1rem" }}>
-                  <div style={{ flex: 1 }}>
-                    <div style={{ display: "flex", justifyContent: "space-between" }}>
-                      <label className="form-label" style={{ fontSize: "0.75rem", marginBottom: "4px" }}>Room No.</label>
-                      <span style={{ fontSize: "11px", color: "var(--text-tertiary)" }}>{roomNo.length}/50</span>
+                <div className="mc-inside-cols">
+                  <div className="mc-room-col">
+                    <div className="mc-room-header-row">
+                      <label className="form-label mc-room-label">Room No.</label>
+                      <span className="mc-small-hint">{roomNo.length}/50</span>
                     </div>
                     <input
                       type="text"
@@ -753,10 +661,10 @@ export default function MeetingCreation({
                       required={modality === "Offline" || modality === "Hybrid"}
                     />
                   </div>
-                  <div style={{ flex: 1 }}>
-                    <div style={{ display: "flex", justifyContent: "space-between" }}>
-                      <label className="form-label" style={{ fontSize: "0.75rem", marginBottom: "4px" }}>Building</label>
-                      <span style={{ fontSize: "11px", color: "var(--text-tertiary)" }}>{building.length}/100</span>
+                  <div className="mc-room-col">
+                    <div className="mc-room-header-row">
+                      <label className="form-label mc-room-label">Building</label>
+                      <span className="mc-small-hint">{building.length}/100</span>
                     </div>
                     <input
                       type="text"
@@ -771,20 +679,13 @@ export default function MeetingCreation({
                 </div>
               ) : (
                 <>
-                  <div
-                    style={{
-                      display: "flex",
-                      justifyContent: "space-between",
-                      alignItems: "center",
-                      marginBottom: "4px"
-                    }}
-                  >
-                    <label className="form-label" style={{ fontSize: "0.75rem", marginBottom: 0 }}>Location Address</label>
-                    <span style={{ fontSize: "11px", color: "var(--text-tertiary)" }}>
+                  <div className="mc-outside-header">
+                    <label className="form-label mc-outside-label">Location Address</label>
+                    <span className="mc-small-hint">
                       {location.length}/200
                     </span>
                   </div>
-                  <div style={{ display: "flex", gap: "0.5rem" }}>
+                  <div className="mc-address-row">
                     <input
                       type="text"
                       className="input"
@@ -797,9 +698,9 @@ export default function MeetingCreation({
                     />
                     <button
                       type="button"
-                      className={`btn btn-secondary${showMap ? ' active' : ''}`}
+                      className={`btn btn-secondary mc-map-toggle-btn${showMap ? ' active' : ''}`}
                       onClick={() => setShowMap(!showMap)}
-                      style={{ flexShrink: 0, display: "flex", alignItems: "center", gap: "0.375rem", padding: "0 0.75rem", background: showMap ? "var(--bg-hover)" : undefined }}
+                      style={{ background: showMap ? "var(--bg-hover)" : undefined }}
                       title={showMap ? "Hide map" : "Show map"}
                     >
                       <Icon icon={Location01Icon} size={14} /> {showMap ? "Hide" : "Map"}
@@ -816,21 +717,21 @@ export default function MeetingCreation({
                     never run two MapLibre instances at the same time.
                   */}
                   {inlineMapMounted && (
-                    <div style={{ marginTop: "0.5rem", borderRadius: "var(--radius-sm)", overflow: "hidden", border: "1px solid var(--border)", display: showMap && !mapExpanded ? "block" : "none" }}>
-                      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "4px 8px", background: "var(--bg-elevated)", borderBottom: "1px solid var(--border)", fontSize: "0.7rem", color: "var(--text-muted)", gap: "6px" }}>
-                        <span style={{ flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                    <div className="mc-inline-map-wrap" style={{ display: showMap && !mapExpanded ? "block" : "none" }}>
+                      <div className="mc-inline-map-header">
+                        <span className="mc-map-coord-text">
                           {geocoding
                             ? "Locating…"
                             : mapPos
                             ? `${mapPos.lat.toFixed(5)}, ${mapPos.lng.toFixed(5)}`
                             : "Click the map or type an address above"}
                         </span>
-                        <div style={{ display: "flex", alignItems: "center", gap: "4px", flexShrink: 0 }}>
+                        <div className="mc-map-header-actions">
                           {mapPos && (
                             <button
                               type="button"
                               onClick={() => { setMapPos(null); setMapCenter([78.123, 17.5947]); setLocation(""); }}
-                              style={{ background: "none", border: "none", cursor: "pointer", color: "var(--accent-rose)", fontSize: "0.7rem", padding: "0 3px" }}
+                              className="mc-map-clear-btn"
                             >
                               Clear
                             </button>
@@ -838,14 +739,14 @@ export default function MeetingCreation({
                           <button
                             type="button"
                             onClick={() => setMapExpanded(true)}
-                            style={{ background: "none", border: "none", cursor: "pointer", color: "var(--text-muted)", padding: "2px 3px", display: "flex", alignItems: "center" }}
+                            className="mc-map-expand-btn"
                             title="Expand map"
                           >
                             <Icon icon={ArrowExpand01Icon} size={13} />
                           </button>
                         </div>
                       </div>
-                      <div style={{ height: "220px" }}>
+                      <div className="mc-map-height">
                         <FlexokiMap
                           initialCenter={mapCenter}
                           markerPos={mapPos}
@@ -859,40 +760,30 @@ export default function MeetingCreation({
                   {/* Expanded map portal — same keep-alive pattern. */}
                   {expandedMapMounted && createPortal(
                     <div
-                      style={{
-                        position: "fixed", inset: 0, zIndex: 99999,
-                        display: mapExpanded ? "flex" : "none", alignItems: "center", justifyContent: "center",
-                        background: "rgba(var(--flexoki-black-rgb), 0.7)", backdropFilter: "blur(6px)",
-                      }}
+                      className="mc-expanded-backdrop"
+                      style={{ display: mapExpanded ? "flex" : "none" }}
                       onClick={() => setMapExpanded(false)}
                     >
                       <div
                         onClick={(e) => e.stopPropagation()}
-                        style={{
-                          width: "min(860px, 96vw)", height: "min(580px, 92vh)",
-                          borderRadius: "var(--radius-md, 12px)", overflow: "hidden",
-                          border: "1px solid var(--border)",
-                          display: "flex", flexDirection: "column",
-                          boxShadow: "var(--shadow-xl)",
-                          background: "var(--bg-secondary)",
-                        }}
+                        className="mc-expanded-card"
                       >
-                        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "8px 14px", background: "var(--bg-elevated)", borderBottom: "1px solid var(--border)", fontSize: "0.8rem", color: "var(--text-muted)" }}>
+                        <div className="mc-expanded-header">
                           <span>
                             {geocoding ? "Locating…" : mapPos ? `${mapPos.lat.toFixed(5)}, ${mapPos.lng.toFixed(5)}` : "Click to pin a location"}
                           </span>
-                          <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                          <div className="mc-expanded-actions">
                             <button
                               type="button"
                               onClick={() => setMapExpanded(false)}
-                              style={{ background: "none", border: "none", cursor: "pointer", color: "var(--text-muted)", display: "flex", alignItems: "center", padding: "2px" }}
+                              className="mc-expanded-close-btn"
                               title="Close"
                             >
                               <Icon icon={ArrowShrink01Icon} size={15} />
                             </button>
                           </div>
                         </div>
-                        <div style={{ flex: 1 }}>
+                        <div className="mc-expanded-map">
                           <FlexokiMap
                             initialCenter={mapCenter}
                             markerPos={mapPos}
@@ -900,8 +791,8 @@ export default function MeetingCreation({
                             onMapClick={handleMapClick}
                           />
                         </div>
-                        <div style={{ padding: "8px 14px", background: "var(--bg-elevated)", borderTop: "1px solid var(--border)", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-                          <span style={{ fontSize: "0.75rem", color: "var(--text-secondary)", flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                        <div className="mc-expanded-footer">
+                          <span className="mc-expanded-addr">
                             {location || "No location selected"}
                           </span>
                           <button
@@ -999,16 +890,9 @@ export default function MeetingCreation({
                       onMouseEnter={() => setUserHighlightIdx(i)}
                       onClick={() => addParticipant(u)}
                     >
-                      <span
-                        className="nldate-option-label"
-                        style={{
-                          display: "flex",
-                          alignItems: "center",
-                          gap: "0.5rem",
-                        }}
-                      >
+                      <span className="nldate-option-label mc-participant-opt-lbl">
                         <span className="participant-chip-avatar">
-                          {renderAvatar(u, 12)}
+                          {renderAvatar(u)}
                         </span>
                         {u.name}
                       </span>
@@ -1021,13 +905,7 @@ export default function MeetingCreation({
           </div>
 
           <div className="form-group">
-            <div
-              style={{
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "space-between",
-              }}
-            >
+            <div className="mc-form-between-row">
               <label
                 className={`form-label slot-label${labelFading ? " fading" : ""}${slotError ? " slot-label-error" : ""}`}
               >
@@ -1108,9 +986,8 @@ export default function MeetingCreation({
                 </div>
                 <button
                   type="button"
-                  className="btn-icon"
+                  className="btn-icon mc-slot-remove-btn"
                   onClick={() => removeSlot(slot.id)}
-                  style={{ width: "1.25rem", height: "1.25rem" }}
                 >
                   <Icon icon={Delete02Icon} size={14} />
                 </button>
@@ -1118,26 +995,13 @@ export default function MeetingCreation({
             ))}
 
             {slots.length > 1 && (
-              <div
-                style={{
-                  fontSize: "0.75rem",
-                  color: "var(--text-muted)",
-                  marginTop: "0.5rem",
-                }}
-              >
+              <div className="mc-multi-slot-hint">
                 Multiple slots — a poll will be sent to participants to vote.
               </div>
             )}
           </div>
 
-          <div
-            style={{
-              display: "flex",
-              gap: "0.75rem",
-              justifyContent: "flex-end",
-              marginTop: "1.5rem",
-            }}
-          >
+          <div className="mc-submit-row">
             <button
               type="button"
               className="btn btn-secondary"

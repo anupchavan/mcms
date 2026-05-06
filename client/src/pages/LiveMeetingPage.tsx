@@ -487,8 +487,7 @@ export default function LiveMeetingPage({ isPersonalRoom = false }: LiveMeetingP
                         >
                             {meeting.status === "pending_poll" && meeting.pollId && (
                                 <button
-                                    className="btn btn-sm btn-primary"
-                                    style={{ position: "absolute", top: "var(--lk-size-md)", right: "var(--lk-size-md)" }}
+                                    className="btn btn-sm btn-primary panel-close-abs"
                                     onClick={(e) => {
                                         e.stopPropagation();
                                         const pm = resolvedInternalMeetingId(meeting);
@@ -508,7 +507,7 @@ export default function LiveMeetingPage({ isPersonalRoom = false }: LiveMeetingP
                                 {(meeting.confirmedTime || meeting.time) && <span><Icon icon={Clock01Icon} size={14} /> {meeting.confirmedTime || meeting.time}</span>}
                                 {shouldShowMeetingLocation(meeting) && (
                                     <span
-                                        style={{ cursor: "pointer", textDecoration: "underline" }}
+                                        className="panel-text-link"
                                         onClick={(e) => { e.stopPropagation(); openLocationModal(meeting.location!); }}
                                     >
                                         <Icon icon={Location01Icon} size={14} /> {meeting.location}

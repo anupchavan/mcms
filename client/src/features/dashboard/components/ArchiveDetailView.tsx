@@ -474,8 +474,8 @@ export default function ArchiveDetailView({ meetingId, fetchWithAuth }: ArchiveD
         return (
             <div className="page-shell">
                 <CrumbHeader title="Not found" />
-                <div className="page-body-gutter-x" style={{ paddingBottom: "1.5rem" }}>
-                    <div role="status" style={{ color: "var(--text-muted)" }}>Archive not found or not available yet.</div>
+                <div className="page-body-gutter-x adv-pad-bottom">
+                    <div role="status" className="adv-muted-text">Archive not found or not available yet.</div>
                 </div>
             </div>
         );
@@ -485,8 +485,8 @@ export default function ArchiveDetailView({ meetingId, fetchWithAuth }: ArchiveD
         return (
             <div className="page-shell">
                 <CrumbHeader title="…" />
-                <div className="page-body-gutter-x" style={{ paddingBottom: "1.5rem" }}>
-                    <div role="status" style={{ color: "var(--text-muted)" }}>Loading archive…</div>
+                <div className="page-body-gutter-x adv-pad-bottom">
+                    <div role="status" className="adv-muted-text">Loading archive…</div>
                 </div>
             </div>
         );
@@ -516,7 +516,7 @@ export default function ArchiveDetailView({ meetingId, fetchWithAuth }: ArchiveD
                                 <SummaryList title="Pending" items={finalSummary.pendingItems} />
                                 <SummaryList title="Decisions" items={finalSummary.decisions} />
                                 <SummaryList title="Next Steps" items={finalSummary.nextSteps} />
-                                <p style={{ fontSize: "0.6875rem", color: "var(--text-muted)", marginTop: "0.75rem", marginBottom: 0 }}>
+                                <p className="adv-summary-model">
                                     Model: {finalSummary.model || "unknown"}
                                     {finalSummary.generatedAt ? ` · Generated ${new Date(finalSummary.generatedAt).toLocaleString()}` : ""}
                                 </p>
@@ -560,10 +560,10 @@ export default function ArchiveDetailView({ meetingId, fetchWithAuth }: ArchiveD
                                 {tasks.length > 0 ? (
                                     groups.length > 1 ? (
                                         groups.map((group) => (
-                                            <div key={group.key} style={{ marginBottom: "1.1rem" }}>
-                                                <div style={{ display: "flex", alignItems: "center", gap: "0.45rem", marginBottom: "0.4rem" }}>
-                                                    <span style={{ fontSize: "0.75rem", fontWeight: 600, color: "var(--text-secondary)" }}>{group.title}</span>
-                                                    <span className="chip chip-blue" style={{ fontSize: "0.5625rem" }}>{group.items.length}</span>
+                                            <div key={group.key} className="adv-group-gap">
+                                                <div className="adv-group-header">
+                                                    <span className="adv-group-title">{group.title}</span>
+                                                    <span className="chip chip-blue chip-2xs">{group.items.length}</span>
                                                 </div>
                                                 <ArchiveTaskTable
                                                     tasks={group.items}
@@ -603,7 +603,7 @@ export default function ArchiveDetailView({ meetingId, fetchWithAuth }: ArchiveD
                                         <span className="archive-searching-loading-text">Generating tasks</span>
                                     </div>
                                 ) : (
-                                    <div style={{ color: "var(--text-muted)", fontSize: "0.8125rem" }}>
+                                    <div className="adv-empty-text">
                                         No tasks were captured for this meeting.
                                     </div>
                                 )}
@@ -614,13 +614,13 @@ export default function ArchiveDetailView({ meetingId, fetchWithAuth }: ArchiveD
                     {detail.pins.length > 0 && (
                         <ArchiveSection title="Resource Pins">
                             {detail.pins.map(pin => (
-                                <div key={pin.id} className="glass-card" style={{ padding: "8px 12px", marginBottom: "6px" }}>
-                                    <div style={{ display: "flex", alignItems: "center", gap: "6px", fontSize: "0.8125rem" }}>
-                                        <span className="chip chip-cyan" style={{ fontSize: "0.5625rem" }}>{pin.type}</span>
-                                        <a href={pin.url || "#"} target="_blank" rel="noopener noreferrer" style={{ fontWeight: 500, color: "var(--primary)" }}>
+                                <div key={pin.id} className="glass-card adv-pin-card">
+                                    <div className="adv-pin-row">
+                                        <span className="chip chip-cyan chip-2xs">{pin.type}</span>
+                                        <a href={pin.url || "#"} target="_blank" rel="noopener noreferrer" className="adv-pin-link">
                                             {pin.label || pin.url || "Code snippet"}
                                         </a>
-                                        <span style={{ color: "var(--text-muted)", marginLeft: "auto", fontSize: "0.6875rem" }}>
+                                        <span className="adv-pin-meta">
                                             at {pin.transcriptTimestamp || "—"}
                                         </span>
                                     </div>
@@ -1085,32 +1085,27 @@ interface AgendaSectionProps {
 function AgendaSection({ item, index, segments, summary }: AgendaSectionProps) {
     const [expanded, setExpanded] = useState(false);
     return (
-        <div className="glass-card" style={{ padding: "10px 14px", marginBottom: "8px" }}>
-            <div
-                style={{ display: "flex", alignItems: "center", gap: "8px", cursor: "pointer" }}
-                onClick={() => setExpanded(e => !e)}
-            >
-                {index >= 0 && <span style={{ fontWeight: 600, fontSize: "0.75rem", color: "var(--text-muted)" }}>{index + 1}.</span>}
-                <span style={{ fontWeight: 500, fontSize: "0.8125rem", flex: 1 }}>{item.title}</span>
-                {item.duration > 0 && <span style={{ fontSize: "0.6875rem", color: "var(--text-muted)" }}>{item.duration}m</span>}
-                <span style={{ fontSize: "0.625rem", color: "var(--text-muted)" }}>{segments.length} segment{segments.length !== 1 ? "s" : ""}</span>
+        <div className="glass-card adv-agenda-item-card">
+            <div className="adv-agenda-item-row" onClick={() => setExpanded(e => !e)}>
+                {index >= 0 && <span className="adv-agenda-item-num">{index + 1}.</span>}
+                <span className="adv-agenda-item-ttl">{item.title}</span>
+                {item.duration > 0 && <span className="adv-agenda-item-dur">{item.duration}m</span>}
+                <span className="adv-agenda-item-segs">{segments.length} segment{segments.length !== 1 ? "s" : ""}</span>
                 <Icon icon={expanded ? ArrowUp01Icon : ArrowDown01Icon} size={16} />
             </div>
 
             {summary && (
-                <p style={{ fontSize: "0.75rem", color: "var(--accent-emerald)", marginTop: "6px", fontStyle: "italic" }}>
-                    {summary}
-                </p>
+                <p className="adv-agenda-alt-note">{summary}</p>
             )}
 
             {expanded && segments.length > 0 && (
-                <div style={{ marginTop: "8px", paddingLeft: "12px", borderLeft: "2px solid var(--border)" }}>
+                <div className="adv-agenda-segs-wrap">
                     {segments.map(seg => (
-                        <p key={seg.id} style={{ fontSize: "0.75rem", margin: "0 0 6px", lineHeight: 1.45, color: "var(--text-secondary)" }}>
-                            <span style={{ color: "var(--text-muted)", fontVariantNumeric: "tabular-nums" }}>{seg.timestamp || "—"}</span>
-                            <span style={{ color: "var(--text-muted)" }}> · </span>
-                            <span style={{ fontWeight: 600, color: "var(--text-primary)" }}>{seg.speaker}</span>
-                            <span style={{ color: "var(--text-muted)" }}> · </span>
+                        <p key={seg.id} className="adv-agenda-seg-p">
+                            <span className="adv-seg-timestamp">{seg.timestamp || "—"}</span>
+                            <span className="adv-seg-sep"> · </span>
+                            <span className="adv-seg-speaker">{seg.speaker}</span>
+                            <span className="adv-seg-sep"> · </span>
                             {seg.text}
                         </p>
                     ))}
@@ -1137,7 +1132,7 @@ function profileImageForTranscriptSpeaker(detail: ArchiveDetail, speakerName: st
 function SummaryList({ title, items }: { title: string; items?: string[] }) {
     if (!items || items.length === 0) return null;
     return (
-        <div style={{ marginTop: "0.75rem" }}>
+        <div className="adv-agenda-extra">
             <h4 className="archive-detail-summary-list-title">
                 {title}
             </h4>
@@ -1277,7 +1272,7 @@ function ArchiveTranscriptExplorer({
     const showLoadMore = needIndexedSearch && preferServer && serverSegments.length > 0 && serverSegments.length < serverTotal;
 
     return (
-        <div className="archive-detail-section" style={{ marginBottom: "1.5rem" }}>
+        <div className="archive-detail-section adv-section-mb">
             <button
                 type="button"
                 className={`archive-detail-section-title archive-detail-section-toggle${sectionOpen ? "" : " is-closed"}`}
@@ -1289,7 +1284,7 @@ function ArchiveTranscriptExplorer({
                 </span>
                 Transcript
             </button>
-            {sectionOpen && <><p style={{ fontSize: "0.75rem", color: "var(--text-muted)", marginBottom: "0.75rem" }}>
+            {sectionOpen && <><p className="adv-transcript-note">
                 Filter by text, meeting time (e.g. 5:30 = 5 min 30 sec from start of recording), or speaker. Large meetings use indexed search automatically; you can force it below.
             </p>
             <div className="archive-detail-transcript-filters">
@@ -1312,30 +1307,27 @@ function ArchiveTranscriptExplorer({
                     Always use indexed (MongoDB) search for this meeting
                 </label>
             )} */}
-            <div style={{ fontSize: "0.6875rem", color: "var(--text-muted)", marginBottom: "0.5rem" }}>
+            <div className="adv-transcript-hint">
                 {loading && "Searching… "}
                 Showing {displayed.length}
                 {needIndexedSearch && preferServer && serverTotal > 0 ? ` of ${serverTotal} matches` : ` segment${displayed.length !== 1 ? "s" : ""}`}
             </div>
             <div className="glass-card archive-detail-transcript-list" >
                 {displayed.map((seg) => (
-                    <div
-                        key={String(seg.id)}
-                        style={{ padding: "0.25rem 0", fontSize: "0.8125rem", lineHeight: 1.45, color: "var(--text-secondary)" }}
-                    >
-                        <span style={{ color: "var(--text-muted)", fontVariantNumeric: "tabular-nums" }}>{seg.timestamp || "—"}</span>
-                        <span style={{ color: "var(--text-muted)" }}> · </span>
-                        <span style={{ fontWeight: 600, color: "var(--text-primary)" }}>{seg.speaker || "Unknown"}</span>
-                        <span style={{ color: "var(--text-muted)" }}> · </span>
+                    <div key={String(seg.id)} className="adv-transcript-seg">
+                        <span className="adv-seg-timestamp">{seg.timestamp || "—"}</span>
+                        <span className="adv-seg-sep"> · </span>
+                        <span className="adv-seg-speaker">{seg.speaker || "Unknown"}</span>
+                        <span className="adv-seg-sep"> · </span>
                         <span>{seg.text}</span>
                         {seg.agendaKey && seg.agendaKey !== "_unlinked" && (
-                            <span className="chip" style={{ fontSize: "0.5rem", padding: "1px 6px", marginLeft: "6px" }}>agenda</span>
+                            <span className="chip adv-agenda-chip">agenda</span>
                         )}
                     </div>
                 ))}
             </div>
             {showLoadMore && (
-                <button type="button" className="btn btn-secondary btn-sm" style={{ marginTop: "0.5rem" }} onClick={loadMoreServer}>
+                <button type="button" className="btn btn-secondary btn-sm adv-transcript-more-btn" onClick={loadMoreServer}>
                     Load more results
                 </button>
             )}</>}

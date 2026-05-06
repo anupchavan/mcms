@@ -268,7 +268,7 @@ export default function ProfileSettings() {
                         ref={fileInputRef}
                         type="file"
                         accept="image/jpeg,image/png,image/gif,image/webp"
-                        style={{ display: 'none' }}
+                        className="profile-hidden-input"
                         onChange={handleAvatarUpload}
                     />
                     <div className="profile-avatar-info">
@@ -314,7 +314,7 @@ export default function ProfileSettings() {
                             </button>
                         ) : (
                             <div className="profile-delete-confirm">
-                                <p className="profile-danger-text" style={{ fontWeight: 500 }}>
+                                <p className="profile-danger-text profile-confirm-note">
                                     Enter your password to confirm account deletion. This action cannot be undone.
                                 </p>
                                 <input

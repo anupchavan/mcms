@@ -144,9 +144,9 @@ function ArchiveResultRow({
                     })()}
                 </div>
                 {meeting.matchedTranscripts && meeting.matchedTranscripts.length > 0 && (
-                    <div style={{ marginTop: "6px" }}>
+                    <div className="archive-snippet-block">
                         {meeting.matchedTranscripts.map((t, i) => (
-                            <p key={i} style={{ fontSize: "0.75rem", color: "var(--text-secondary)", margin: "2px 0", lineHeight: 1.4 }}>
+                            <p key={i} className="archive-search-snippet">
                                 {t.timestamp ? `${t.timestamp} · ` : ""}{t.speaker} ·{" "}
                                 {t.text.length > 120 ? `${t.text.slice(0, 120)}...` : t.text}
                             </p>
@@ -969,7 +969,7 @@ export default function ArchiveListView({ fetchWithAuth, onSelectMeeting }: Arch
                         </div>
                     ))}
                     {results.length === 0 && !loading && (
-                        <p style={{ color: "var(--text-muted)", fontSize: "0.875rem" }}>No completed meetings found.</p>
+                        <p className="archive-no-results">No completed meetings found.</p>
                     )}
 
                     {!loading && totalCount > 0 ? (

@@ -6,7 +6,7 @@ export default function DashboardPage() {
     const { user } = useAuth();
     const { dashboardStats, myTasks } = useDashboardContext();
     return (
-        <div style={{ flex: 1, overflow: "hidden" }}>
+        <div className="dashboard-root">
             <ProductivityDashboard
                 stats={dashboardStats as any}
                 userName={user?.name}

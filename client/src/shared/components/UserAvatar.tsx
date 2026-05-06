@@ -42,7 +42,7 @@ export function UserAvatar({
   const isSmall = size <= 22;
   const borderWidth = isSmall ? 1 : 2;
   const fontSize = isSmall ? 7 : Math.round(size * 0.36);
-
+	console.log(size);
   return (
     <div
       className={`user-avatar${className ? ` ${className}` : ''}`}

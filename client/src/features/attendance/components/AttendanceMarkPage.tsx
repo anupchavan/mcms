@@ -94,56 +94,26 @@ export default function AttendanceMarkPage({ meetingId, token }: AttendanceMarkP
               : 'var(--danger)';
 
     return (
-        <div style={{
-            minHeight: '100vh',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            background: 'radial-gradient(circle at top, rgba(var(--flexoki-blue-600-rgb), 0.18), transparent 38%), linear-gradient(180deg, var(--flexoki-black) 0%, var(--flexoki-900) 100%)',
-            padding: '24px',
-        }}>
-            <div style={{
-                width: '100%',
-                maxWidth: '440px',
-                background: 'rgba(var(--flexoki-950-rgb), 0.92)',
-                border: '1px solid rgba(var(--flexoki-400-rgb), 0.2)',
-                borderRadius: '24px',
-                padding: '32px',
-                color: 'var(--flexoki-paper)',
-                boxShadow: '0 24px 60px rgba(var(--flexoki-black-rgb), 0.45)',
-                textAlign: 'center',
-            }}>
-                <div style={{
-                    width: '64px',
-                    height: '64px',
-                    margin: '0 auto 20px',
-                    borderRadius: '999px',
-                    background: accent,
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    fontSize: '28px',
-                    fontWeight: 700,
-                    color: 'var(--flexoki-paper)',
-                }}>
+        <div className="attendance-page-root">
+            <div className="attendance-page-card">
+                <div className="attendance-icon-circle" style={{ background: accent }}>
                     {state === 'success' ? '✓' : state === 'loading' ? '…' : '!'}
                 </div>
 
-                <h1 style={{ margin: 0, fontSize: '28px', lineHeight: 1.1 }}>{title}</h1>
-                <p style={{ margin: '12px 0 0', color: 'var(--flexoki-300)', fontSize: '15px', lineHeight: 1.6 }}>
+                <h1 className="attendance-page-title">{title}</h1>
+                <p className="attendance-page-sub">
                     {message}
                 </p>
 
                 {!user?.token && (
-                    <p style={{ margin: '18px 0 0', color: 'var(--flexoki-500)', fontSize: '13px', lineHeight: 1.6 }}>
+                    <p className="attendance-page-note">
                         Once you sign in, this page will automatically finish the attendance check-in.
                     </p>
                 )}
 
                 {state !== 'loading' && (
                     <button
-                        className="btn btn-primary"
-                        style={{ width: '100%', marginTop: '24px', justifyContent: 'center' }}
+                        className="btn btn-primary attendance-action-btn"
                         onClick={() => { window.location.href = '/'; }}
                     >
                         Open App

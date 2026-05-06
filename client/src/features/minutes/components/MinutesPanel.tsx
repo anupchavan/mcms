@@ -2,7 +2,6 @@ import { FC, useState } from 'react';
 import Icon from '../../../shared/components/Icon';
 import {
   Add01Icon,
-  CheckmarkSquare01Icon,
   Cancel01Icon,
   Notebook01Icon,
   PlusSignIcon,
@@ -63,46 +62,32 @@ const MinutesPanel: FC<MinutesPanelProps> = ({ minutesItems = [], onAddItem, onI
       </div>
 
       {isAdding && (
-        <div className="item-add-form" style={{
-          padding: '1rem',
-          background: 'var(--bg-card)',
-          borderRadius: 'var(--radius-md)',
-          margin: 'var(--lk-size-sm)',
-          border: '1px solid var(--border)'
-        }}>
-          <div style={{ marginBottom: '1rem' }}>
-            <label style={{ display: 'block', fontSize: '0.75rem', color: 'var(--text-secondary)', marginBottom: '0.25rem' }}>Item Title</label>
+        <div className="item-add-form">
+          <div className="minutes-form-group">
+            <label className="panel-form-label">Item Title</label>
             <input
               type="text"
               placeholder="e.g. Discussion summary"
               value={newTitle}
               onChange={(e) => setNewTitle(e.target.value)}
-              style={{
-                width: '100%',
-                padding: '0.5rem',
-                background: 'var(--bg-primary)',
-                border: '1px solid var(--border)',
-                borderRadius: 'var(--radius-sm)',
-                color: 'var(--text-primary)',
-                fontSize: '0.875rem'
-              }}
+              className="input-field panel-form-input"
             />
           </div>
-          <div style={{ display: 'flex', gap: '0.5rem', justifyContent: 'flex-end' }}>
-            <button type="button" className="btn btn-primary" onClick={handleAdd} style={{ padding: 'var(--lk-size-sm)', paddingTop: 'var(--lk-size-xs)', paddingBottom: 'var(--lk-size-xs)', fontSize: '0.875rem' }}>
+          <div className="agenda-form-actions">
+            <button type="button" className="btn btn-primary panel-item-btn" onClick={handleAdd}>
               <Icon icon={PlusSignIcon} size={14} />
-              <span style={{ marginLeft: '0.25rem' }}>Add Item</span>
+              <span>Add Item</span>
             </button>
-            <button type="button" className="btn btn-secondary" onClick={() => setIsAdding(false)} style={{ padding: 'var(--lk-size-sm)', paddingTop: 'var(--lk-size-xs)', paddingBottom: 'var(--lk-size-xs)', fontSize: '0.875rem' }}>
+            <button type="button" className="btn btn-secondary panel-item-btn" onClick={() => setIsAdding(false)}>
               Cancel
             </button>
           </div>
         </div>
       )}
 
-      <div className="agenda-list" style={{ margin: 'var(--lk-size-sm)' }}>
+      <div className="agenda-list">
         {items.length === 0 && !isAdding ? (
-          <div style={{ textAlign: 'center', color: 'var(--text-secondary)', fontSize: '0.875rem' }}>
+          <div className="agenda-empty-msg">
             No minute items yet. Add items as the meeting progresses.
           </div>
         ) : (
@@ -110,19 +95,10 @@ const MinutesPanel: FC<MinutesPanelProps> = ({ minutesItems = [], onAddItem, onI
             const itemKey = item.id || item._id || String(index);
             const status = item.status || 'pending';
             return (
-              <div key={itemKey} className={`agenda-item ${status}`} style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: '0.75rem',
-                padding: '0.75rem',
-                background: 'var(--bg-elevated)',
-                borderRadius: 'var(--radius-sm)',
-                marginBottom: '0.5rem',
-                border: '1px solid var(--border)',
-              }}>
+              <div key={itemKey} className={`agenda-item ${status}`}>
                 <Icon icon={Notebook01Icon} size={16} />
-                <div style={{ flex: 1 }}>
-                  <div style={{ fontSize: '0.875rem', fontWeight: 500, color: 'var(--text-primary)' }}>{item.title}</div>
+                <div className="minutes-item-flex">
+                  <div className="agenda-item-title">{item.title}</div>
                 </div>
               </div>
             );

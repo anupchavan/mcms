@@ -363,11 +363,11 @@ export default function Tasks({ items, sectionTitle = 'Tasks', emptyMessage = 'N
                     )}
 
                     {groupedSections.map((group) => (
-                        <div key={group.key} style={{ marginBottom: '0.85rem' }}>
+                        <div key={group.key} className="tasks-group">
                             {group.title && (
-                                <div style={{ display: 'flex', alignItems: 'center', gap: '0.45rem', margin: '0 0.75rem 0.5rem', color: 'var(--text-secondary)' }}>
-                                    <span style={{ fontSize: '0.75rem', fontWeight: 600 }}>{group.title}</span>
-                                    <span className="chip chip-blue" style={{ fontSize: '0.5625rem' }}>{group.items.length}</span>
+                                <div className="tasks-group-header">
+                                    <span className="tasks-group-title">{group.title}</span>
+                                    <span className="chip chip-blue chip-2xs">{group.items.length}</span>
                                 </div>
                             )}
                             {group.items.map((item, index) => {
@@ -397,14 +397,7 @@ export default function Tasks({ items, sectionTitle = 'Tasks', emptyMessage = 'N
                                     >
                                         {/* ── AI eyebrow (only when expanded) ── */}
                                         {isAI && !isCollapsed && (
-                                            <div style={{
-                                                fontSize: '0.625rem',
-                                                fontWeight: 600,
-                                                letterSpacing: '0.06em',
-                                                textTransform: 'uppercase',
-                                                color: 'var(--flair-purple-color)',
-                                                marginBottom: '0.35rem',
-                                            }}>
+                                            <div className="task-ai-eyebrow">
                                                 AI Generated
                                             </div>
                                         )}
@@ -482,11 +475,10 @@ export default function Tasks({ items, sectionTitle = 'Tasks', emptyMessage = 'N
                                                         {isHost ? (
                                                             <input
                                                                 type="date"
-                                                                className="input-field tasks-date-input"
+                                                                className="input-field tasks-date-input tasks-date-font"
                                                                 defaultValue={formatDateOnlyDisplay(item.deadline)}
                                                                 key={`dl-${itemId}-${item.deadline}`}
                                                                 onBlur={(e) => handleDeadlineChange(item, e.target.value)}
-                                                                style={{ fontSize: '0.8125rem' }}
                                                             />
                                                         ) : (
                                                             <span className="live-task-card-value">
@@ -531,16 +523,15 @@ export default function Tasks({ items, sectionTitle = 'Tasks', emptyMessage = 'N
                     {canCreateItems && adding ? (
                         <div className="glass-card inline-form-card" onKeyDown={(e: React.KeyboardEvent) => { if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); setAdding(false); resetFields(); } }}>
                             <input
-                                className="input-field"
+                                className="input-field tasks-new-form-row"
                                 placeholder="Task title..."
                                 value={newTitle}
                                 onChange={(e) => setNewTitle(e.target.value)}
                                 onKeyDown={(e) => { if (e.key === 'Enter') handleCreate(); if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); setAdding(false); resetFields(); } }}
                                 autoFocus
-                                style={{ marginBottom: '0.25rem' }}
                             />
                             <div className="inline-form-row">
-                                <select className="input-field" value={newCategory} onChange={(e) => setNewCategory(e.target.value)} style={{ flex: 1 }}>
+                                <select className="input-field tasks-select-flex" value={newCategory} onChange={(e) => setNewCategory(e.target.value)}>
                                     {CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
                                 </select>
                                 {archiveParticipants.length > 0 && (
@@ -556,7 +547,7 @@ export default function Tasks({ items, sectionTitle = 'Tasks', emptyMessage = 'N
                                 )}
                             </div>
                             {agendaItems.length > 0 && (
-                                <select className="input-field" value={newAgendaItemId} onChange={(e) => setNewAgendaItemId(e.target.value)} style={{ marginBottom: '0.25rem' }}>
+                                <select className="input-field tasks-select-mb" value={newAgendaItemId} onChange={(e) => setNewAgendaItemId(e.target.value)}>
                                     <option value="">General / Unlinked</option>
                                     {agendaItems.map((a) => <option key={a.id} value={a.id}>{a.title}</option>)}
                                 </select>
@@ -565,14 +556,13 @@ export default function Tasks({ items, sectionTitle = 'Tasks', emptyMessage = 'N
                                 <span className="task-deadline-label">Deadline</span>
                                 <input
                                     type="date"
-                                    className="input-field"
+                                    className="input-field tasks-deadline-flex"
                                     value={newDeadlineDate}
                                     onChange={(e) => setNewDeadlineDate(e.target.value)}
                                     aria-label="Deadline date"
-                                    style={{ flex: 1 }}
                                 />
                             </div>
-                            <div className="inline-form-row" style={{ marginTop: '0.35rem' }}>
+                            <div className="inline-form-row tasks-new-form-gap">
                                 <button className="btn btn-sm btn-primary" onClick={handleCreate} disabled={!newTitle.trim()}>Add</button>
                                 <button className="btn btn-sm btn-secondary" onClick={() => { setAdding(false); resetFields(); }}>Cancel</button>
                             </div>
@@ -581,8 +571,7 @@ export default function Tasks({ items, sectionTitle = 'Tasks', emptyMessage = 'N
                         canCreateItems && (
                             <ShortcutTooltip keys={['Shift', 'A']} position="top" fullWidth>
                                 <button
-                                    className="btn btn-secondary"
-                                    style={{ margin: '0 var(--lk-size-sm)', width: 'calc(100% - 2 * var(--lk-size-sm))', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                                    className="btn btn-secondary tasks-add-full-btn"
                                     onClick={() => setAdding(true)}
                                 >
                                     <Icon icon={Add01Icon} size={16} /> Add Task
