@@ -20,10 +20,10 @@ const CATEGORIES = ["Technical", "Administrative", "Decision", "Follow-up"];
 
 /** Text-only colors for category labels (no chip background). */
 export const CATEGORY_TEXT_COLOR: Record<string, string> = {
-    Technical: "var(--flair-primary-color)",
-    Administrative: "var(--flair-purple-color)",
-    Decision: "var(--flair-amber-color)",
-    "Follow-up": "var(--primary)",
+    Technical: "var(--color-tx-normal)",
+    Administrative: "var(--color-tx-normal)",
+    Decision: "var(--color-tx-normal)",
+    "Follow-up": "var(--color-tx-normal)",
 };
 
 const MONTH_ABBR = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
@@ -260,7 +260,7 @@ function ArchiveTaskRow({ task, participants, canEdit, fetchWithAuth, apiBase, o
                         value={deadlineDraft}
                         onChange={(e) => setDeadlineDraft(e.target.value)}
                         onBlur={(e) => commitDeadline(e.target.value)}
-                        style={{ fontSize: "0.8125rem", padding: "0.2rem 0.35rem", minWidth: 0, width: "100%" }}
+                        style={{ fontSize: "var(--font-size-caption)", padding: "0", minWidth: 0, width: "100%", background: "transparent", border: "none", outline: "none" }}
                     />
                 ) : (
                     <span className="archive-task-deadline-text">
