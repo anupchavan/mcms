@@ -8338,7 +8338,7 @@ button.archive-detail-section-toggle:hover .archive-detail-section-chevron {
 }
 .participants-list {
     overflow-y: auto;
-    height: 280px;
+    max-height: 280px;
 }
 .participants-empty {
     padding: 16px 12px;
