@@ -5,3 +5,4 @@ node_modules
 myenv
 .codex
 .pip
+ai-service/.venv
